@@ -847,6 +847,7 @@ public class Consent implements Action {
             rs = pstmt.executeQuery();
             return rs.next() ? (UUID) rs.getObject(1) : null;
         } catch (Exception e) {
+            System.err.println("[WARN] resolveRopaEntryId: " + e.getMessage());
             return null;
         } finally {
             try { if (rs != null) rs.close(); } catch (Exception ignored) {}

@@ -25,7 +25,24 @@ public class PasswordHasher {
      * @return true if the password matches, false otherwise.
      */
     public boolean checkPassword(String plaintextPassword, String hashedPassword) {
-        return BCrypt.checkpw(plaintextPassword, hashedPassword);
+        // Fail-safe: a null/malformed stored hash must mean "auth fails", never a
+        // thrown exception that aborts the whole DB transaction. BCrypt.checkpw
+        // throws IllegalArgumentException "Invalid salt version" on a non-BCrypt
+        // value (e.g. a legacy/un-migrated hash), so guard + catch it.
+        if (plaintextPassword == null || hashedPassword == null
+                || !hashedPassword.startsWith("$2")) {
+            System.err.println("[WARN] checkPassword: stored hash not BCrypt ("
+                    + (hashedPassword == null ? "null" : "len=" + hashedPassword.length()
+                       + " prefix=" + hashedPassword.substring(0, Math.min(4, hashedPassword.length())))
+                    + ") — treating as no-match");
+            return false;
+        }
+        try {
+            return BCrypt.checkpw(plaintextPassword, hashedPassword);
+        } catch (IllegalArgumentException e) {
+            System.err.println("[WARN] checkPassword: BCrypt rejected stored hash: " + e.getMessage());
+            return false;
+        }
     }
 
     /**
