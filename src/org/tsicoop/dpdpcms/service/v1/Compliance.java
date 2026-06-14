@@ -82,12 +82,41 @@ public class Compliance implements Action {
             }
 
             UUID fiduciaryId = null;
-            String fiduciaryIdStr = input.get("fiduciary_id") != null?(String) input.get("fiduciary_id"):new Fiduciary().getFiduciaryId(UUID.fromString(apiKey),apiSecret);
-            if (fiduciaryIdStr != null && !fiduciaryIdStr.isEmpty()) {
-                try {
-                    fiduciaryId = UUID.fromString(fiduciaryIdStr);
-                } catch (IllegalArgumentException e) {
-                    OutputProcessor.errorResponse(res, HttpServletResponse.SC_BAD_REQUEST, "Bad Request", "Invalid 'fiduciary_id' format.", req.getRequestURI());
+            // F2 fix: the authenticated fiduciary is derived ONLY from the auth context — never from the request body.
+            // PRINCIPAL JWT path: InterceptingFilter stamps fiduciary_id on the request attributes.
+            // API-key path: derive from the key/secret pair. Body fiduciary_id is never authoritative.
+            // (Also fixes the prior NPE: UUID.fromString(apiKey) when apiKey was null, and the missing JWT handling.)
+            Boolean viaPrincipalJwt = (Boolean) req.getAttribute("auth_via_principal_jwt");
+            String operatorRole = InputProcessor.getVerifiedRole(req);
+            String fiduciaryIdStr = null;
+            if (Boolean.TRUE.equals(viaPrincipalJwt)) {
+                Object fidAttr = req.getAttribute("fiduciary_id");
+                if (fidAttr != null) fiduciaryIdStr = fidAttr.toString();
+            } else if (operatorRole != null) {
+                // Admin/operator path: an authenticated operator (verified JWT role)
+                // legitimately acts on the fiduciary they are managing, so the
+                // body fiduciary_id IS authoritative here — but ONLY because the
+                // operator JWT was already verified by processAdminHeader.
+                fiduciaryIdStr = (String) input.get("fiduciary_id");
+            } else if (apiKey != null) {
+                fiduciaryIdStr = new Fiduciary().getFiduciaryId(UUID.fromString(apiKey), apiSecret);
+            }
+            if (fiduciaryIdStr == null || fiduciaryIdStr.isEmpty()) {
+                OutputProcessor.errorResponse(res, HttpServletResponse.SC_UNAUTHORIZED, "Unauthorized", "Unable to resolve authenticated fiduciary.", req.getRequestURI());
+                return;
+            }
+            try {
+                fiduciaryId = UUID.fromString(fiduciaryIdStr);
+            } catch (IllegalArgumentException e) {
+                OutputProcessor.errorResponse(res, HttpServletResponse.SC_BAD_REQUEST, "Bad Request", "Invalid 'fiduciary_id' format.", req.getRequestURI());
+                return;
+            }
+            // For the api-key/principal paths, reject any body fiduciary_id that
+            // disagrees with the authenticated one (operator path already used it).
+            if (viaPrincipalJwt == Boolean.TRUE || (operatorRole == null && apiKey != null)) {
+                String bodyFidStr = (String) input.get("fiduciary_id");
+                if (bodyFidStr != null && !bodyFidStr.isEmpty() && !bodyFidStr.equalsIgnoreCase(fiduciaryIdStr)) {
+                    OutputProcessor.errorResponse(res, HttpServletResponse.SC_FORBIDDEN, "Forbidden", "Body 'fiduciary_id' does not match the authenticated fiduciary.", req.getRequestURI());
                     return;
                 }
             }

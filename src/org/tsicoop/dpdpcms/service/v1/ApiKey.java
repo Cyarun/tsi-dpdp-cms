@@ -78,6 +78,12 @@ public class ApiKey implements Action {
             // Get the ID of the Admin performing the action
             UUID loginUserId = InputProcessor.getAuthenticatedUserId(req);
 
+            // F3: DB-verified caller role and fiduciary (tenant) scope. Non-ADMIN callers are
+            // confined to their own fiduciary so by-id reads/mutations cannot cross tenants.
+            String callerRole = InputProcessor.getVerifiedRole(req);
+            UUID callerFid = InputProcessor.getVerifiedFiduciaryId(req);
+            boolean isAdmin = "ADMIN".equalsIgnoreCase(callerRole);
+
             switch (func.toLowerCase()) {
                 case "generate_api_key":
                     if (fiduciaryId == null) {
@@ -114,7 +120,7 @@ public class ApiKey implements Action {
                         OutputProcessor.errorResponse(res, HttpServletResponse.SC_BAD_REQUEST, "Bad Request", "'key_id' is required.", req.getRequestURI());
                         return;
                     }
-                    Optional<JSONObject> keyOptional = getApiKeyDetailsFromDb(keyId);
+                    Optional<JSONObject> keyOptional = getApiKeyDetailsFromDb(keyId, isAdmin, callerFid);
                     if (keyOptional.isPresent()) {
                         output = keyOptional.get();
                         OutputProcessor.send(res, HttpServletResponse.SC_OK, output);
@@ -136,13 +142,24 @@ public class ApiKey implements Action {
                         OutputProcessor.errorResponse(res, HttpServletResponse.SC_BAD_REQUEST, "Bad Request", "'key_id' is required for revocation.", req.getRequestURI());
                         return;
                     }
-                    revokeApiKeyInDb(keyId, loginUserId);
+                    revokeApiKeyInDb(keyId, loginUserId, isAdmin, callerFid);
                     OutputProcessor.send(res, HttpServletResponse.SC_OK, new JSONObject() {{ put("success", true); put("message", "API Key revoked successfully."); }});
                     break;
 
                 case "update_api_key_status":
                     if (keyId == null) {
                         OutputProcessor.errorResponse(res, HttpServletResponse.SC_BAD_REQUEST, "Bad Request", "'key_id' is required.", req.getRequestURI());
+                        return;
+                    }
+                    // F4: require DB-verified ADMIN role (not the JWT claim) to change key status.
+                    // (callerRole resolved once at the top of this method.)
+                    if (!"ADMIN".equalsIgnoreCase(callerRole)) {
+                        OutputProcessor.errorResponse(res, HttpServletResponse.SC_FORBIDDEN, "Forbidden", "ADMIN role required to change API key status.", req.getRequestURI());
+                        return;
+                    }
+                    // F4: require fiduciary scope so an admin can only act within a single tenant.
+                    if (fiduciaryId == null) {
+                        OutputProcessor.errorResponse(res, HttpServletResponse.SC_BAD_REQUEST, "Bad Request", "'fiduciary_id' is required to change key status.", req.getRequestURI());
                         return;
                     }
                     statusFilter = (String) input.get("status"); // Expected status: ACTIVE, INACTIVE, EXPIRED
@@ -155,7 +172,12 @@ public class ApiKey implements Action {
                         OutputProcessor.errorResponse(res, HttpServletResponse.SC_BAD_REQUEST, "Bad Request", "Use 'revoke_api_key' function to permanently revoke keys.", req.getRequestURI());
                         return;
                     }
-                    updateApiKeyStatusInDb(keyId, statusFilter);
+                    // F4: only permit a closed set of statuses (defense in depth; reactivation is blocked in the helper).
+                    if (!statusFilter.equalsIgnoreCase("ACTIVE") && !statusFilter.equalsIgnoreCase("INACTIVE") && !statusFilter.equalsIgnoreCase("EXPIRED")) {
+                        OutputProcessor.errorResponse(res, HttpServletResponse.SC_BAD_REQUEST, "Bad Request", "Unsupported status value.", req.getRequestURI());
+                        return;
+                    }
+                    updateApiKeyStatusInDb(keyId, statusFilter, fiduciaryId, loginUserId);
                     OutputProcessor.send(res, HttpServletResponse.SC_OK, new JSONObject() {{ put("success", true); put("message", "API Key status updated successfully."); }});
                     break;
 
@@ -261,18 +283,25 @@ public class ApiKey implements Action {
     /**
      * Retrieves API key details from the database by its ID. (Does NOT retrieve raw key).
      */
-    private Optional<JSONObject> getApiKeyDetailsFromDb(UUID keyId) throws SQLException {
+    private Optional<JSONObject> getApiKeyDetailsFromDb(UUID keyId, boolean isAdmin, UUID callerFid) throws SQLException {
         Connection conn = null;
         PreparedStatement pstmt = null;
         ResultSet rs = null;
         PoolDB pool = new PoolDB();
 
         // Exclude the sensitive key_value hash from being pulled into general objects
+        // F3: non-ADMIN callers are scoped to their own fiduciary so cross-tenant keys return as not-found.
         String sql = "SELECT id, fiduciary_id, app_id, description, status, permissions, created_at, expires_at, last_used_at FROM api_keys WHERE id = ?";
+        if (!isAdmin) {
+            sql += " AND fiduciary_id = ?";
+        }
         try {
             conn = pool.getConnection();
             pstmt = conn.prepareStatement(sql);
             pstmt.setObject(1, keyId);
+            if (!isAdmin) {
+                pstmt.setObject(2, callerFid);
+            }
             rs = pstmt.executeQuery();
             if (rs.next()) {
                 JSONObject key = new JSONObject();
@@ -352,24 +381,31 @@ public class ApiKey implements Action {
     /**
      * Revokes an API key by setting its status to REVOKED and recording revocation details.
      */
-    private void revokeApiKeyInDb(UUID keyId, UUID loginUserId) throws SQLException {
+    private void revokeApiKeyInDb(UUID keyId, UUID loginUserId, boolean isAdmin, UUID callerFid) throws SQLException {
         Connection conn = null;
         PreparedStatement pstmt = null;
         PoolDB pool = new PoolDB();
         boolean success = false;
 
         // Soft delete/Revoke by updating status and recording metadata
+        // F3: non-ADMIN callers can only revoke keys within their own fiduciary (cross-tenant = no-op).
         String sql = "UPDATE api_keys SET status = 'REVOKED', revoked_at = NOW(), last_used_at = NOW() WHERE id = ? AND status != 'REVOKED'";
+        if (!isAdmin) {
+            sql += " AND fiduciary_id = ?";
+        }
 
         try {
             conn = pool.getConnection();
             pstmt = conn.prepareStatement(sql);
             pstmt.setObject(1, keyId);
+            if (!isAdmin) {
+                pstmt.setObject(2, callerFid);
+            }
 
             int affectedRows = pstmt.executeUpdate();
             if (affectedRows == 0) {
-                // Check if it exists at all (optional)
-                if (getApiKeyDetailsFromDb(keyId).isEmpty()) {
+                // Check if it exists at all (optional), scoped to the caller's tenant.
+                if (getApiKeyDetailsFromDb(keyId, isAdmin, callerFid).isEmpty()) {
                     throw new SQLException("API Key not found.");
                 }
             }
@@ -387,33 +423,59 @@ public class ApiKey implements Action {
     /**
      * Updates the ACTIVE/INACTIVE/EXPIRED status of an existing key.
      */
-    private void updateApiKeyStatusInDb(UUID keyId, String status) throws SQLException {
+    private void updateApiKeyStatusInDb(UUID keyId, String status, UUID fiduciaryId, UUID loginUserId) throws SQLException {
         Connection conn = null;
         PreparedStatement pstmt = null;
         PoolDB pool = new PoolDB();
+        boolean success = false;
 
-        String sql = "UPDATE api_keys SET status = ?, last_updated_at = NOW() WHERE id = ? AND status != 'REVOKED'";
+        // F4: load the key first to enforce tenant ownership and the no-reactivation rule.
+        // Caller is already DB-verified ADMIN (gated in the switch); tenant check is enforced explicitly below.
+        Optional<JSONObject> keyDetails = getApiKeyDetailsFromDb(keyId, true, null);
+        if (keyDetails.isEmpty()) {
+            throw new SQLException("API Key not found.");
+        }
+        // F4: prevent cross-tenant status changes even for an ADMIN.
+        String keyFiduciaryId = (String) keyDetails.get().get("fiduciary_id");
+        if (keyFiduciaryId == null || !keyFiduciaryId.equals(fiduciaryId.toString())) {
+            throw new SQLException("API Key does not belong to the specified fiduciary.");
+        }
+        // F4: refuse reactivation of an INACTIVE/EXPIRED key; re-issuance must go through generate_api_key.
+        String current = (String) keyDetails.get().get("status");
+        if ("ACTIVE".equalsIgnoreCase(status) && ("INACTIVE".equalsIgnoreCase(current) || "EXPIRED".equalsIgnoreCase(current))) {
+            throw new SQLException("Cannot reactivate an INACTIVE/EXPIRED key; issue a new key via generate_api_key.");
+        }
+
+        // F4: scope the UPDATE by fiduciary so it can only touch keys belonging to this tenant.
+        String sql = "UPDATE api_keys SET status = ?, last_updated_at = NOW() WHERE id = ? AND fiduciary_id = ? AND status != 'REVOKED'";
 
         try {
             conn = pool.getConnection();
             pstmt = conn.prepareStatement(sql);
             pstmt.setString(1, status.toUpperCase());
             pstmt.setObject(2, keyId);
+            pstmt.setObject(3, fiduciaryId);
 
             int affectedRows = pstmt.executeUpdate();
             if (affectedRows == 0) {
                 // Check if it exists at all and if it was already permanently revoked.
-                Optional<JSONObject> keyDetails = getApiKeyDetailsFromDb(keyId);
-                if (keyDetails.isEmpty()) {
+                Optional<JSONObject> postKeyDetails = getApiKeyDetailsFromDb(keyId, true, null);
+                if (postKeyDetails.isEmpty()) {
                     throw new SQLException("API Key not found.");
                 }
-                if (keyDetails.get().get("status").equals("REVOKED")) {
+                if (postKeyDetails.get().get("status").equals("REVOKED")) {
                     throw new SQLException("Cannot update status of a permanently REVOKED key.");
                 }
+            } else {
+                success = true;
             }
             InputProcessor.evictApiKeyCache(keyId.toString());
         } finally {
             pool.cleanup(null, pstmt, conn);
+        }
+
+        if (success) {
+            new Audit().logEventAsync("ADMIN", ADMIN_FID_UUID, Constants.SERVICE_TYPE_ADMIN_CONSOLE, loginUserId, "UPDATE_API_KEY_STATUS", "Key:"+keyId+" status:"+status.toUpperCase());
         }
     }
 

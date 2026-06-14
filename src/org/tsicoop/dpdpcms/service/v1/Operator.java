@@ -195,6 +195,10 @@ public class Operator implements Action {
         }
         String fidStr = (String) input.get("fiduciary_id");
         UUID fid = (fidStr != null && !fidStr.isEmpty()) ? UUID.fromString(fidStr) : ADMIN_FID_UUID;
+        // F3: a non-ADMIN caller (e.g. DPO) cannot create users in another tenant; force the caller's fiduciary.
+        if (!"ADMIN".equalsIgnoreCase(callerRole)) {
+            fid = InputProcessor.getVerifiedFiduciaryId(req);
+        }
 
         if (mail == null || !EMAIL_PATTERN.matcher(mail).matches() || pass == null || !PASSWORD_PATTERN.matcher(pass).matches()) {
             OutputProcessor.errorResponse(res, 400, "Bad Request", "Invalid email or weak password.", req.getRequestURI());
@@ -241,14 +245,26 @@ public class Operator implements Action {
     private void handleUpdateUser(JSONObject input, UUID loginUserId, HttpServletResponse res, HttpServletRequest req) throws SQLException {
         UUID uid = UUID.fromString((String) input.get("user_id"));
         String callerRole = InputProcessor.getVerifiedRole(req);
+        // Fail-closed: a null/unverified role must not bypass the DPO self-only guard.
+        if (callerRole == null) {
+            OutputProcessor.errorResponse(res, 403, "Forbidden", "Verified role required.", req.getRequestURI());
+            return;
+        }
         if ("DPO".equalsIgnoreCase(callerRole) && !uid.equals(loginUserId)) {
             OutputProcessor.errorResponse(res, 403, "Forbidden", "DPO users may only update their own profile.", req.getRequestURI());
             return;
         }
+        // F3: DB-verified ADMIN flag + caller tenant scope for by-id mutations.
+        boolean isAdmin = "ADMIN".equalsIgnoreCase(callerRole);
+        UUID callerFid = InputProcessor.getVerifiedFiduciaryId(req);
         String user = (String) input.get("username");
         String pass = (String) input.get("password");
         String fidStr = (String) input.get("fiduciary_id");
         UUID fid = (fidStr != null && !fidStr.isEmpty()) ? UUID.fromString(fidStr) : ADMIN_FID_UUID;
+        // F3: non-ADMIN callers cannot move a target into another tenant; force the caller's fiduciary.
+        if (!isAdmin) {
+            fid = callerFid;
+        }
 
         if (pass != null && !pass.isEmpty() && !PASSWORD_PATTERN.matcher(pass).matches()) {
             OutputProcessor.errorResponse(res, 400, "Bad Request", "Weak password.", req.getRequestURI());
@@ -264,18 +280,25 @@ public class Operator implements Action {
         try {
             conn = pool.getConnection();
             // Fetch target email for audit principal
+            // F3: scope the lookup to the caller's tenant for non-ADMIN callers.
             try (PreparedStatement p = conn.prepareStatement(
-                    "SELECT " + DbEncryption.decryptCol("email_enc") + " AS email FROM operators WHERE id = ?")) {
+                    "SELECT " + DbEncryption.decryptCol("email_enc") + " AS email FROM operators WHERE id = ?"
+                            + (!isAdmin ? " AND fiduciary_id = ?" : ""))) {
                 int pi = DbEncryption.bindKey(p, 1);
                 p.setObject(pi, uid);
+                if (!isAdmin) {
+                    p.setObject(pi + 1, callerFid);
+                }
                 try (ResultSet rs = p.executeQuery()) {
                     if (rs.next()) targetEmail = rs.getString("email");
                 }
             }
 
+            // F3: scope the UPDATE to the caller's tenant for non-ADMIN callers (cross-tenant = 0 rows).
             String sql = "UPDATE operators SET name = ?, fiduciary_id = ?, last_updated_at = NOW() " +
                     (pass != null && !pass.isEmpty() ? ", password_hash = ?" : "") +
-                    " WHERE id = ? AND role != 'ADMIN'";
+                    " WHERE id = ? AND role != 'ADMIN'" +
+                    (!isAdmin ? " AND fiduciary_id = ?" : "");
 
             pstmt = conn.prepareStatement(sql);
             pstmt.setString(1, user);
@@ -284,7 +307,10 @@ public class Operator implements Action {
             if (pass != null && !pass.isEmpty()) {
                 pstmt.setString(paramIdx++, passwordHasher.hashPassword(pass));
             }
-            pstmt.setObject(paramIdx, uid);
+            pstmt.setObject(paramIdx++, uid);
+            if (!isAdmin) {
+                pstmt.setObject(paramIdx, callerFid);
+            }
 
             if (pstmt.executeUpdate() > 0) {
                 OutputProcessor.send(res, 200, new JSONObject() {{ put("success", true); }});
@@ -303,6 +329,19 @@ public class Operator implements Action {
 
     private void handleDeactivateUser(JSONObject input, UUID loginUserId, HttpServletResponse res, HttpServletRequest req) throws SQLException {
         UUID uid = UUID.fromString((String) input.get("user_id"));
+        String callerRole = InputProcessor.getVerifiedRole(req);
+        // Fail-closed: a null/unverified role must not bypass the DPO self-only guard.
+        if (callerRole == null) {
+            OutputProcessor.errorResponse(res, 403, "Forbidden", "Verified role required.", req.getRequestURI());
+            return;
+        }
+        if ("DPO".equalsIgnoreCase(callerRole) && !uid.equals(loginUserId)) {
+            OutputProcessor.errorResponse(res, 403, "Forbidden", "DPO users may only deactivate their own profile.", req.getRequestURI());
+            return;
+        }
+        // F3: DB-verified ADMIN flag + caller tenant scope for by-id deactivation.
+        boolean isAdmin = "ADMIN".equalsIgnoreCase(callerRole);
+        UUID callerFid = InputProcessor.getVerifiedFiduciaryId(req);
         PoolDB pool = new PoolDB();
         Connection conn = null;
         PreparedStatement pstmt = null;
@@ -312,17 +351,27 @@ public class Operator implements Action {
         try {
             conn = pool.getConnection();
             // Fetch email for audit
+            // F3: scope the lookup to the caller's tenant for non-ADMIN callers.
             try (PreparedStatement p = conn.prepareStatement(
-                    "SELECT " + DbEncryption.decryptCol("email_enc") + " AS email FROM operators WHERE id = ?")) {
+                    "SELECT " + DbEncryption.decryptCol("email_enc") + " AS email FROM operators WHERE id = ?"
+                            + (!isAdmin ? " AND fiduciary_id = ?" : ""))) {
                 int pi = DbEncryption.bindKey(p, 1);
                 p.setObject(pi, uid);
+                if (!isAdmin) {
+                    p.setObject(pi + 1, callerFid);
+                }
                 try (ResultSet rs = p.executeQuery()) {
                     if (rs.next()) targetEmail = rs.getString("email");
                 }
             }
 
-            pstmt = conn.prepareStatement("UPDATE operators SET status = 'INACTIVE', last_updated_at = NOW() WHERE id = ? AND role != 'ADMIN'");
+            // F3: scope the UPDATE to the caller's tenant for non-ADMIN callers (cross-tenant = no-op).
+            pstmt = conn.prepareStatement("UPDATE operators SET status = 'INACTIVE', last_updated_at = NOW() WHERE id = ? AND role != 'ADMIN'"
+                    + (!isAdmin ? " AND fiduciary_id = ?" : ""));
             pstmt.setObject(1, uid);
+            if (!isAdmin) {
+                pstmt.setObject(2, callerFid);
+            }
             pstmt.executeUpdate();
             success = true;
         } catch(Exception e) {
@@ -396,6 +445,10 @@ public class Operator implements Action {
 
     private void handleGenerateRecoveryKey(JSONObject input, UUID loginUserId, HttpServletResponse res, HttpServletRequest req) throws SQLException {
         UUID uid = UUID.fromString((String) input.get("user_id"));
+        // F3: DB-verified ADMIN flag + caller tenant scope for by-id recovery-key issuance.
+        String callerRole = InputProcessor.getVerifiedRole(req);
+        boolean isAdmin = "ADMIN".equalsIgnoreCase(callerRole);
+        UUID callerFid = InputProcessor.getVerifiedFiduciaryId(req);
         String plainKey = PassphraseGenerator.generate();
 
         PoolDB pool = new PoolDB();
@@ -406,18 +459,28 @@ public class Operator implements Action {
 
         try {
             conn = pool.getConnection();
+            // F3: scope the lookup to the caller's tenant for non-ADMIN callers.
             try (PreparedStatement p = conn.prepareStatement(
-                    "SELECT " + DbEncryption.decryptCol("email_enc") + " AS email FROM operators WHERE id = ?")) {
+                    "SELECT " + DbEncryption.decryptCol("email_enc") + " AS email FROM operators WHERE id = ?"
+                            + (!isAdmin ? " AND fiduciary_id = ?" : ""))) {
                 int pi = DbEncryption.bindKey(p, 1);
                 p.setObject(pi, uid);
+                if (!isAdmin) {
+                    p.setObject(pi + 1, callerFid);
+                }
                 try (ResultSet rs = p.executeQuery()) {
                     if (rs.next()) targetEmail = rs.getString("email");
                 }
             }
 
-            pstmt = conn.prepareStatement("UPDATE operators SET recovery_key_hash = ?, last_updated_at = NOW() WHERE id = ?");
+            // F3: scope the UPDATE to the caller's tenant for non-ADMIN callers (cross-tenant = no-op).
+            pstmt = conn.prepareStatement("UPDATE operators SET recovery_key_hash = ?, last_updated_at = NOW() WHERE id = ?"
+                    + (!isAdmin ? " AND fiduciary_id = ?" : ""));
             pstmt.setString(1, passwordHasher.hashPassword(plainKey));
             pstmt.setObject(2, uid);
+            if (!isAdmin) {
+                pstmt.setObject(3, callerFid);
+            }
 
             if (pstmt.executeUpdate() > 0) {
                 OutputProcessor.send(res, 200, new JSONObject() {{ put("success", true); put("passphrase", plainKey); }});

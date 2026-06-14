@@ -298,6 +298,26 @@ public class InterceptingFilter implements Filter {
                     authenticated = InputProcessor.processAdminHeader(req, res);
                 }
             } else if (BOOTSTRAP_URI_PATH.equalsIgnoreCase(apiCategory)){
+                // F1: bootstrap is first-run setup ONLY. Two independent gates, fail closed.
+                // Gate 1: one-time-setup token from env must be configured AND match request header.
+                String bootstrapToken = System.getenv("BOOTSTRAP_TOKEN");
+                String providedToken = req.getHeader("X-Bootstrap-Token");
+                boolean tokenOk = bootstrapToken != null && !bootstrapToken.trim().isEmpty()
+                        && providedToken != null
+                        && java.security.MessageDigest.isEqual(
+                                bootstrapToken.trim().getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                                providedToken.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                // Gate 2: explicit service + func allowlist (only initial admin setup).
+                boolean allowlistOk = "setup".equalsIgnoreCase(serviceName)
+                        && "initial_setup".equalsIgnoreCase(func);
+                if (!tokenOk) {
+                    OutputProcessor.errorResponse(res, HttpServletResponse.SC_UNAUTHORIZED, "Unauthorized", "Bootstrap token missing or invalid.", uri);
+                    return;
+                }
+                if (!allowlistOk) {
+                    OutputProcessor.errorResponse(res, HttpServletResponse.SC_FORBIDDEN, "Forbidden", "Bootstrap is restricted to initial setup only.", uri);
+                    return;
+                }
                 authenticated = true;
             } else if (PUBLIC_URI_PATH.equalsIgnoreCase(apiCategory)) {
                 if (!PUBLIC_ALLOWED_FUNCS.contains(func.toLowerCase())) {

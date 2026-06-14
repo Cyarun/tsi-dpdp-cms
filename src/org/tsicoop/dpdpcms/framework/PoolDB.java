@@ -30,7 +30,14 @@ public class PoolDB extends DB {
                     // Database Connection Properties
                     String dbHost = SystemConfig.getAppConfig().getProperty("framework.db.host");
                     String dbName = SystemConfig.getAppConfig().getProperty("framework.db.name");
-                    String sslMode = "local".equals(System.getenv("TSI_DPDP_CMS_ENV")) ? "prefer" : "require";
+                    // sslmode is env-overridable: deployments where the DB is reached
+                    // only over a private/trusted network (e.g. an internal Docker
+                    // network) can set DB_SSLMODE=disable. Defaults preserve prior
+                    // behaviour (prefer for local, require otherwise).
+                    String sslMode = System.getenv("DB_SSLMODE");
+                    if (sslMode == null || sslMode.trim().isEmpty()) {
+                        sslMode = "local".equals(System.getenv("TSI_DPDP_CMS_ENV")) ? "prefer" : "require";
+                    }
                     config.setJdbcUrl(dbHost + "/" + dbName + "?sslmode=" + sslMode);
                     config.setUsername(SystemConfig.getAppConfig().getProperty("framework.db.user"));
                     config.setPassword(SystemConfig.getAppConfig().getProperty("framework.db.password"));

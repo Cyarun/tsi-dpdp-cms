@@ -295,6 +295,43 @@ public class InputProcessor {
         apiClientCache.entrySet().removeIf(e -> e.getKey().startsWith(apiKeyId + ":"));
     }
 
+    /**
+     * Returns the verified fiduciary (tenant) id for the authenticated caller from the database,
+     * not from any client-supplied claim. The req.setAttribute("fiduciary_id") at line 85 is set
+     * ONLY in the app/API-key path, not the operator JWT path, so this DB lookup is required.
+     * Returns the ADMIN fiduciary (all-zeros UUID) when the operator has a null fiduciary_id.
+     * Returns null only on error.
+     */
+    public static UUID getVerifiedFiduciaryId(HttpServletRequest req) {
+        final UUID ADMIN_FID_UUID = UUID.fromString("00000000-0000-0000-0000-000000000000");
+        JSONObject authToken = (JSONObject) req.getAttribute(InputProcessor.AUTH_TOKEN);
+        if (authToken == null) return null;
+        String email = (String) authToken.get("email");
+        if (email == null) return null;
+
+        PoolDB pool = null;
+        Connection conn = null;
+        PreparedStatement pstmt = null;
+        ResultSet rs = null;
+        try {
+            pool = new PoolDB();
+            conn = pool.getConnection();
+            pstmt = conn.prepareStatement("SELECT fiduciary_id FROM operators WHERE email_hmac = " + DbEncryption.HMAC + " AND status = 'ACTIVE'");
+            DbEncryption.bindHmac(pstmt, 1, email);
+            rs = pstmt.executeQuery();
+            if (rs.next()) {
+                Object fid = rs.getObject("fiduciary_id");
+                return fid != null ? (UUID) fid : ADMIN_FID_UUID;
+            }
+            return ADMIN_FID_UUID;
+        } catch (Exception e) {
+            System.err.println("[ERROR] InputProcessor.getVerifiedFiduciaryId: " + e);
+        } finally {
+            if (pool != null) pool.cleanup(rs, pstmt, conn);
+        }
+        return null;
+    }
+
     /** Returns the role from the database for the authenticated user, not from the JWT claim. */
     public static String getVerifiedRole(HttpServletRequest req) {
         JSONObject authToken = (JSONObject) req.getAttribute(InputProcessor.AUTH_TOKEN);

@@ -72,22 +72,45 @@ public class Grievance implements Action {
 
             String userId = (String) input.get("user_id");
             UUID fiduciaryId = null;
-            String fiduciaryIdStr = input.get("fiduciary_id") != null ? (String) input.get("fiduciary_id") : null;
-            // When called via PRINCIPAL JWT, fiduciary_id is stamped on request attributes by InterceptingFilter
-            if (fiduciaryIdStr == null) {
+            // F2 fix: the authenticated fiduciary is derived ONLY from the auth context — never from the request body.
+            // PRINCIPAL JWT path: InterceptingFilter stamps fiduciary_id on the request attributes.
+            // API-key path: derive from the key/secret pair. Body fiduciary_id is never authoritative.
+            Boolean viaPrincipalJwt = (Boolean) req.getAttribute("auth_via_principal_jwt");
+            String operatorRole = InputProcessor.getVerifiedRole(req);
+            String fiduciaryIdStr = null;
+            if (Boolean.TRUE.equals(viaPrincipalJwt)) {
                 Object fidAttr = req.getAttribute("fiduciary_id");
                 if (fidAttr != null) fiduciaryIdStr = fidAttr.toString();
+            } else if (operatorRole != null) {
+                // Admin/operator path: an authenticated operator (verified JWT role)
+                // legitimately acts on the fiduciary they are managing, so the
+                // body fiduciary_id IS authoritative here — but ONLY because the
+                // operator JWT was already verified by processAdminHeader.
+                fiduciaryIdStr = (String) input.get("fiduciary_id");
+            } else if (apiKey != null) {
+                fiduciaryIdStr = new Fiduciary().getFiduciaryId(UUID.fromString(apiKey), apiSecret);
             }
-            // Fall back to API key lookup when fiduciary_id is still unresolved
-            if (fiduciaryIdStr == null) {
-                fiduciaryIdStr = new Fiduciary().getFiduciaryId(UUID.fromString(apiKey != null ? apiKey : "00000000-0000-0000-0000-000000000000"), apiSecret);
+            if (fiduciaryIdStr == null || fiduciaryIdStr.isEmpty()) {
+                OutputProcessor.errorResponse(res, HttpServletResponse.SC_UNAUTHORIZED, "Unauthorized", "Unable to resolve authenticated fiduciary.", req.getRequestURI());
+                return;
             }
-            if (fiduciaryIdStr != null && !fiduciaryIdStr.isEmpty()) {
+            try {
                 fiduciaryId = UUID.fromString(fiduciaryIdStr);
+            } catch (IllegalArgumentException e) {
+                OutputProcessor.errorResponse(res, HttpServletResponse.SC_BAD_REQUEST, "Bad Request", "Invalid 'fiduciary_id' format.", req.getRequestURI());
+                return;
+            }
+            // For the api-key/principal paths, reject any body fiduciary_id that
+            // disagrees with the authenticated one (operator path already used it).
+            if (viaPrincipalJwt == Boolean.TRUE || (operatorRole == null && apiKey != null)) {
+                String bodyFidStr = (String) input.get("fiduciary_id");
+                if (bodyFidStr != null && !bodyFidStr.isEmpty() && !bodyFidStr.equalsIgnoreCase(fiduciaryIdStr)) {
+                    OutputProcessor.errorResponse(res, HttpServletResponse.SC_FORBIDDEN, "Forbidden", "Body 'fiduciary_id' does not match the authenticated fiduciary.", req.getRequestURI());
+                    return;
+                }
             }
 
             // Security guard: when authenticated via PRINCIPAL JWT, enforce that user_id matches the token subject
-            Boolean viaPrincipalJwt = (Boolean) req.getAttribute("auth_via_principal_jwt");
             if (Boolean.TRUE.equals(viaPrincipalJwt) && userId != null) {
                 String principalUserId = (String) req.getAttribute("principal_user_id");
                 if (!userId.equals(principalUserId)) {
