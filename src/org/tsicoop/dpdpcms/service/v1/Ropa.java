@@ -97,7 +97,13 @@ public class Ropa implements Action {
         UUID entryId = requireUUID(input, "id", res, req);
         if (entryId == null) return;
 
-        JSONObject existing = getEntryById(entryId);
+        // A5 + hardening: ADMIN is still scoped by the body fiduciary_id. The shared wix
+        // platform-ADMIN (all-zeros fid) must NOT silently bypass tenant isolation; it must
+        // name the target tenant in the body. effectiveFid is the body fid for ADMIN (403 if
+        // absent/invalid), else the verified caller fid. The predicate is now unconditional.
+        UUID effectiveFid = resolveEffectiveFid(input, res, req);
+        if (effectiveFid == null) return;  // error already sent (403 ADMIN no body fid / 401 caller)
+        JSONObject existing = getEntryById(entryId, effectiveFid);
         if (existing == null) {
             OutputProcessor.errorResponse(res, HttpServletResponse.SC_NOT_FOUND, "Not Found", "ROPA entry not found.", req.getRequestURI());
             return;
@@ -115,7 +121,7 @@ public class Ropa implements Action {
         snapshotToHistory(entryId, currentVersion, existing, changedBy);
 
         int newVersion = currentVersion + 1;
-        applyUpdate(entryId, input, newVersion);
+        applyUpdate(entryId, input, newVersion, effectiveFid);
 
         UUID fiduciaryId = UUID.fromString((String) existing.get("fiduciary_id"));
         new Audit().logEventAsync("DPO", fiduciaryId, Constants.SERVICE_TYPE_DPO_CONSOLE, fiduciaryId,
@@ -131,7 +137,10 @@ public class Ropa implements Action {
         UUID entryId = requireUUID(input, "id", res, req);
         if (entryId == null) return;
 
-        JSONObject existing = getEntryById(entryId);
+        // A5 + hardening: ADMIN scoped by body fiduciary_id; predicate always applied.
+        UUID effectiveFid = resolveEffectiveFid(input, res, req);
+        if (effectiveFid == null) return;
+        JSONObject existing = getEntryById(entryId, effectiveFid);
         if (existing == null) {
             OutputProcessor.errorResponse(res, HttpServletResponse.SC_NOT_FOUND, "Not Found", "ROPA entry not found.", req.getRequestURI());
             return;
@@ -164,7 +173,7 @@ public class Ropa implements Action {
             return;
         }
 
-        transitionStatus(entryId, "active");
+        transitionStatus(entryId, "active", effectiveFid);
         UUID fiduciaryId = UUID.fromString((String) existing.get("fiduciary_id"));
         new Audit().logEventAsync("DPO", fiduciaryId, Constants.SERVICE_TYPE_DPO_CONSOLE, fiduciaryId,
                 "ROPA_ENTRY_PUBLISHED", "id:" + entryId);
@@ -184,7 +193,10 @@ public class Ropa implements Action {
         UUID entryId = requireUUID(input, "id", res, req);
         if (entryId == null) return;
 
-        JSONObject existing = getEntryById(entryId);
+        // A5 + hardening: ADMIN scoped by body fiduciary_id; predicate always applied.
+        UUID effectiveFid = resolveEffectiveFid(input, res, req);
+        if (effectiveFid == null) return;
+        JSONObject existing = getEntryById(entryId, effectiveFid);
         if (existing == null) {
             OutputProcessor.errorResponse(res, HttpServletResponse.SC_NOT_FOUND, "Not Found", "ROPA entry not found.", req.getRequestURI());
             return;
@@ -194,7 +206,7 @@ public class Ropa implements Action {
             return;
         }
 
-        transitionStatus(entryId, "retired");
+        transitionStatus(entryId, "retired", effectiveFid);
         UUID fiduciaryId = UUID.fromString((String) existing.get("fiduciary_id"));
         new Audit().logEventAsync("DPO", fiduciaryId, Constants.SERVICE_TYPE_DPO_CONSOLE, fiduciaryId,
                 "ROPA_ENTRY_RETIRED", "id:" + entryId);
@@ -223,7 +235,11 @@ public class Ropa implements Action {
         UUID entryId = requireUUID(input, "id", res, req);
         if (entryId == null) return;
 
-        JSONObject entry = getEntryById(entryId);
+        // A5 + hardening: ADMIN scoped by body fiduciary_id; predicate always applied
+        // (cross-tenant = not found).
+        UUID effectiveFid = resolveEffectiveFid(input, res, req);
+        if (effectiveFid == null) return;
+        JSONObject entry = getEntryById(entryId, effectiveFid);
         if (entry == null) {
             OutputProcessor.errorResponse(res, HttpServletResponse.SC_NOT_FOUND, "Not Found", "ROPA entry not found.", req.getRequestURI());
             return;
@@ -238,7 +254,12 @@ public class Ropa implements Action {
         UUID entryId = requireUUID(input, "id", res, req);
         if (entryId == null) return;
 
-        JSONObject entry = getEntryById(entryId);
+        // Cross-tenant IDOR fix: scope by effective fiduciary the same way
+        // handleGetEntry/handleUpdateEntry do — never the unscoped lookup,
+        // which would leak tenant B's populated fields + an existence oracle.
+        UUID effectiveFid = resolveEffectiveFid(input, res, req);
+        if (effectiveFid == null) return;
+        JSONObject entry = getEntryById(entryId, effectiveFid);
         if (entry == null) {
             OutputProcessor.errorResponse(res, HttpServletResponse.SC_NOT_FOUND, "Not Found", "ROPA entry not found.", req.getRequestURI());
             return;
@@ -361,7 +382,7 @@ public class Ropa implements Action {
         }
     }
 
-    private void applyUpdate(UUID entryId, JSONObject input, int newVersion) throws SQLException {
+    private void applyUpdate(UUID entryId, JSONObject input, int newVersion, UUID effectiveFid) throws SQLException {
         StringBuilder sql = new StringBuilder("UPDATE ropa_entries SET version = ?, updated_at = NOW()");
         List<Object> params = new ArrayList<>();
         params.add(newVersion);
@@ -390,8 +411,12 @@ public class Ropa implements Action {
             params.add(parseOptionalUUID(input, "app_id"));
         }
 
-        sql.append(" WHERE id = ?");
+        // A5 + hardening: scope the by-id UPDATE to the effective tenant unconditionally
+        // (defense in depth; the handler already loaded the row via the scoped getEntryById).
+        // For ADMIN, effectiveFid is the body fiduciary_id — never an unscoped bypass.
+        sql.append(" WHERE id = ? AND fiduciary_id = ?");
         params.add(entryId);
+        params.add(effectiveFid);
 
         PoolDB pool = new PoolDB();
         Connection conn = null;
@@ -413,8 +438,10 @@ public class Ropa implements Action {
         params.add(val != null ? val.toString() : null);
     }
 
-    private void transitionStatus(UUID entryId, String newStatus) throws SQLException {
-        String sql = "UPDATE ropa_entries SET status = ?, updated_at = NOW() WHERE id = ?";
+    private void transitionStatus(UUID entryId, String newStatus, UUID effectiveFid) throws SQLException {
+        // A5 + hardening: scope the by-id status transition to the effective tenant
+        // unconditionally. For ADMIN, effectiveFid is the body fiduciary_id.
+        String sql = "UPDATE ropa_entries SET status = ?, updated_at = NOW() WHERE id = ? AND fiduciary_id = ?";
         PoolDB pool = new PoolDB();
         Connection conn = null;
         PreparedStatement pstmt = null;
@@ -423,6 +450,7 @@ public class Ropa implements Action {
             pstmt = conn.prepareStatement(sql);
             pstmt.setString(1, newStatus);
             pstmt.setObject(2, entryId);
+            pstmt.setObject(3, effectiveFid);
             pstmt.executeUpdate();
         } finally {
             pool.cleanup(null, pstmt, conn);
@@ -472,11 +500,21 @@ public class Ropa implements Action {
         }
     }
 
-    protected JSONObject getEntryById(UUID entryId) throws SQLException {
+    // Unscoped by-id lookup removed: the last caller (validate_completeness) was a
+    // cross-tenant IDOR and now uses the scoped 2-arg getEntryById. No request handler
+    // or internal flow looks up a ROPA row without a fiduciary predicate, so an unscoped
+    // helper is retained nowhere to avoid re-introducing the same footgun.
+
+    // A5 + hardening: scoped by-id lookup. The predicate is ALWAYS applied. effectiveFid is
+    // the caller's verified fiduciary, or (for the ADMIN/wix path) the body fiduciary_id —
+    // so even the shared platform-ADMIN is constrained to the tenant named in the body
+    // (cross-tenant = empty result). No isAdmin bypass.
+    protected JSONObject getEntryById(UUID entryId, UUID effectiveFid) throws SQLException {
         String sql = "SELECT id, fiduciary_id, app_id, activity_name, purpose, legal_basis, " +
                 "data_categories, data_subject_categories, retention_period_days, retention_start_event, " +
                 "processors, cross_border_transfers, security_measures, dpo_id, linked_policy_ids, " +
-                "source_purpose_id, status, version, created_at, updated_at FROM ropa_entries WHERE id = ?";
+                "source_purpose_id, status, version, created_at, updated_at FROM ropa_entries " +
+                "WHERE id = ? AND fiduciary_id = ?";
 
         PoolDB pool = new PoolDB();
         Connection conn = null;
@@ -486,6 +524,7 @@ public class Ropa implements Action {
             conn = pool.getConnection();
             pstmt = conn.prepareStatement(sql);
             pstmt.setObject(1, entryId);
+            pstmt.setObject(2, effectiveFid);
             rs = pstmt.executeQuery();
             return rs.next() ? mapEntry(rs) : null;
         } finally {
@@ -671,6 +710,48 @@ public class Ropa implements Action {
     }
 
     // --- Utility helpers ---
+
+    /**
+     * Hardening: for the shared platform-ADMIN (wix) caller, the body fiduciary_id IS the
+     * intended tenant. Read it and 403 if absent or malformed — never grant an unscoped,
+     * cross-tenant ADMIN op silently. There is no everyday cross-tenant bypass; the predicate
+     * is always applied to the returned fid. (No _platform_maintenance flag is offered because
+     * no current internal caller needs a genuine cross-tenant ADMIN op — see report.)
+     */
+    /**
+     * Hardening: uniform "ADMIN is still scoped by the body fiduciary_id" resolution.
+     * Returns the effective tenant fid (and sends the appropriate error + returns null on
+     * failure): for ADMIN, the body fiduciary_id (403 if absent/invalid); otherwise the
+     * verified caller fid (401 if unresolvable). The caller must `return` when this is null.
+     */
+    private UUID resolveEffectiveFid(JSONObject input, HttpServletResponse res, HttpServletRequest req) {
+        boolean isAdmin = "ADMIN".equalsIgnoreCase(InputProcessor.getVerifiedRole(req));
+        if (isAdmin) {
+            return requireBodyFiduciaryId(input, res, req);
+        }
+        UUID callerFid = InputProcessor.getVerifiedFiduciaryId(req);
+        if (callerFid == null) {
+            OutputProcessor.errorResponse(res, HttpServletResponse.SC_UNAUTHORIZED, "Unauthorized",
+                    "Unable to resolve authenticated fiduciary.", req.getRequestURI());
+        }
+        return callerFid;
+    }
+
+    private UUID requireBodyFiduciaryId(JSONObject input, HttpServletResponse res, HttpServletRequest req) {
+        String fidStr = (String) input.get("fiduciary_id");
+        if (fidStr == null || fidStr.isEmpty()) {
+            OutputProcessor.errorResponse(res, HttpServletResponse.SC_FORBIDDEN, "Forbidden",
+                    "Admin operations must specify the target tenant via 'fiduciary_id'.", req.getRequestURI());
+            return null;
+        }
+        try {
+            return UUID.fromString(fidStr);
+        } catch (IllegalArgumentException e) {
+            OutputProcessor.errorResponse(res, HttpServletResponse.SC_FORBIDDEN, "Forbidden",
+                    "Invalid 'fiduciary_id' for admin-scoped operation.", req.getRequestURI());
+            return null;
+        }
+    }
 
     private UUID requireUUID(JSONObject input, String field, HttpServletResponse res, HttpServletRequest req) {
         String val = (String) input.get(field);

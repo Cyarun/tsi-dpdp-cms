@@ -120,7 +120,17 @@ public class ApiKey implements Action {
                         OutputProcessor.errorResponse(res, HttpServletResponse.SC_BAD_REQUEST, "Bad Request", "'key_id' is required.", req.getRequestURI());
                         return;
                     }
-                    Optional<JSONObject> keyOptional = getApiKeyDetailsFromDb(keyId, isAdmin, callerFid);
+                    // Hardening: ADMIN is still scoped by the body fiduciary_id (the shared wix
+                    // platform-ADMIN must name the target tenant; 403 if absent/invalid). The
+                    // predicate is now applied unconditionally — no isAdmin bypass.
+                    UUID getFid = isAdmin ? requireBodyFiduciaryId(fiduciaryId, res, req) : callerFid;
+                    if (getFid == null) {
+                        if (!isAdmin) {
+                            OutputProcessor.errorResponse(res, HttpServletResponse.SC_UNAUTHORIZED, "Unauthorized", "Unable to resolve authenticated fiduciary.", req.getRequestURI());
+                        }
+                        return;
+                    }
+                    Optional<JSONObject> keyOptional = getApiKeyDetailsFromDb(keyId, getFid);
                     if (keyOptional.isPresent()) {
                         output = keyOptional.get();
                         OutputProcessor.send(res, HttpServletResponse.SC_OK, output);
@@ -133,7 +143,18 @@ public class ApiKey implements Action {
                     String statusFilter = (String) input.get("status");
                     String search = (String) input.get("search");
 
-                    outputArray = listApiKeysFromDb("", statusFilter, search);
+                    // A3: list_api_keys previously passed an empty fiduciary filter, returning
+                    // EVERY tenant's keys to any caller. Scope to the caller's tenant: ADMIN may
+                    // target a specific tenant via the body fiduciary_id (provisioning path),
+                    // non-ADMIN callers are confined to their own verified fiduciary.
+                    String listFid = isAdmin
+                            ? (fiduciaryId != null ? fiduciaryId.toString() : null)
+                            : (callerFid != null ? callerFid.toString() : null);
+                    if (!isAdmin && (listFid == null || listFid.isEmpty())) {
+                        OutputProcessor.errorResponse(res, HttpServletResponse.SC_FORBIDDEN, "Forbidden", "A verified fiduciary is required to list API keys.", req.getRequestURI());
+                        return;
+                    }
+                    outputArray = listApiKeysFromDb(listFid, statusFilter, search);
                     OutputProcessor.send(res, HttpServletResponse.SC_OK, outputArray);
                     break;
 
@@ -142,7 +163,16 @@ public class ApiKey implements Action {
                         OutputProcessor.errorResponse(res, HttpServletResponse.SC_BAD_REQUEST, "Bad Request", "'key_id' is required for revocation.", req.getRequestURI());
                         return;
                     }
-                    revokeApiKeyInDb(keyId, loginUserId, isAdmin, callerFid);
+                    // Hardening: ADMIN is still scoped by the body fiduciary_id (403 if
+                    // absent/invalid); non-ADMIN scoped to own verified tenant. Always scoped.
+                    UUID revokeFid = isAdmin ? requireBodyFiduciaryId(fiduciaryId, res, req) : callerFid;
+                    if (revokeFid == null) {
+                        if (!isAdmin) {
+                            OutputProcessor.errorResponse(res, HttpServletResponse.SC_UNAUTHORIZED, "Unauthorized", "Unable to resolve authenticated fiduciary.", req.getRequestURI());
+                        }
+                        return;
+                    }
+                    revokeApiKeyInDb(keyId, loginUserId, revokeFid);
                     OutputProcessor.send(res, HttpServletResponse.SC_OK, new JSONObject() {{ put("success", true); put("message", "API Key revoked successfully."); }});
                     break;
 
@@ -209,6 +239,23 @@ public class ApiKey implements Action {
             return false;
         }
         return InputProcessor.validate(req, res);
+    }
+
+    /**
+     * Hardening: for the shared platform-ADMIN (wix) caller, the body fiduciary_id IS the
+     * intended tenant for a by-id operation. The body fid is parsed once at the top of post();
+     * 403 if it was absent. Never grant an unscoped cross-tenant ADMIN op silently — the
+     * predicate is always applied to the returned fid. No _platform_maintenance bypass is
+     * offered: provisioning (generate_api_key) carries the tenant in the body and is not a
+     * by-id op, and no current internal caller needs a genuine cross-tenant by-id ADMIN op.
+     */
+    private UUID requireBodyFiduciaryId(UUID parsedBodyFid, HttpServletResponse res, HttpServletRequest req) {
+        if (parsedBodyFid == null) {
+            OutputProcessor.errorResponse(res, HttpServletResponse.SC_FORBIDDEN, "Forbidden",
+                    "Admin operations must specify the target tenant via 'fiduciary_id'.", req.getRequestURI());
+            return null;
+        }
+        return parsedBodyFid;
     }
 
     /**
@@ -283,24 +330,37 @@ public class ApiKey implements Action {
     /**
      * Retrieves API key details from the database by its ID. (Does NOT retrieve raw key).
      */
-    private Optional<JSONObject> getApiKeyDetailsFromDb(UUID keyId, boolean isAdmin, UUID callerFid) throws SQLException {
+    private Optional<JSONObject> getApiKeyDetailsFromDb(UUID keyId, UUID effectiveFid) throws SQLException {
+        return getApiKeyDetailsFromDb(keyId, effectiveFid, false);
+    }
+
+    // Unscoped internal lookup retained ONLY for updateApiKeyStatusInDb, which performs its own
+    // explicit cross-tenant ownership check (keyFiduciaryId vs body fiduciary_id) before mutating.
+    // Not reachable from any tenant-facing by-id read path.
+    private Optional<JSONObject> getApiKeyDetailsFromDbUnscoped(UUID keyId) throws SQLException {
+        return getApiKeyDetailsFromDb(keyId, null, true);
+    }
+
+    private Optional<JSONObject> getApiKeyDetailsFromDb(UUID keyId, UUID effectiveFid, boolean unscoped) throws SQLException {
         Connection conn = null;
         PreparedStatement pstmt = null;
         ResultSet rs = null;
         PoolDB pool = new PoolDB();
 
-        // Exclude the sensitive key_value hash from being pulled into general objects
-        // F3: non-ADMIN callers are scoped to their own fiduciary so cross-tenant keys return as not-found.
+        // Exclude the sensitive key_value hash from being pulled into general objects.
+        // Hardening: the tenant predicate is applied unconditionally for caller-facing reads
+        // (effectiveFid). Only the explicit internal `unscoped` path (status update, which does
+        // its own ownership check) omits it.
         String sql = "SELECT id, fiduciary_id, app_id, description, status, permissions, created_at, expires_at, last_used_at FROM api_keys WHERE id = ?";
-        if (!isAdmin) {
+        if (!unscoped) {
             sql += " AND fiduciary_id = ?";
         }
         try {
             conn = pool.getConnection();
             pstmt = conn.prepareStatement(sql);
             pstmt.setObject(1, keyId);
-            if (!isAdmin) {
-                pstmt.setObject(2, callerFid);
+            if (!unscoped) {
+                pstmt.setObject(2, effectiveFid);
             }
             rs = pstmt.executeQuery();
             if (rs.next()) {
@@ -381,31 +441,27 @@ public class ApiKey implements Action {
     /**
      * Revokes an API key by setting its status to REVOKED and recording revocation details.
      */
-    private void revokeApiKeyInDb(UUID keyId, UUID loginUserId, boolean isAdmin, UUID callerFid) throws SQLException {
+    private void revokeApiKeyInDb(UUID keyId, UUID loginUserId, UUID effectiveFid) throws SQLException {
         Connection conn = null;
         PreparedStatement pstmt = null;
         PoolDB pool = new PoolDB();
         boolean success = false;
 
-        // Soft delete/Revoke by updating status and recording metadata
-        // F3: non-ADMIN callers can only revoke keys within their own fiduciary (cross-tenant = no-op).
-        String sql = "UPDATE api_keys SET status = 'REVOKED', revoked_at = NOW(), last_used_at = NOW() WHERE id = ? AND status != 'REVOKED'";
-        if (!isAdmin) {
-            sql += " AND fiduciary_id = ?";
-        }
+        // Soft delete/Revoke by updating status and recording metadata.
+        // Hardening: the tenant predicate is applied unconditionally — even the shared
+        // platform-ADMIN can only revoke a key within the tenant named by effectiveFid.
+        String sql = "UPDATE api_keys SET status = 'REVOKED', revoked_at = NOW(), last_used_at = NOW() WHERE id = ? AND status != 'REVOKED' AND fiduciary_id = ?";
 
         try {
             conn = pool.getConnection();
             pstmt = conn.prepareStatement(sql);
             pstmt.setObject(1, keyId);
-            if (!isAdmin) {
-                pstmt.setObject(2, callerFid);
-            }
+            pstmt.setObject(2, effectiveFid);
 
             int affectedRows = pstmt.executeUpdate();
             if (affectedRows == 0) {
-                // Check if it exists at all (optional), scoped to the caller's tenant.
-                if (getApiKeyDetailsFromDb(keyId, isAdmin, callerFid).isEmpty()) {
+                // Check if it exists at all (optional), scoped to the effective tenant.
+                if (getApiKeyDetailsFromDb(keyId, effectiveFid).isEmpty()) {
                     throw new SQLException("API Key not found.");
                 }
             }
@@ -431,7 +487,7 @@ public class ApiKey implements Action {
 
         // F4: load the key first to enforce tenant ownership and the no-reactivation rule.
         // Caller is already DB-verified ADMIN (gated in the switch); tenant check is enforced explicitly below.
-        Optional<JSONObject> keyDetails = getApiKeyDetailsFromDb(keyId, true, null);
+        Optional<JSONObject> keyDetails = getApiKeyDetailsFromDbUnscoped(keyId);
         if (keyDetails.isEmpty()) {
             throw new SQLException("API Key not found.");
         }
@@ -459,7 +515,7 @@ public class ApiKey implements Action {
             int affectedRows = pstmt.executeUpdate();
             if (affectedRows == 0) {
                 // Check if it exists at all and if it was already permanently revoked.
-                Optional<JSONObject> postKeyDetails = getApiKeyDetailsFromDb(keyId, true, null);
+                Optional<JSONObject> postKeyDetails = getApiKeyDetailsFromDbUnscoped(keyId);
                 if (postKeyDetails.isEmpty()) {
                     throw new SQLException("API Key not found.");
                 }

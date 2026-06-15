@@ -159,7 +159,8 @@ public class Compliance implements Action {
                     }
                     String status = (String) input.get("status"); // COMPLETED, FAILED, IN_PROGRESS
                     String details = (String) input.get("details");
-                    updatePurgeStatus(purgeRequestId, status, details, loginUserId, appId);
+                    // A4: scope the by-id UPDATE to the authenticated fiduciary (resolved above).
+                    updatePurgeStatus(purgeRequestId, status, details, loginUserId, appId, fiduciaryId);
                     OutputProcessor.send(res, HttpServletResponse.SC_OK, new JSONObject() {{ put("success", true); put("message", "Purge status confirmed."); }});
                     break;
 
@@ -185,7 +186,8 @@ public class Compliance implements Action {
                         OutputProcessor.errorResponse(res, HttpServletResponse.SC_BAD_REQUEST, "Bad Request", "'fiduciary_id' is required for 'list_purge_requests'.", req.getRequestURI());
                         return;
                     }
-                    output = getPurgeRequestsFromDb(id);
+                    // A4: scope the by-id read to the authenticated fiduciary (resolved above).
+                    output = getPurgeRequestsFromDb(id, fiduciaryId);
                     OutputProcessor.send(res, HttpServletResponse.SC_OK, output);
                     break;
 
@@ -282,7 +284,7 @@ public class Compliance implements Action {
      * Confirms the status of a purge request (called by DF/DP).
      * @throws SQLException if a database access error occurs.
      */
-    private void updatePurgeStatus(UUID purgeRequestId, String confirmationStatus, String details, UUID loginUserId, UUID appId) throws SQLException {
+    private void updatePurgeStatus(UUID purgeRequestId, String confirmationStatus, String details, UUID loginUserId, UUID appId, UUID callerFiduciaryId) throws SQLException {
         Connection conn = null;
         PreparedStatement pstmt = null;
         ResultSet rs = null;
@@ -292,8 +294,10 @@ public class Compliance implements Action {
         boolean updated = false;
         String serviceType = null;
 
-        String sql = "UPDATE purge_requests SET status = ?, details = ?, last_updated_at = NOW() WHERE id = ?";
-        String sql2 = "select user_id,fiduciary_id from  purge_requests WHERE id = ?";
+        // A4: scope the by-id UPDATE to the caller's tenant so an operator who learns
+        // another tenant's purge_request id cannot mutate it (cross-tenant = 0 rows).
+        String sql = "UPDATE purge_requests SET status = ?, details = ?, last_updated_at = NOW() WHERE id = ? AND fiduciary_id = ?";
+        String sql2 = "select user_id,fiduciary_id from  purge_requests WHERE id = ? AND fiduciary_id = ?";
 
         try {
             conn = pool.getConnection();
@@ -301,15 +305,18 @@ public class Compliance implements Action {
             pstmt.setString(1, confirmationStatus);
             pstmt.setString(2, details);
             pstmt.setObject(3, purgeRequestId);
+            pstmt.setObject(4, callerFiduciaryId);
 
             int affectedRows = pstmt.executeUpdate();
             if (affectedRows == 0) {
+                // A4: missing row or cross-tenant — same result, do not leak existence.
                 throw new SQLException("Confirming purge status failed, purge request not found or no changes made.");
             }
 
             // Audit Log: Log the purge confirmation event
             pstmt = conn.prepareStatement(sql2);
             pstmt.setObject(1, purgeRequestId);
+            pstmt.setObject(2, callerFiduciaryId);
             rs = pstmt.executeQuery();
             if(rs.next()) {
                 userId = rs.getString("user_id");
@@ -403,19 +410,22 @@ public class Compliance implements Action {
      * @return JSONArray of purge request JSONObjects.
      * @throws SQLException if a database access error occurs.
      */
-    private JSONObject getPurgeRequestsFromDb(String id) throws SQLException {
+    private JSONObject getPurgeRequestsFromDb(String id, UUID callerFiduciaryId) throws SQLException {
         JSONObject purgeob = null;
         Connection conn = null;
         PreparedStatement pstmt = null;
         ResultSet rs = null;
         PoolDB pool = new PoolDB();
 
-        String sql = "SELECT pr.id, pr.user_id, pr.fiduciary_id, pr.purpose_id, pr.app_id, pr.trigger_event, pr.status, pr.initiated_at, pr.details, a.name FROM purge_requests pr LEFT JOIN apps a ON pr.app_id = a.id WHERE pr.id=?";
+        // A4: scope the by-id read to the caller's tenant so an operator who learns
+        // another tenant's purge_request id cannot read it (cross-tenant = empty result).
+        String sql = "SELECT pr.id, pr.user_id, pr.fiduciary_id, pr.purpose_id, pr.app_id, pr.trigger_event, pr.status, pr.initiated_at, pr.details, a.name FROM purge_requests pr LEFT JOIN apps a ON pr.app_id = a.id WHERE pr.id=? AND pr.fiduciary_id=?";
 
         try {
             conn = pool.getConnection();
             pstmt = conn.prepareStatement(sql);
             pstmt.setObject(1, UUID.fromString(id));
+            pstmt.setObject(2, callerFiduciaryId);
             rs = pstmt.executeQuery();
 
             if (rs.next()) {

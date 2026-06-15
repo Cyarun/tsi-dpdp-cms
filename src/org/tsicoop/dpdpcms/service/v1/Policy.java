@@ -103,6 +103,11 @@ public class Policy implements Action {
                     }
                     Optional<JSONObject> policyOptional = getPolicyFromDb(policyIdStr, versionStr);
                     if (policyOptional.isPresent()) {
+                        // A6: enforce tenant ownership on the by-id read (cross-tenant = not found).
+                        if (!policyBelongsToCaller(policyOptional.get(), fiduciaryId)) {
+                            OutputProcessor.errorResponse(res, HttpServletResponse.SC_NOT_FOUND, "Not Found", "Policy with ID '" + policyIdStr + "' and version '" + versionStr + "' not found.", req.getRequestURI());
+                            return;
+                        }
                         output = policyOptional.get();
                         OutputProcessor.send(res, HttpServletResponse.SC_OK, output);
                     } else {
@@ -161,6 +166,12 @@ public class Policy implements Action {
                         OutputProcessor.errorResponse(res, HttpServletResponse.SC_NOT_FOUND, "Not Found", "Policy with ID '" + policyIdStr + "' and version '" + versionStr + "' not found.", req.getRequestURI());
                         return;
                     }
+                    // A6: enforce tenant ownership before mutating (updatePolicyInDb scopes by
+                    // policy_id only, so without this an operator could edit another tenant's policy).
+                    if (!policyBelongsToCaller(existingPolicy.get(), fiduciaryId)) {
+                        OutputProcessor.errorResponse(res, HttpServletResponse.SC_NOT_FOUND, "Not Found", "Policy with ID '" + policyIdStr + "' and version '" + versionStr + "' not found.", req.getRequestURI());
+                        return;
+                    }
                     String currentStatus = (String) existingPolicy.get().get("status");
                     if (!"DRAFT".equalsIgnoreCase(currentStatus)) {
                         OutputProcessor.errorResponse(res, HttpServletResponse.SC_FORBIDDEN, "Forbidden", "Only DRAFT policies can be updated. Current status: " + currentStatus, req.getRequestURI());
@@ -189,6 +200,12 @@ public class Policy implements Action {
                         OutputProcessor.errorResponse(res, HttpServletResponse.SC_NOT_FOUND, "Not Found", "Policy with ID '" + policyIdStr + "' not found.", req.getRequestURI());
                         return;
                     }
+                    // A6: enforce tenant ownership before publishing (publish used the policy's
+                    // own fiduciary_id without comparing it to the caller).
+                    if (!policyBelongsToCaller(existingPolicy.get(), fiduciaryId)) {
+                        OutputProcessor.errorResponse(res, HttpServletResponse.SC_NOT_FOUND, "Not Found", "Policy with ID '" + policyIdStr + "' not found.", req.getRequestURI());
+                        return;
+                    }
                     currentStatus = (String) existingPolicy.get().get("status");
                     if ("ACTIVE".equalsIgnoreCase(currentStatus)) {
                         OutputProcessor.errorResponse(res, HttpServletResponse.SC_CONFLICT, "Conflict", "Policy is already ACTIVE.", req.getRequestURI());
@@ -214,6 +231,11 @@ public class Policy implements Action {
                     }
                     existingPolicy = getPolicyFromDb(policyIdStr, versionStr);
                     if (existingPolicy.isEmpty()) {
+                        OutputProcessor.errorResponse(res, HttpServletResponse.SC_NOT_FOUND, "Not Found", "Policy with ID '" + policyIdStr + "' not found.", req.getRequestURI());
+                        return;
+                    }
+                    // A6: enforce tenant ownership before (soft) delete.
+                    if (!policyBelongsToCaller(existingPolicy.get(), fiduciaryId)) {
                         OutputProcessor.errorResponse(res, HttpServletResponse.SC_NOT_FOUND, "Not Found", "Policy with ID '" + policyIdStr + "' not found.", req.getRequestURI());
                         return;
                     }
@@ -382,6 +404,19 @@ public class Policy implements Action {
      * The JWT identifies the caller by email; we look up their fiduciary_id
      * in the operators table so the frontend never needs to supply it.
      */
+    /**
+     * A6: tenant-ownership gate for by-id policy operations. Returns true only when the
+     * loaded policy belongs to the resolved caller fiduciary. resolveFiduciaryId() yields
+     * the DPO's bound fiduciary, or (for the ADMIN/wix provisioning path) the body
+     * fiduciary_id — which wix sets to the tenant being provisioned, so legitimate
+     * provisioning calls still match. Fail-closed: a null caller cannot prove ownership.
+     */
+    private boolean policyBelongsToCaller(JSONObject policy, UUID callerFiduciaryId) {
+        if (callerFiduciaryId == null) return false;
+        Object fid = policy.get("fiduciary_id");
+        return fid != null && callerFiduciaryId.toString().equalsIgnoreCase(fid.toString());
+    }
+
     private UUID resolveFiduciaryId(HttpServletRequest req) throws SQLException {
         // 1. Derive from the authenticated operator's DB record (covers DPOs implicitly)
         String authHeader = req.getHeader("Authorization");

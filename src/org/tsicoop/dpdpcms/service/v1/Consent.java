@@ -195,7 +195,11 @@ public class Consent implements Action {
                     break;
                 case "get_consent_record_details":
                     String recordId = (String) input.get("record_id");
-                    Optional<JSONObject> consentOptional = getConsentFromDb(UUID.fromString(recordId));
+                    // A7: scope the by-id read to the authenticated fiduciary; the prior call
+                    // had no filter, letting any caller read another tenant's consent record by id.
+                    // For the principal-JWT path also constrain to the token's user_id.
+                    Optional<JSONObject> consentOptional = getConsentFromDb(UUID.fromString(recordId),
+                            fiduciaryId, Boolean.TRUE.equals(viaPrincipalJwt) ? userId : null);
                     if (consentOptional.isPresent()) {
                         output = consentOptional.get();
                         OutputProcessor.send(res, HttpServletResponse.SC_OK, output);
@@ -904,22 +908,29 @@ public class Consent implements Action {
      * @return An Optional containing the consent record JSONObject if found, otherwise empty.
      * @throws SQLException if a database access error occurs.
      */
-    private Optional<JSONObject> getConsentFromDb(UUID recordId) throws SQLException {
+    private Optional<JSONObject> getConsentFromDb(UUID recordId, UUID callerFiduciaryId, String principalUserId) throws SQLException {
         Connection conn = null;
         PreparedStatement pstmt = null;
         ResultSet rs = null;
         PoolDB pool = new PoolDB();
+        // A7: scope the by-id read to the caller's tenant (cross-tenant = empty result);
+        // for the principal-JWT path also enforce user_id match.
         String sql = "SELECT cr.id, cr.user_id, cr.fiduciary_id, cr.policy_id, cr.policy_version, cr.timestamp, " +
                 "cr.jurisdiction, cr.language_selected, cr.consent_status_general, cr.consent_mechanism, " +
                 "cr.ip_address, cr.user_agent, cr.data_point_consents, cr.is_active_consent, " +
                 "cr.ropa_entry_id, re.activity_name AS ropa_activity_name " +
                 "FROM consent_records cr " +
                 "LEFT JOIN ropa_entries re ON re.id = cr.ropa_entry_id " +
-                "WHERE cr.id = ?";
+                "WHERE cr.id = ? AND cr.fiduciary_id = ?"
+                + (principalUserId != null ? " AND cr.user_id = ?" : "");
         try {
             conn = pool.getConnection();
             pstmt = conn.prepareStatement(sql);
             pstmt.setObject(1, recordId);
+            pstmt.setObject(2, callerFiduciaryId);
+            if (principalUserId != null) {
+                pstmt.setString(3, principalUserId);
+            }
             rs = pstmt.executeQuery();
             if (rs.next()) {
                 JSONObject consent = new JSONObject();

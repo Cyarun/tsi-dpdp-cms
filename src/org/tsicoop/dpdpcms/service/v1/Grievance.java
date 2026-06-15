@@ -125,7 +125,10 @@ public class Grievance implements Action {
                     break;
 
                 case "get_grievance":
-                    handleGetGrievance(grievanceId, res, req);
+                    // A7: scope the by-id read to the authenticated fiduciary; for the
+                    // principal-JWT path also constrain to the token's user_id.
+                    handleGetGrievance(grievanceId, fiduciaryId,
+                            Boolean.TRUE.equals(viaPrincipalJwt) ? userId : null, res, req);
                     break;
 
                 case "list_grievances":
@@ -137,7 +140,8 @@ public class Grievance implements Action {
                     break;
 
                 case "update_grievance_status":
-                    handleUpdateGrievanceStatus(input, grievanceId, serviceType, actorServiceId, res, req);
+                    // A2: scope the by-id UPDATE to the authenticated fiduciary (resolved above).
+                    handleUpdateGrievanceStatus(input, grievanceId, fiduciaryId, serviceType, actorServiceId, res, req);
                     break;
 
                 default:
@@ -206,7 +210,7 @@ public class Grievance implements Action {
         }
     }
 
-    private void handleUpdateGrievanceStatus(JSONObject input, UUID grievanceId, String serviceType, UUID serviceId, HttpServletResponse res, HttpServletRequest req) throws SQLException {
+    private void handleUpdateGrievanceStatus(JSONObject input, UUID grievanceId, UUID callerFiduciaryId, String serviceType, UUID serviceId, HttpServletResponse res, HttpServletRequest req) throws SQLException {
         String newStatus = (String) input.get("status");
         String resolutionDetails = (String) input.get("resolution_details");
 
@@ -241,20 +245,25 @@ public class Grievance implements Action {
             if (resolutionDetails != null) {
                 sql.append(", resolution_details = ?, resolution_timestamp = NOW()");
             }
-            sql.append(" WHERE id = ?");
+            // A2: scope the by-id UPDATE to the caller's tenant so an operator who learns
+            // another tenant's grievance id cannot mutate it (cross-tenant = 0 rows).
+            sql.append(" WHERE id = ? AND fiduciary_id = ?");
 
             pstmt = conn.prepareStatement(sql.toString());
             pstmt.setString(1, newStatus);
+            int idx = 2;
             if (resolutionDetails != null) {
-                pstmt.setString(2, resolutionDetails);
-                pstmt.setObject(3, grievanceId);
-            } else {
-                pstmt.setObject(2, grievanceId);
+                pstmt.setString(idx++, resolutionDetails);
             }
+            pstmt.setObject(idx++, grievanceId);
+            pstmt.setObject(idx, callerFiduciaryId);
 
             if (pstmt.executeUpdate() > 0) {
                 OutputProcessor.send(res, 200, new JSONObject() {{ put("success", true); }});
                 success = true;
+            } else {
+                // A2: do not leak existence — same 404 whether the row is missing or cross-tenant.
+                OutputProcessor.errorResponse(res, 404, "Not Found", "Grievance not found.", req.getRequestURI());
             }
         } finally {
             pool.cleanup(rs, pstmt, conn);
@@ -267,15 +276,23 @@ public class Grievance implements Action {
         }
     }
 
-    private void handleGetGrievance(UUID id, HttpServletResponse res, HttpServletRequest req) throws SQLException {
+    private void handleGetGrievance(UUID id, UUID callerFiduciaryId, String principalUserId, HttpServletResponse res, HttpServletRequest req) throws SQLException {
         PoolDB pool = new PoolDB();
         Connection conn = null;
         PreparedStatement pstmt = null;
         ResultSet rs = null;
         try {
             conn = pool.getConnection();
-            pstmt = conn.prepareStatement("SELECT * FROM grievances WHERE id = ?");
+            // A7: scope the by-id read to the caller's tenant; for the principal-JWT path
+            // also enforce user_id match so a principal can only read their own grievance.
+            String sql = "SELECT * FROM grievances WHERE id = ? AND fiduciary_id = ?"
+                    + (principalUserId != null ? " AND user_id = ?" : "");
+            pstmt = conn.prepareStatement(sql);
             pstmt.setObject(1, id);
+            pstmt.setObject(2, callerFiduciaryId);
+            if (principalUserId != null) {
+                pstmt.setString(3, principalUserId);
+            }
             rs = pstmt.executeQuery();
             if (rs.next()) {
                 JSONObject g = new JSONObject();
