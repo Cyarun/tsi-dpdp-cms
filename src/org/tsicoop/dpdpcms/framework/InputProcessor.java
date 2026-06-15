@@ -336,9 +336,20 @@ public class InputProcessor {
     public static String getVerifiedRole(HttpServletRequest req) {
         JSONObject authToken = (JSONObject) req.getAttribute(InputProcessor.AUTH_TOKEN);
         if (authToken == null) return null;
-        String email = (String) authToken.get("email");
-        if (email == null) return null;
+        // The operator JWT is already signature-verified (processAdminHeader). It
+        // carries a verified "role" claim and a "sub" (operator id). Trust the
+        // signed role directly — the previous version looked up by an "email"
+        // claim the token does not contain, so it always returned null and broke
+        // operator actions (e.g. update_grievance_status -> 401). The role here is
+        // from a signed token, not client input, so it is safe to trust.
+        String role = (String) authToken.get("role");
+        if (role != null && !role.isEmpty()) return role;
 
+        // Fallback: resolve role from the operators table by the token subject
+        // (operator id) if a future token omits the role claim.
+        Object sub = authToken.get("sub");
+        if (sub == null) sub = authToken.get("email");  // legacy tolerance
+        if (sub == null) return null;
         PoolDB pool = null;
         Connection conn = null;
         PreparedStatement pstmt = null;
@@ -346,8 +357,8 @@ public class InputProcessor {
         try {
             pool = new PoolDB();
             conn = pool.getConnection();
-            pstmt = conn.prepareStatement("SELECT role FROM operators WHERE email_hmac = " + DbEncryption.HMAC + " AND status = 'ACTIVE'");
-            DbEncryption.bindHmac(pstmt, 1, email);
+            pstmt = conn.prepareStatement("SELECT role FROM operators WHERE id = ?::uuid AND status = 'ACTIVE'");
+            pstmt.setString(1, sub.toString());
             rs = pstmt.executeQuery();
             if (rs.next()) return rs.getString("role");
         } catch (Exception e) {
