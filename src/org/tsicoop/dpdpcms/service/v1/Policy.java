@@ -812,7 +812,28 @@ public class Policy implements Action {
                 }
             }
 
+            // 1b. SUPERSEDE: a publish of a new version of THIS policy_id replaces any
+            // prior ACTIVE/UNDER_REVIEW version of the SAME policy_id for the SAME
+            // fiduciary. Without this, every re-publish of an edited consent policy
+            // collides on its own purpose IDs (which are stable across versions) and
+            // 409s — a tenant could publish exactly once, then be permanently blocked,
+            // and orphaned UNDER_REVIEW versions (e.g. from interrupted ROPA approval)
+            // would block forever. We archive only same-policy_id, same-fiduciary,
+            // prior versions — fiduciary is the caller-verified owner of THIS policy
+            // (publish_policy checked policyBelongsToCaller before calling us), never a
+            // request-body value, so this cannot touch another tenant. Same transaction
+            // as the activation below, so it commits or rolls back atomically.
+            String supersedeSql = "UPDATE consent_policies SET status = 'ARCHIVED', last_updated_at = NOW() " +
+                    "WHERE fiduciary_id = ? AND id = ? AND version != ? AND status IN ('ACTIVE', 'UNDER_REVIEW')";
+            try (PreparedStatement pSupersede = conn.prepareStatement(supersedeSql)) {
+                pSupersede.setObject(1, fiduciaryId);
+                pSupersede.setString(2, policyId);
+                pSupersede.setString(3, version);
+                pSupersede.executeUpdate();
+            }
+
             // 2. Scan all currently ACTIVE/UNDER_REVIEW policies for the fiduciary for potential collisions
+            // (after the supersede above, only OTHER policy_ids of this fiduciary can still collide).
             Set<String> activePurposes = new HashSet<>();
             String scanSql = "SELECT policy_content FROM consent_policies WHERE fiduciary_id = ? AND status IN ('ACTIVE', 'UNDER_REVIEW') AND (id != ? OR version != ?)";
             pstmtCheck = conn.prepareStatement(scanSql);
