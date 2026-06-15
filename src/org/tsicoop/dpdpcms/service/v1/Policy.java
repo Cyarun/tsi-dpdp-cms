@@ -31,8 +31,24 @@ public class Policy implements Action {
     private static final Pattern POLICY_ID_PATTERN = Pattern.compile("^[a-zA-Z0-9_-]{3,255}$");
     private static final Pattern VERSION_PATTERN = Pattern.compile("^[0-9]+\\.[0-9]+(\\.[0-9]+)?$"); // e.g., 1.0, 1.0.1
     private static final UUID ADMIN_FID_UUID = UUID.fromString("00000000-0000-0000-0000-000000000000");
-    // Thread-safe in-memory cache for Policy lookups to minimize database round-trips
+    // Thread-safe in-memory cache for Policy lookups to minimize database round-trips.
+    // BUG1 FIX (vAIb-too): keyed by policy_id + version (see policyCacheKey) so
+    // distinct versions never collide, and evicted on every state change so a
+    // published/updated/deleted policy never serves a stale status.
     private static final Map<String, JSONObject> policyCache = new ConcurrentHashMap<>();
+
+    /** Version-aware cache key. A null/empty version is normalised so the
+     *  empty-version row (legacy initial policy) gets its own stable slot. */
+    private static String policyCacheKey(String policyId, String version) {
+        return policyId + "@" + (version == null ? "" : version);
+    }
+
+    /** Evict the cached row for a specific (policy_id, version) after a mutation
+     *  that changes its status (publish/update/delete) so the next read reflects
+     *  the new DB state instead of a stale cached snapshot. */
+    private static void policyCacheEvict(String policyId, String version) {
+        policyCache.remove(policyCacheKey(policyId, version));
+    }
 
     /**
      * Handles all Policy Management operations via a single POST endpoint.
@@ -187,6 +203,8 @@ public class Policy implements Action {
                     }
 
                     output = updatePolicyInDb(policyIdStr, fiduciaryId, policyContent);
+                    // BUG1 FIX (vAIb-too): the cached snapshot is now stale.
+                    policyCacheEvict(policyIdStr, versionStr);
                     OutputProcessor.send(res, HttpServletResponse.SC_OK, output);
                     break;
 
@@ -221,6 +239,11 @@ public class Policy implements Action {
                     String policyJurisdiction = (String)existingPolicy.get().get("jurisdiction");
 
                     publishPolicyInDb(policyIdStr, versionStr, policyFidId, policyJurisdiction);
+                    // BUG1 FIX (vAIb-too): publish flips this version to ACTIVE and
+                    // ARCHIVES the prior ACTIVE version of the same policy_id, so any
+                    // cached snapshot of this policy is now stale. Clear all of this
+                    // policy_id's cached versions (cheap; the map is small per id).
+                    policyCache.keySet().removeIf(k -> k.startsWith(policyIdStr + "@"));
                     OutputProcessor.send(res, HttpServletResponse.SC_OK, new JSONObject() {{ put("success", true); put("message", "Policy published successfully."); }});
                     break;
 
@@ -240,6 +263,8 @@ public class Policy implements Action {
                         return;
                     }
                     deletePolicyFromDb(fiduciaryId, policyIdStr, versionStr);
+                    // BUG1 FIX (vAIb-too): the cached snapshot is now stale.
+                    policyCacheEvict(policyIdStr, versionStr);
                     OutputProcessor.send(res, HttpServletResponse.SC_NO_CONTENT, null);
                     break;
                 default:
@@ -604,7 +629,13 @@ public class Policy implements Action {
      * Uses a ConcurrentHashMap to cache results and minimize latency.
      */
     protected Optional<JSONObject> getPolicyFromDb(String policyId, String version) throws SQLException {
-        String cacheKey = policyId;
+        // BUG1 FIX (vAIb-too): the cache key MUST include the version. A policy_id
+        // has MANY versions (multiple DRAFTs, an ACTIVE, ARCHIVED/EXPIRED ones).
+        // Keying by policy_id alone made every version-specific lookup return
+        // whichever version landed in the cache FIRST — so publishing a fresh
+        // DRAFT could read a stale ARCHIVED/EXPIRED row and be rejected 403
+        // ("Cannot publish an ARCHIVED or EXPIRED policy"). Key by id + version.
+        String cacheKey = policyCacheKey(policyId, version);
 
         // 1. Return from cache if present
         if (policyCache.containsKey(cacheKey)) {
@@ -634,7 +665,7 @@ public class Policy implements Action {
                 policy.put("created_at", rs.getTimestamp("created_at").toInstant().toString());
                 policy.put("last_updated_at", rs.getTimestamp("last_updated_at").toInstant().toString());
 
-                // 2. Populate cache on successful lookup
+                // 2. Populate cache on successful lookup (keyed by id + version)
                 policyCache.put(cacheKey, policy);
                 return Optional.of(policy);
             }
