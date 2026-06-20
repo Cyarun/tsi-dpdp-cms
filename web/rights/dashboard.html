@@ -876,15 +876,16 @@
     // signals readiness so the widget knows when to (re)send. Standalone (not iframed):
     // fall back to requireAuth() (redirect to index.html login).
     (function bootstrap() {
-        // Only trust messages from the fabric origin that hosts this page (the widget
-        // posts to IFRAME_ORIGIN). Never trust an arbitrary postMessage sender.
-        var EXPECTED_ORIGIN = (function () {
-            try { return location.origin; } catch (e) { return null; }
-        })();
-
+        // The session is posted by the WIDGET, which runs on the PARENT page (the
+        // tenant's own Wix site, e.g. www.nailtalk.in) — NOT this iframe's origin
+        // (docs.cynorsense.com). Each tenant has a different domain we can't pin, so the
+        // trust anchor is the SENDER being our parent window. (Pinning location.origin
+        // was the bug: the widget's origin never equals the iframe's, so every session
+        // was rejected → "Loading…" forever.) Defence still holds: only window.parent
+        // can deliver, and the session token itself is a CMS-signed JWT validated below.
         function onSessionMessage(event) {
-            // Origin gate: only the same origin that serves this fabric-hosted page.
-            if (EXPECTED_ORIGIN && event.origin !== EXPECTED_ORIGIN) return;
+            // Sender gate: only our embedding parent window may inject the session.
+            try { if (event.source !== window.parent) return; } catch (e) { return; }
             var msg = event.data;
             if (!msg || typeof msg !== 'object' || msg.type !== 'vaib-principal-session') return;
             var s = msg.session;
