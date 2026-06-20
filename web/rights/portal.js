@@ -4,7 +4,27 @@
  * All session state is stored in sessionStorage (auto-clears on tab close).
  */
 
-const PORTAL_BASE_URL = 'http://localhost:8080';
+// vAIb-7fic: route the data-principal /api/v1/client/* calls THROUGH fabric's
+// PRINCIPAL-scoped console proxy (the Wix-app thin security gateway), instead of the
+// CMS directly. apiCall('/api/v1/client/consent', ...) -> this base + that path ->
+// fabric /v1/console/cms/client-api/api/v1/client/consent (the proxy verifies the
+// member countersign + forwards the principal Bearer token, and the CMS sees
+// /api/v1/client/consent). When this page is served by fabric (embedded in the Wix
+// My Data widget) the widget injects the session via postMessage (see the
+// vaib-principal-session bootstrap in dashboard.html) so no second login is needed.
+//
+// STANDALONE fallback: if the page is opened directly (not via fabric / not on the
+// docs.cynorsense.com origin), keep the legacy same-origin base so a developer can
+// still load it against a local CMS. The fabric base is used ONLY when the page is
+// actually served from the fabric origin.
+const PORTAL_BASE_URL = (function () {
+    try {
+        if (location.hostname === 'docs.cynorsense.com') {
+            return 'https://docs.cynorsense.com/vaib/fabric/console/cms/client-api';
+        }
+    } catch (e) { /* non-browser / sandboxed -> fall through */ }
+    return 'http://localhost:8080';
+})();
 
 const SESSION_KEYS = {
     token:          'pp_token',

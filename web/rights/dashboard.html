@@ -841,8 +841,9 @@
     }
 
     // ── Bootstrap ───────────────────────────────────────────────────────
-    document.addEventListener('DOMContentLoaded', () => {
-        SESSION = requireAuth();
+    // The actual dashboard init, run ONLY once a valid session is in sessionStorage.
+    function initDashboard() {
+        SESSION = getSession();
         if (!SESSION) return;
 
         document.getElementById('header-fiduciary').textContent = SESSION.fiduciaryName;
@@ -865,7 +866,53 @@
         });
 
         setTab('consent');
-    });
+    }
+
+    // vAIb-7fic — SESSION HANDOFF when embedded in the Wix My Data widget.
+    // The widget (apps/wix-dpdpa-widget/src/element.js) runs the whoami -> countersign
+    // -> OTP -> verify-otp flow and gets the CMS principal_login session. It then loads
+    // THIS page in an iframe and postMessages {type:'vaib-principal-session', session}
+    // so we can saveSession() it BEFORE the dashboard runs — no second login. The page
+    // signals readiness so the widget knows when to (re)send. Standalone (not iframed):
+    // fall back to requireAuth() (redirect to index.html login).
+    (function bootstrap() {
+        // Only trust messages from the fabric origin that hosts this page (the widget
+        // posts to IFRAME_ORIGIN). Never trust an arbitrary postMessage sender.
+        var EXPECTED_ORIGIN = (function () {
+            try { return location.origin; } catch (e) { return null; }
+        })();
+
+        function onSessionMessage(event) {
+            // Origin gate: only the same origin that serves this fabric-hosted page.
+            if (EXPECTED_ORIGIN && event.origin !== EXPECTED_ORIGIN) return;
+            var msg = event.data;
+            if (!msg || typeof msg !== 'object' || msg.type !== 'vaib-principal-session') return;
+            var s = msg.session;
+            // Shape-validate before it touches sessionStorage (untrusted input): a token
+            // string is REQUIRED; the rest are whitelisted strings/array by saveSession.
+            if (!s || typeof s !== 'object' || typeof s.token !== 'string' || !s.token) return;
+            window.removeEventListener('message', onSessionMessage);
+            saveSession(s);            // writes sessionStorage SESSION_KEYS (portal.js:29)
+            initDashboard();
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            // Already have a session (standalone login already ran, or a prior inject) ->
+            // init immediately.
+            if (getSession()) { initDashboard(); return; }
+            // Embedded in an iframe with no session yet -> wait for the widget to inject
+            // it (origin-checked listener above). Tell the parent we're ready to receive.
+            var embedded = false;
+            try { embedded = (window.parent && window.parent !== window); } catch (e) { embedded = true; }
+            if (embedded) {
+                window.addEventListener('message', onSessionMessage);
+                try { window.parent.postMessage({ type: 'vaib-rights-ready' }, '*'); } catch (e) { /* parent gone */ }
+                return;   // do NOT redirect — the session arrives by postMessage.
+            }
+            // Truly standalone with no session -> legacy login redirect.
+            requireAuth();
+        });
+    })();
 
     // Close detail modal on backdrop click
     document.getElementById('detail-modal').addEventListener('click', function(e) {
