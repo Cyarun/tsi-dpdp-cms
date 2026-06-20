@@ -31,7 +31,15 @@ const SESSION_KEYS = {
     userId:         'pp_user_id',
     fiduciaryId:    'pp_fiduciary_id',
     fiduciaryName:  'pp_fiduciary_name',
-    policies:       'pp_policies'   // JSON array of { policy_id, version, jurisdiction, title }
+    policies:       'pp_policies',  // JSON array of { policy_id, version, jurisdiction, title }
+    // The Wix member countersign (instance + member_sig + member_ts), carried so EVERY
+    // /api/v1/client/* call can re-present it to the fabric proxy. Fabric requires the
+    // countersign per-call AND binds it to the Bearer's principal (cross-principal IDOR
+    // guard, vAIb-7fic SEC Finding 1) — so the principal proves identity BOTH ways on
+    // every call: the CMS-signed Bearer + the fabric-verified Wix countersign.
+    instance:       'pp_instance',
+    memberSig:      'pp_member_sig',
+    memberTs:       'pp_member_ts'
 };
 
 function getSession() {
@@ -42,7 +50,10 @@ function getSession() {
         userId:        sessionStorage.getItem(SESSION_KEYS.userId),
         fiduciaryId:   sessionStorage.getItem(SESSION_KEYS.fiduciaryId),
         fiduciaryName: sessionStorage.getItem(SESSION_KEYS.fiduciaryName),
-        policies:      getSessionPolicies()
+        policies:      getSessionPolicies(),
+        instance:      sessionStorage.getItem(SESSION_KEYS.instance),
+        memberSig:     sessionStorage.getItem(SESSION_KEYS.memberSig),
+        memberTs:      sessionStorage.getItem(SESSION_KEYS.memberTs)
     };
 }
 
@@ -52,6 +63,10 @@ function saveSession(data) {
     sessionStorage.setItem(SESSION_KEYS.fiduciaryId,   data.fiduciary_id   || '');
     sessionStorage.setItem(SESSION_KEYS.fiduciaryName, data.fiduciary_name || '');
     sessionStorage.setItem(SESSION_KEYS.policies,      JSON.stringify(data.policies || []));
+    // Countersign material injected by the widget alongside the principal session.
+    sessionStorage.setItem(SESSION_KEYS.instance,      data.instance       || '');
+    sessionStorage.setItem(SESSION_KEYS.memberSig,     data.member_sig     || '');
+    sessionStorage.setItem(SESSION_KEYS.memberTs,      data.member_ts      || '');
 }
 
 function getSessionPolicies() {
@@ -87,7 +102,13 @@ async function apiCall(path, func, bodyExtra) {
     if (session) {
         headers['Authorization'] = 'Bearer ' + session.token;
     }
-    const body = JSON.stringify({ _func: func, ...bodyExtra });
+    // Re-present the Wix member countersign on EVERY call so the fabric proxy can
+    // verify it (per-call) AND bind it to the Bearer's principal. The proxy STRIPS
+    // these before forwarding upstream, so the CMS never sees them.
+    const cs = session
+        ? { instance: session.instance, member_sig: session.memberSig, member_ts: session.memberTs }
+        : {};
+    const body = JSON.stringify({ _func: func, ...cs, ...bodyExtra });
     try {
         const res = await fetch(PORTAL_BASE_URL + path, { method: 'POST', headers, body });
         if (res.status === 401) {
