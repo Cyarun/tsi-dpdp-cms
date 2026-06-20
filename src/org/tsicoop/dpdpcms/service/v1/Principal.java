@@ -6,6 +6,8 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -20,7 +22,42 @@ import java.util.UUID;
  */
 public class Principal implements Action {
 
-    private static final String PLACEHOLDER_OTP = "1234"; // TODO: replace with real OTP service
+    /**
+     * Shared secret that gates principal_login (vAIb-4y7x).
+     *
+     * principal_login is a PUBLIC/no-auth endpoint, so the `otp` field IS the auth:
+     * the REAL per-principal OTP gate lives in the fabric (gateway) — it verifies the
+     * data principal's 6-digit code (constant-time hash compare, single-use, TTL) and
+     * ONLY THEN calls principal_login, passing THIS shared secret as `otp`. The CMS
+     * therefore trusts the call iff the caller proves it knows the secret. An attacker
+     * hitting the CMS directly with a guessed/empty otp does NOT know it -> rejected.
+     *
+     * Read from the PRINCIPAL_LOGIN_SECRET env var — same discipline as JWT_SECRET
+     * (JWTUtil) and DB_ENCRYPTION_KEY (DbEncryption): the value is NEVER hardcoded and
+     * NEVER logged. FAIL CLOSED: if the env var is unset/empty the secret is null and
+     * EVERY principal_login is rejected (we never fall back to a default — an empty or
+     * default value would re-open the bypass). The compare is constant-time
+     * (MessageDigest.isEqual) so the secret cannot be recovered via timing.
+     *
+     * FOLLOW-UP (vAIb-4y7x, noted): a stronger future fix is the fabric minting a
+     * short-lived signed JWT the CMS verifies (bound to user_id + fiduciary_id + exp);
+     * the shared-secret check closes the live hole now with the smallest diff.
+     */
+    private static final byte[] PRINCIPAL_LOGIN_SECRET = loadPrincipalLoginSecret();
+
+    private static byte[] loadPrincipalLoginSecret() {
+        String secret = System.getenv("PRINCIPAL_LOGIN_SECRET");
+        if (secret == null || secret.trim().isEmpty()) {
+            // FAIL CLOSED: no secret configured -> reject all principal_login. Do NOT
+            // throw at class-load (that would also break list_active_fiduciaries); the
+            // null is checked per-request in handleLogin and rejects fail-closed.
+            System.err.println("SECURITY: PRINCIPAL_LOGIN_SECRET is not set — "
+                    + "principal_login is DISABLED (fail closed). Set it to the value "
+                    + "provisioned in OpenBao (vaib/cms/principal_login_secret).");
+            return null;
+        }
+        return secret.trim().getBytes(StandardCharsets.UTF_8);
+    }
 
     @Override
     public void post(HttpServletRequest req, HttpServletResponse res) {
@@ -66,8 +103,14 @@ public class Principal implements Action {
             return;
         }
 
-        // TODO: replace with real OTP verification (SMS/email)
-        if (!PLACEHOLDER_OTP.equals(otp)) {
+        // principal_login is gated by the fabric-shared secret (vAIb-4y7x). FAIL CLOSED
+        // if the secret is unconfigured (null) so a missing env can never re-open the
+        // bypass. Constant-time compare (MessageDigest.isEqual) so the secret cannot be
+        // recovered via response timing. The real per-principal OTP was already proven
+        // by the fabric BEFORE this call; this check authenticates the FABRIC, not the
+        // principal's typed code.
+        if (PRINCIPAL_LOGIN_SECRET == null
+                || !MessageDigest.isEqual(PRINCIPAL_LOGIN_SECRET, otp.getBytes(StandardCharsets.UTF_8))) {
             OutputProcessor.errorResponse(res, HttpServletResponse.SC_UNAUTHORIZED, "Unauthorized", "Invalid OTP.", req.getRequestURI());
             return;
         }
