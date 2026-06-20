@@ -14,6 +14,13 @@ DB_ENCRYPTION_KEY=<generate-with-openssl-rand-hex-32>
 # TSI_LOOKUP_SALT: HMAC salt for pseudonymising user IDs in audit logs.
 # Generate with: openssl rand -hex 32
 TSI_LOOKUP_SALT=<generate-with-openssl-rand-hex-32>
+# PRINCIPAL_LOGIN_SECRET (vAIb-4y7x): shared secret that gates the PUBLIC
+# principal_login endpoint. The fabric/gateway proves the real per-principal OTP,
+# THEN calls principal_login passing this secret as `otp`; the CMS verifies it
+# (constant-time). Unset/empty => principal_login is DISABLED (fail closed).
+# MUST be the SAME value the gateway reads from OpenBao at vaib/cms/principal_login_secret.
+# Generate with: openssl rand -hex 32
+PRINCIPAL_LOGIN_SECRET=<generate-with-openssl-rand-hex-32-MUST-match-OpenBao>
 TSI_DPDP_CMS_ENV=local
 TSI_DPDP_CMS_HOME=/home/tsicoop/tsi-dpdp-cms
 TSI_EXPORT_PATH=/var/lib/tsi/exports/
