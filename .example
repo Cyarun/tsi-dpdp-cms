@@ -14,6 +14,16 @@ DB_ENCRYPTION_KEY=<generate-with-openssl-rand-hex-32>
 # TSI_LOOKUP_SALT: HMAC salt for pseudonymising user IDs in audit logs.
 # Generate with: openssl rand -hex 32
 TSI_LOOKUP_SALT=<generate-with-openssl-rand-hex-32>
+# OPERATOR_LOGIN_SECRET (vAIb-pigk): shared secret that gates the PUBLIC
+# operator_session endpoint (unified Wix identity — the dashboard owner->operator
+# console handoff, NO CMS password). The fabric/gateway VERIFIES the Wix-signed
+# OWNER instance, THEN calls operator_session passing this secret; the CMS verifies
+# it (constant-time). Unset/empty => operator_session is DISABLED (fail closed; the
+# password login stays as break-glass). DISTINCT from PRINCIPAL_LOGIN_SECRET (a
+# principal secret must never mint an operator session). MUST be the SAME value the
+# gateway reads (OpenBao vaib/cms/operator_login_secret / gateway OPERATOR_LOGIN_SECRET).
+# Generate with: openssl rand -hex 32 — DO NOT COMMIT THE REAL VALUE.
+OPERATOR_LOGIN_SECRET=__SET_IN_ENV__
 TSI_DPDP_CMS_ENV=local
 TSI_DPDP_CMS_HOME=/home/tsicoop/tsi-dpdp-cms
 TSI_EXPORT_PATH=/var/lib/tsi/exports/
