@@ -11,6 +11,7 @@ import org.json.simple.parser.ParseException;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.security.SecureRandom;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -70,6 +71,35 @@ public class Operator implements Action {
             Pattern.compile("^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[!@#$%^&*()_+])[A-Za-z\\d!@#$%^&*()_+]{12,}$");
     private static final Pattern EMAIL_PATTERN =
             Pattern.compile("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,6}$");
+
+    /**
+     * UNUSABLE password-hash sentinel for the AUTO-CREATED Wix owner operator
+     * (vAIb-q3g5). The owner has NO CMS password — Wix owns login (unified
+     * identity); the owner reaches the console ONLY via the secret-gated
+     * operator_session mint, NEVER via the password path.
+     *
+     * Why a real BCrypt hash of a one-time random value (NOT null, NOT a literal):
+     *  - It is a well-formed "$2"-prefixed BCrypt string, so handleLogin's
+     *    PasswordHasher.verifyPassword (a raw BCrypt.checkpw) returns false
+     *    CLEANLY for ANY supplied password — it never throws "Invalid salt
+     *    version" (which a non-BCrypt literal would, surfacing as a 500).
+     *  - It also satisfies PasswordHasher.checkPassword's "$2" guard (used on the
+     *    recovery path) so that path likewise no-matches cleanly.
+     *  - The plaintext is a fresh SecureRandom value that is DISCARDED (never
+     *    stored, never logged), so no password — present or future — can match.
+     *    A single per-JVM hash is sufficient: it is unguessable and never equal
+     *    to a user-chosen password (which must satisfy PASSWORD_PATTERN anyway).
+     */
+    private static final String UNUSABLE_PASSWORD_HASH = generateUnusablePasswordHash();
+
+    private static String generateUnusablePasswordHash() {
+        byte[] rnd = new byte[32];
+        new SecureRandom().nextBytes(rnd);
+        // Base64 of 32 random bytes -> unguessable plaintext, immediately discarded.
+        // Fully qualify: the framework package also defines a Base64 type.
+        String throwaway = java.util.Base64.getEncoder().encodeToString(rnd);
+        return new PasswordHasher().hashPassword(throwaway);
+    }
 
     @Override
     public void post(HttpServletRequest req, HttpServletResponse res) {
@@ -214,17 +244,30 @@ public class Operator implements Action {
      * This is a PUBLIC/no-auth endpoint at the InterceptingFilter (reached via
      * /api/v1/public/operator, func=operator_session); the shared secret IS the
      * auth. It NEVER accepts a password and NEVER mints the platform-wide ADMIN
-     * (null-fiduciary) session — it binds the JWT to an EXISTING ACTIVE operator of
-     * the named ACTIVE fiduciary, so the minted token is hard-scoped to that one
-     * tenant. fiduciary_id is supplied by the fabric (server-derived from OpenBao),
-     * NOT free client input the CMS trusts blindly.
+     * (null-fiduciary) session — it binds the JWT to an ACTIVE operator of the named
+     * ACTIVE fiduciary, so the minted token is hard-scoped to that one tenant.
+     * fiduciary_id is supplied by the fabric (server-derived from OpenBao), NOT free
+     * client input the CMS trusts blindly.
+     *
+     * vAIb-q3g5 — AUTO-CREATE the owner operator when the tenant has none. Onboarded
+     * tenants (unified identity; the Super-Admin-Setup operator-creation step was
+     * removed) have ZERO operators, so there was nothing to bind to and the mint
+     * 401'd. Now, INSIDE this already-secret-gated path, when the SELECT finds no
+     * operator AND the fiduciary is ACTIVE, we create the owner's PASSWORDLESS ADMIN
+     * operator (role=ADMIN, status=ACTIVE, password_hash=unusable sentinel,
+     * recovery_key_hash=NULL) and bind to it. SAFE: the secret already proves the
+     * trusted fabric (which only calls us AFTER verifying the Wix-signed OWNER
+     * instance), and we still require the fiduciary to be ACTIVE. Idempotent:
+     * concurrent first-mints converge on ONE row (unique-violation -> re-SELECT).
+     * The auto-created operator can NEVER password-login (handleLogin's
+     * verifyPassword no-matches the sentinel) — usable ONLY via this mint.
      *
      * On success returns {success, token, role, username, fiduciary_id,
      * fiduciary_name} — the SAME shape handleLogin returns, so the console pages
      * seed localStorage identically (authToken/role/username/fiduciary_id/
      * fiduciary_name). FAIL CLOSED at every rung: secret unset/mismatch -> 401;
-     * bad/missing fiduciary_id -> 400; fiduciary inactive -> 401; no ACTIVE operator
-     * for the tenant -> 401 (we never invent an identity).
+     * bad/missing fiduciary_id -> 400; fiduciary inactive/unknown -> 401 (NO
+     * auto-create — never invent an identity for a non-ACTIVE tenant).
      */
     private void handleOperatorSession(JSONObject input, HttpServletResponse res, HttpServletRequest req) throws SQLException {
         String secret = (String) input.get("secret");
@@ -266,6 +309,7 @@ public class Operator implements Action {
         JSONObject out = null;
         boolean success = false;
 
+        boolean autoCreated = false;
         try {
             conn = pool.getConnection();
             // Bind to an EXISTING ACTIVE operator of THIS ACTIVE fiduciary. Prefer a
@@ -274,22 +318,28 @@ public class Operator implements Action {
             // fiduciaries enforces the fiduciary is ACTIVE (no session for a
             // suspended/deleted tenant). We never select the platform null-fiduciary
             // ADMIN here: fiduciary_id is a concrete tenant UUID.
-            pstmt = conn.prepareStatement(
-                "SELECT o.id, o.name, " + DbEncryption.decryptCol("o.email_enc") + " AS email, o.role, f.name AS fiduciary_name " +
-                "FROM operators o JOIN fiduciaries f ON o.fiduciary_id = f.id " +
-                "WHERE o.fiduciary_id = ? AND o.status = 'ACTIVE' AND f.status = 'ACTIVE' " +
-                "ORDER BY (CASE WHEN UPPER(o.role) = UPPER(?) THEN 0 ELSE 1 END), o.created_at DESC " +
-                "LIMIT 1");
-            int qi = DbEncryption.bindKey(pstmt, 1);   // param 1: decrypt key for email_enc
-            pstmt.setObject(qi++, fiduciaryId);          // fiduciary_id
-            pstmt.setString(qi, rolePref != null ? rolePref : "");  // role hint
-            rs = pstmt.executeQuery();
-            if (rs.next()) {
-                email = rs.getString("email");
-                operatorName = rs.getString("name");
-                role = rs.getString("role");
-                userUid = (UUID) rs.getObject("id");
-                fiduciaryName = rs.getString("fiduciary_name");
+            OwnerOperator bound = selectActiveOperator(conn, fiduciaryId, rolePref);
+
+            // vAIb-q3g5: onboarded tenants (unified identity, no Super-Admin-Setup
+            // step) have ZERO operators, so the mint had nothing to bind to and
+            // 401'd. When the SELECT finds none AND the fiduciary is ACTIVE, the
+            // already-secret-gated fabric (which only calls us AFTER verifying the
+            // Wix-signed OWNER instance) is allowed to AUTO-CREATE the owner's
+            // passwordless ADMIN operator, then bind to it. SAFE because we are
+            // already inside the secret-valid + concrete-tenant path; we still
+            // require the fiduciary to be ACTIVE (fail-closed: never create for an
+            // inactive/unknown tenant). Idempotent: a second mint finds the row.
+            if (bound == null) {
+                bound = autoCreateOwnerOperator(conn, fiduciaryId, rolePref);
+                if (bound != null) autoCreated = true;
+            }
+
+            if (bound != null) {
+                email = bound.email;
+                operatorName = bound.name;
+                role = bound.role;
+                userUid = bound.id;
+                fiduciaryName = bound.fiduciaryName;
                 fidUid = fiduciaryId;
 
                 // Mint the operator JWT bound to the REAL operator email + role, so
@@ -316,15 +366,176 @@ public class Operator implements Action {
                 ? Constants.SERVICE_TYPE_DPO_CONSOLE : Constants.SERVICE_TYPE_ADMIN_CONSOLE;
 
         if (success) {
+            if (autoCreated) {
+                new Audit().logEventAsync(email, fidUid, serviceType, userUid, "OPERATOR_AUTO_CREATED", "Auto-created passwordless owner ADMIN operator (Wix unified identity)");
+            }
             new Audit().logEventAsync(email, fidUid, serviceType, userUid, "OPERATOR_SESSION_MINTED", "Wix-owner console session (no password)");
             OutputProcessor.send(res, 200, out);
         } else {
-            // No ACTIVE operator for an ACTIVE fiduciary -> deny (never invent an
-            // identity). Generic message: do not reveal whether the fiduciary or the
-            // operator was the missing piece.
-            new Audit().logEventAsync(fiduciaryIdStr, fiduciaryId, Constants.SERVICE_TYPE_ADMIN_CONSOLE, null, "OPERATOR_SESSION_DENIED", "No active operator for tenant or inactive fiduciary.");
+            // Fiduciary inactive/unknown (or, defensively, still no operator) -> deny
+            // (never invent an identity for a non-ACTIVE tenant). Generic message: do
+            // not reveal whether the fiduciary or the operator was the missing piece.
+            new Audit().logEventAsync(fiduciaryIdStr, fiduciaryId, Constants.SERVICE_TYPE_ADMIN_CONSOLE, null, "OPERATOR_SESSION_DENIED", "Inactive/unknown fiduciary — no console session minted or operator created.");
             OutputProcessor.errorResponse(res, HttpServletResponse.SC_UNAUTHORIZED, "Unauthorized", "No console session available for this tenant.", req.getRequestURI());
         }
+    }
+
+    /**
+     * Small holder for the operator row we bind the minted JWT to.
+     */
+    private static final class OwnerOperator {
+        final UUID id;
+        final String name;
+        final String email;
+        final String role;
+        final String fiduciaryName;
+        OwnerOperator(UUID id, String name, String email, String role, String fiduciaryName) {
+            this.id = id; this.name = name; this.email = email; this.role = role; this.fiduciaryName = fiduciaryName;
+        }
+    }
+
+    /**
+     * SELECT the operator the operator_session mint binds to: an ACTIVE operator of
+     * THIS ACTIVE fiduciary, preferring the caller's role hint. Returns null when
+     * the tenant has no ACTIVE operator OR the fiduciary itself is not ACTIVE (the
+     * JOIN enforces f.status = 'ACTIVE'). Pure read; caller owns the connection.
+     */
+    private OwnerOperator selectActiveOperator(Connection conn, UUID fiduciaryId, String rolePref) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement(
+                "SELECT o.id, o.name, " + DbEncryption.decryptCol("o.email_enc") + " AS email, o.role, f.name AS fiduciary_name " +
+                "FROM operators o JOIN fiduciaries f ON o.fiduciary_id = f.id " +
+                "WHERE o.fiduciary_id = ? AND o.status = 'ACTIVE' AND f.status = 'ACTIVE' " +
+                "ORDER BY (CASE WHEN UPPER(o.role) = UPPER(?) THEN 0 ELSE 1 END), o.created_at DESC " +
+                "LIMIT 1")) {
+            int qi = DbEncryption.bindKey(ps, 1);          // param 1: decrypt key for email_enc
+            ps.setObject(qi++, fiduciaryId);                 // fiduciary_id
+            ps.setString(qi, rolePref != null ? rolePref : ""); // role hint
+            try (ResultSet r = ps.executeQuery()) {
+                if (r.next()) {
+                    return new OwnerOperator(
+                            (UUID) r.getObject("id"),
+                            r.getString("name"),
+                            r.getString("email"),
+                            r.getString("role"),
+                            r.getString("fiduciary_name"));
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * vAIb-q3g5 — AUTO-CREATE the owner's passwordless ADMIN operator for a tenant
+     * that has none, then return it bound for the mint. Called ONLY from the
+     * secret-gated operator_session path AFTER the SELECT found no operator.
+     *
+     * Security invariants (all enforced here, fail-closed):
+     *  - Runs in a SERIALIZABLE-not-required but COMMITTED transaction; we first
+     *    re-confirm the fiduciary is ACTIVE *inside the tx with FOR UPDATE*. If it
+     *    is not ACTIVE (inactive/unknown) we create NOTHING and return null -> the
+     *    caller denies (same fail-closed gate as before).
+     *  - role = ADMIN, status = ACTIVE, fiduciary_id = the verified tenant.
+     *  - password_hash = UNUSABLE_PASSWORD_HASH (a "$2" BCrypt of a discarded
+     *    random) and recovery_key_hash = NULL: the operator can NEVER password-login
+     *    (handleLogin's verifyPassword no-matches it) — usable ONLY via this
+     *    secret-gated mint.
+     *  - name + email are made GLOBALLY UNIQUE by embedding the fiduciary UUID,
+     *    because operators.name and operators.email_hmac both carry GLOBAL UNIQUE
+     *    indexes (idx_operators_name_unique, idx_operators_email_hmac). The email is
+     *    an identity LABEL, not a credential: prefer the fiduciary's own contact
+     *    email when present, else a stable synthetic owner+<fid>@<primary_domain>.
+     *  - IDEMPOTENT: a concurrent mint may insert first; we catch the unique
+     *    violation (SQLState 23505) and re-SELECT, binding to the existing row so we
+     *    never create a duplicate.
+     *
+     * Returns the bound operator, or null if the fiduciary is not ACTIVE.
+     */
+    private OwnerOperator autoCreateOwnerOperator(Connection conn, UUID fiduciaryId, String rolePref) throws SQLException {
+        boolean priorAutoCommit = conn.getAutoCommit();
+        conn.setAutoCommit(false);
+        try {
+            // 1) Re-confirm the fiduciary is ACTIVE inside the tx (FOR UPDATE serialises
+            //    concurrent first-mints on the same tenant). Pull the identity fields we
+            //    derive the owner label from. Inactive/unknown -> create nothing.
+            String fidEmail = null, fidDomain = null;
+            try (PreparedStatement fp = conn.prepareStatement(
+                    "SELECT " + DbEncryption.decryptCol("email_enc") + " AS email, primary_domain, status " +
+                    "FROM fiduciaries WHERE id = ? FOR UPDATE")) {
+                int fi = DbEncryption.bindKey(fp, 1);   // decrypt key for email_enc
+                fp.setObject(fi, fiduciaryId);
+                try (ResultSet fr = fp.executeQuery()) {
+                    if (!fr.next() || !"ACTIVE".equals(fr.getString("status"))) {
+                        conn.rollback();
+                        return null; // fail-closed: never create for an inactive/unknown tenant
+                    }
+                    fidEmail = fr.getString("email");
+                    fidDomain = fr.getString("primary_domain");
+                }
+            }
+
+            // 2) Derive a passwordless ADMIN owner identity. name + email are GLOBALLY
+            //    unique (the unique indexes are global, not per-fiduciary), so embed the
+            //    fiduciary UUID. email prefers the fiduciary's own contact email (a real
+            //    identity label) but is NEVER a login credential.
+            String ownerName = "Site Owner (Wix) " + fiduciaryId;
+            String ownerEmail = deriveOwnerEmail(fidEmail, fidDomain, fiduciaryId);
+
+            // 3) INSERT the passwordless ADMIN operator. Mirrors handleCreateUser's
+            //    encrypted-email INSERT; password_hash = unusable sentinel,
+            //    recovery_key_hash left NULL (column is nullable). We do not need the
+            //    new id here — step 4 re-SELECTs and binds (covers the race too).
+            try {
+                String sql = "INSERT INTO operators (id, name, email_plaintext, email_enc, email_hmac, password_hash, recovery_key_hash, role, status, fiduciary_id, created_at, last_updated_at) " +
+                        "VALUES (uuid_generate_v4(), ?, ?, " + DbEncryption.ENCRYPT + ", " + DbEncryption.HMAC + ", ?, NULL, 'ADMIN', 'ACTIVE', ?, NOW(), NOW())";
+                try (PreparedStatement ins = conn.prepareStatement(sql)) {
+                    int ci = 1;
+                    ins.setString(ci++, ownerName);
+                    ins.setString(ci++, ownerEmail);                 // email_plaintext
+                    ci = DbEncryption.bindEncrypt(ins, ci, ownerEmail); // email_enc
+                    ci = DbEncryption.bindHmac(ins, ci, ownerEmail);    // email_hmac
+                    ins.setString(ci++, UNUSABLE_PASSWORD_HASH);     // password_hash (unusable)
+                    ins.setObject(ci++, fiduciaryId);                 // fiduciary_id
+                    ins.executeUpdate();
+                }
+                conn.commit();
+            } catch (SQLException e) {
+                // 23505 = unique_violation: a concurrent mint won the race. Roll back our
+                // INSERT and fall through to re-SELECT the existing row (idempotent).
+                if (!"23505".equals(e.getSQLState())) {
+                    conn.rollback();
+                    throw e;
+                }
+                conn.rollback();
+            }
+
+            // 4) Bind: re-SELECT (covers both our fresh INSERT and the concurrent-winner
+            //    case). The SELECT re-enforces fiduciary ACTIVE + operator ACTIVE.
+            OwnerOperator bound = selectActiveOperator(conn, fiduciaryId, rolePref);
+            conn.commit();
+            return bound;
+        } catch (SQLException e) {
+            try { conn.rollback(); } catch (SQLException ignore) {}
+            throw e;
+        } finally {
+            conn.setAutoCommit(priorAutoCommit);
+        }
+    }
+
+    /**
+     * Derive the owner operator's email LABEL (never a credential). Prefer the
+     * fiduciary's own contact email when it is a valid address; else a stable
+     * synthetic owner+<fid>@<primary_domain> so it is globally unique and tied to
+     * the tenant. Final fallback uses a sentinel host to stay well-formed.
+     */
+    private String deriveOwnerEmail(String fidEmail, String fidDomain, UUID fiduciaryId) {
+        if (fidEmail != null && EMAIL_PATTERN.matcher(fidEmail.trim()).matches()) {
+            return fidEmail.trim();
+        }
+        String host = (fidDomain != null && !fidDomain.trim().isEmpty())
+                ? fidDomain.trim().toLowerCase().replaceAll("[^a-z0-9.-]", "")
+                : "tenant.invalid";
+        if (host.isEmpty()) host = "tenant.invalid";
+        return "owner+" + fiduciaryId + "@" + host;
     }
 
     private void handleLogout(HttpServletRequest req, HttpServletResponse res) {
