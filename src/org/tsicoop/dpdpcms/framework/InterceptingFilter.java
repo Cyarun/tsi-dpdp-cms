@@ -21,7 +21,13 @@ public class InterceptingFilter implements Filter {
 
     private static final Set<String> PUBLIC_ALLOWED_FUNCS = new HashSet<>(Arrays.asList(
             "principal_login",
-            "list_active_fiduciaries"
+            "list_active_fiduciaries",
+            // vAIb-pigk — Wix-owner console handoff (unified identity, NO CMS
+            // password). PUBLIC like principal_login: the func is gated by the
+            // OPERATOR_LOGIN_SECRET shared secret INSIDE Operator.handleOperatorSession
+            // (the fabric proves it after verifying the Wix-signed owner instance), so
+            // the public category is correct (the secret, not a session, is the auth).
+            "operator_session"
     ));
     private static final String API_PREFIX = "/api/v1/"; // Assuming API paths are /api/v1/user, /api/v1/policy etc.
 

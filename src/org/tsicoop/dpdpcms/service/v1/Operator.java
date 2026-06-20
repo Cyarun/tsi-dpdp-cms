@@ -9,6 +9,8 @@ import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 import org.json.simple.parser.ParseException;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -26,6 +28,43 @@ public class Operator implements Action {
 
     private final PasswordHasher passwordHasher = new PasswordHasher();
     private static final UUID ADMIN_FID_UUID = UUID.fromString("00000000-0000-0000-0000-000000000000");
+
+    /**
+     * Shared secret that gates the PUBLIC operator_session endpoint (unified Wix
+     * identity — vAIb-pigk). EXACT MIRROR of Principal.PRINCIPAL_LOGIN_SECRET.
+     *
+     * UNIFIED IDENTITY (user-decided): Wix owns ALL login. The owner authenticates
+     * on the Wix dashboard; the fabric (gateway) VERIFIES the Wix-signed instance
+     * (HMAC over APP_SECRET + known-instance allowlist), resolves the tenant's
+     * fiduciary_id from OpenBao, and ONLY THEN calls operator_session passing THIS
+     * shared secret. The CMS therefore trusts the call iff the caller proves it
+     * knows the secret — exactly the principal_login pattern. The CMS /api/v1/admin/
+     * operator PASSWORD login is BYPASSED for the console handoff; no operator types
+     * a CMS password (it stays usable as a break-glass fallback only).
+     *
+     * Read from OPERATOR_LOGIN_SECRET — same discipline as JWT_SECRET / PRINCIPAL_
+     * LOGIN_SECRET: NEVER hardcoded, NEVER logged. FAIL CLOSED: unset/empty => null
+     * => EVERY operator_session is rejected (no default — a default would re-open a
+     * passwordless mint to anyone). Constant-time compare (MessageDigest.isEqual).
+     * SCOPED + DISTINCT from PRINCIPAL_LOGIN_SECRET so a leak of one cannot forge
+     * the other (a principal secret must never mint an operator/admin session).
+     */
+    private static final byte[] OPERATOR_LOGIN_SECRET = loadOperatorLoginSecret();
+
+    private static byte[] loadOperatorLoginSecret() {
+        String secret = System.getenv("OPERATOR_LOGIN_SECRET");
+        if (secret == null || secret.trim().isEmpty()) {
+            // FAIL CLOSED: no secret configured -> reject all operator_session. Do
+            // NOT throw at class-load (that would also break the password login +
+            // user-management funcs); the null is checked per-request and rejects.
+            System.err.println("SECURITY: OPERATOR_LOGIN_SECRET is not set — "
+                    + "operator_session (Wix-owner console handoff) is DISABLED "
+                    + "(fail closed). Set it to the value provisioned in OpenBao "
+                    + "(vaib/cms/operator_login_secret).");
+            return null;
+        }
+        return secret.trim().getBytes(StandardCharsets.UTF_8);
+    }
 
     private static final Pattern PASSWORD_PATTERN =
             Pattern.compile("^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[!@#$%^&*()_+])[A-Za-z\\d!@#$%^&*()_+]{12,}$");
@@ -50,6 +89,9 @@ public class Operator implements Action {
             switch (func.toLowerCase()) {
                 case "login":
                     handleLogin(input, res, req);
+                    break;
+                case "operator_session":
+                    handleOperatorSession(input, res, req);
                     break;
                 case "logout":
                     handleLogout(req, res);
@@ -159,6 +201,129 @@ public class Operator implements Action {
         }else{
             new Audit().logEventAsync(identifier, fidUid, serviceType, userUid, "LOGIN_FAILURE", "Invalid credentials or account inactive.");
             OutputProcessor.errorResponse(res, 401, "Unauthorized", "Invalid credentials or account inactive.", req.getRequestURI());
+        }
+    }
+
+    /**
+     * operator_session (vAIb-pigk) — mint a CMS operator JWT for the VERIFIED Wix
+     * owner, WITHOUT a CMS password. The unified-identity console handoff: the
+     * fabric has already verified the Wix-signed instance (owner) and resolved the
+     * tenant's fiduciary_id from OpenBao; it proves itself to the CMS with the
+     * OPERATOR_LOGIN_SECRET shared secret (EXACT mirror of principal_login).
+     *
+     * This is a PUBLIC/no-auth endpoint at the InterceptingFilter (reached via
+     * /api/v1/public/operator, func=operator_session); the shared secret IS the
+     * auth. It NEVER accepts a password and NEVER mints the platform-wide ADMIN
+     * (null-fiduciary) session — it binds the JWT to an EXISTING ACTIVE operator of
+     * the named ACTIVE fiduciary, so the minted token is hard-scoped to that one
+     * tenant. fiduciary_id is supplied by the fabric (server-derived from OpenBao),
+     * NOT free client input the CMS trusts blindly.
+     *
+     * On success returns {success, token, role, username, fiduciary_id,
+     * fiduciary_name} — the SAME shape handleLogin returns, so the console pages
+     * seed localStorage identically (authToken/role/username/fiduciary_id/
+     * fiduciary_name). FAIL CLOSED at every rung: secret unset/mismatch -> 401;
+     * bad/missing fiduciary_id -> 400; fiduciary inactive -> 401; no ACTIVE operator
+     * for the tenant -> 401 (we never invent an identity).
+     */
+    private void handleOperatorSession(JSONObject input, HttpServletResponse res, HttpServletRequest req) throws SQLException {
+        String secret = (String) input.get("secret");
+        String fiduciaryIdStr = (String) input.get("fiduciary_id");
+        // Optional caller hint: which console role the owner is landing on. Used only
+        // to PREFER a matching operator row; never to grant a role the tenant lacks.
+        String rolePref = (String) input.get("role");
+
+        // Gate 1: the fabric shared secret (constant-time, fail-closed if unset).
+        if (OPERATOR_LOGIN_SECRET == null || secret == null
+                || !MessageDigest.isEqual(OPERATOR_LOGIN_SECRET, secret.getBytes(StandardCharsets.UTF_8))) {
+            OutputProcessor.errorResponse(res, HttpServletResponse.SC_UNAUTHORIZED, "Unauthorized", "Invalid session secret.", req.getRequestURI());
+            return;
+        }
+
+        if (fiduciaryIdStr == null || fiduciaryIdStr.isEmpty()) {
+            OutputProcessor.errorResponse(res, HttpServletResponse.SC_BAD_REQUEST, "Bad Request", "fiduciary_id is required.", req.getRequestURI());
+            return;
+        }
+        UUID fiduciaryId;
+        try {
+            fiduciaryId = UUID.fromString(fiduciaryIdStr);
+        } catch (IllegalArgumentException e) {
+            OutputProcessor.errorResponse(res, HttpServletResponse.SC_BAD_REQUEST, "Bad Request", "Invalid fiduciary_id format.", req.getRequestURI());
+            return;
+        }
+
+        PoolDB pool = new PoolDB();
+        Connection conn = null;
+        PreparedStatement pstmt = null;
+        ResultSet rs = null;
+
+        String email = null;
+        String operatorName = null;
+        String role = null;
+        UUID userUid = null;
+        UUID fidUid = null;
+        String fiduciaryName = null;
+        JSONObject out = null;
+        boolean success = false;
+
+        try {
+            conn = pool.getConnection();
+            // Bind to an EXISTING ACTIVE operator of THIS ACTIVE fiduciary. Prefer a
+            // row matching the caller's role hint (e.g. DPO landing), else the most
+            // recently created ACTIVE operator for the tenant. The JOIN to
+            // fiduciaries enforces the fiduciary is ACTIVE (no session for a
+            // suspended/deleted tenant). We never select the platform null-fiduciary
+            // ADMIN here: fiduciary_id is a concrete tenant UUID.
+            pstmt = conn.prepareStatement(
+                "SELECT o.id, o.name, " + DbEncryption.decryptCol("o.email_enc") + " AS email, o.role, f.name AS fiduciary_name " +
+                "FROM operators o JOIN fiduciaries f ON o.fiduciary_id = f.id " +
+                "WHERE o.fiduciary_id = ? AND o.status = 'ACTIVE' AND f.status = 'ACTIVE' " +
+                "ORDER BY (CASE WHEN UPPER(o.role) = UPPER(?) THEN 0 ELSE 1 END), o.created_at DESC " +
+                "LIMIT 1");
+            int qi = DbEncryption.bindKey(pstmt, 1);   // param 1: decrypt key for email_enc
+            pstmt.setObject(qi++, fiduciaryId);          // fiduciary_id
+            pstmt.setString(qi, rolePref != null ? rolePref : "");  // role hint
+            rs = pstmt.executeQuery();
+            if (rs.next()) {
+                email = rs.getString("email");
+                operatorName = rs.getString("name");
+                role = rs.getString("role");
+                userUid = (UUID) rs.getObject("id");
+                fiduciaryName = rs.getString("fiduciary_name");
+                fidUid = fiduciaryId;
+
+                // Mint the operator JWT bound to the REAL operator email + role, so
+                // downstream getVerifiedFiduciaryId/getVerifiedRole (which read the
+                // signed JWT, falling back to the operators table by email/sub)
+                // resolve to THIS tenant. Same JWTUtil.generateToken handleLogin
+                // uses (subject=email, claims name+role) — isTokenValid accepts it.
+                final String token = JWTUtil.generateToken(email, operatorName, role);
+
+                out = new JSONObject();
+                out.put("success", true);
+                out.put("token", token);
+                out.put("role", role);
+                out.put("username", operatorName);
+                out.put("fiduciary_id", fidUid.toString());
+                if (fiduciaryName != null) out.put("fiduciary_name", fiduciaryName);
+                success = true;
+            }
+        } finally {
+            pool.cleanup(rs, pstmt, conn);
+        }
+
+        String serviceType = (role != null && role.equalsIgnoreCase("DPO"))
+                ? Constants.SERVICE_TYPE_DPO_CONSOLE : Constants.SERVICE_TYPE_ADMIN_CONSOLE;
+
+        if (success) {
+            new Audit().logEventAsync(email, fidUid, serviceType, userUid, "OPERATOR_SESSION_MINTED", "Wix-owner console session (no password)");
+            OutputProcessor.send(res, 200, out);
+        } else {
+            // No ACTIVE operator for an ACTIVE fiduciary -> deny (never invent an
+            // identity). Generic message: do not reveal whether the fiduciary or the
+            // operator was the missing piece.
+            new Audit().logEventAsync(fiduciaryIdStr, fiduciaryId, Constants.SERVICE_TYPE_ADMIN_CONSOLE, null, "OPERATOR_SESSION_DENIED", "No active operator for tenant or inactive fiduciary.");
+            OutputProcessor.errorResponse(res, HttpServletResponse.SC_UNAUTHORIZED, "Unauthorized", "No console session available for this tenant.", req.getRequestURI());
         }
     }
 
