@@ -96,14 +96,13 @@ public class Policy implements Action {
                 case "list_policies":
                     String statusFilter = (String) input.get("status");
                     String search = (String) input.get("search");
-                    String fidIdFilter = (String) input.get("fiduciary_id_filter"); // For listing policies of a specific fiduciary
-                    UUID listFidId = null;
-                    if (fidIdFilter != null && !fidIdFilter.isEmpty()) {
-                        try { listFidId = UUID.fromString(fidIdFilter); } catch (IllegalArgumentException e) { /* handled below */ }
-                    }
-                    if (fidIdFilter != null && listFidId == null) {
-                        OutputProcessor.errorResponse(res, HttpServletResponse.SC_BAD_REQUEST, "Bad Request", "Invalid 'fiduciary_id_filter' format.", req.getRequestURI());
-                        return;
+                    // vAIb-ae11: the listing tenant is the SERVER-DERIVED scope, never the client
+                    // 'fiduciary_id_filter'. A tenant operator only ever lists their own policies;
+                    // a PLATFORM admin with no body target lists across all tenants.
+                    UUID listFidId = InputProcessor.resolveTenantScope(req, res, false);
+                    if (listFidId == null) return;                       // error already sent
+                    if (InputProcessor.PLATFORM_ADMIN_FID.equals(listFidId)) {
+                        listFidId = null;                               // platform admin -> all tenants
                     }
                     int page = (input.get("page") instanceof Long) ? ((Long)input.get("page")).intValue() : 1;
                     int limit = (input.get("limit") instanceof Long) ? ((Long)input.get("limit")).intValue() : 10;

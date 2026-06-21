@@ -82,11 +82,14 @@ public class Grievance implements Action {
                 Object fidAttr = req.getAttribute("fiduciary_id");
                 if (fidAttr != null) fiduciaryIdStr = fidAttr.toString();
             } else if (operatorRole != null) {
-                // Admin/operator path: an authenticated operator (verified JWT role)
-                // legitimately acts on the fiduciary they are managing, so the
-                // body fiduciary_id IS authoritative here — but ONLY because the
-                // operator JWT was already verified by processAdminHeader.
-                fiduciaryIdStr = (String) input.get("fiduciary_id");
+                // vAIb-ae11: operator/console path. The fiduciary is SERVER-DERIVED, never the
+                // raw body fiduciary_id (which previously let the Wix-owner ADMIN target other
+                // tenants). A tenant operator is hard-scoped to their own fiduciary; only a
+                // PLATFORM admin may name a target tenant in the body. resolveTenantScope sends
+                // the error + returns null on failure.
+                UUID opScope = InputProcessor.resolveTenantScope(req, res, true);
+                if (opScope == null) return;
+                fiduciaryIdStr = opScope.toString();
             } else if (apiKey != null) {
                 fiduciaryIdStr = new Fiduciary().getFiduciaryId(UUID.fromString(apiKey), apiSecret);
             }

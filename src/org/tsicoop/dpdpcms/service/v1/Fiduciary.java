@@ -86,6 +86,21 @@ public class Fiduciary implements Action {
             // Get the ID of the Admin performing the action
             UUID loginUserId = InputProcessor.getAuthenticatedUserId(req);
 
+            // vAIb-ae11: server-derived tenant scope. A tenant-scoped operator (concrete
+            // fiduciary) may ONLY ever act on their own fiduciary; a PLATFORM admin (null
+            // fiduciary -> all-zeros) may act across tenants.
+            UUID callerScope = InputProcessor.getVerifiedFiduciaryId(req);
+            if (callerScope == null) {
+                OutputProcessor.errorResponse(res, HttpServletResponse.SC_UNAUTHORIZED, "Unauthorized", "Unable to resolve authenticated fiduciary.", req.getRequestURI());
+                return;
+            }
+            boolean isPlatformAdmin = InputProcessor.PLATFORM_ADMIN_FID.equals(callerScope);
+            // For a tenant operator, any by-id op must target their OWN fiduciary; ignore/deny client id.
+            if (!isPlatformAdmin && fiduciaryId != null && !fiduciaryId.equals(callerScope)) {
+                OutputProcessor.errorResponse(res, HttpServletResponse.SC_FORBIDDEN, "Forbidden", "Cross-tenant access denied: request is scoped to your own fiduciary.", req.getRequestURI());
+                return;
+            }
+
             switch (func.toLowerCase()) {
                 case "list_fiduciaries":
                     String statusFilter = (String) input.get("status");
@@ -93,7 +108,10 @@ public class Fiduciary implements Action {
                     int page = (input.get("page") instanceof Long) ? ((Long)input.get("page")).intValue() : 1;
                     int limit = (input.get("limit") instanceof Long) ? ((Long)input.get("limit")).intValue() : 10;
 
-                    outputArray = listFiduciariesFromDb(statusFilter, search, page, limit);
+                    // vAIb-ae11: a tenant operator sees ONLY their own fiduciary (exactly 1);
+                    // a platform admin may list all. listFiduciariesFromDb hard-scopes by ownFid.
+                    UUID ownFid = isPlatformAdmin ? null : callerScope;
+                    outputArray = listFiduciariesFromDb(statusFilter, search, page, limit, ownFid);
                     OutputProcessor.send(res, HttpServletResponse.SC_OK, outputArray);
                     break;
 
@@ -395,7 +413,7 @@ public class Fiduciary implements Action {
      * @return JSONArray of fiduciary JSONObjects.
      * @throws SQLException if a database access error occurs.
      */
-    private JSONArray listFiduciariesFromDb(String statusFilter, String search, int page, int limit) throws SQLException {
+    private JSONArray listFiduciariesFromDb(String statusFilter, String search, int page, int limit, UUID ownFid) throws SQLException {
         JSONArray fiduciariesArray = new JSONArray();
         Connection conn = null;
         PreparedStatement pstmt = null;
@@ -406,6 +424,12 @@ public class Fiduciary implements Action {
                 "SELECT id, name, contact_person, " + DbEncryption.decryptCol("email_enc") + " AS email, primary_domain, cms_cname, domain_validation_status, is_significant_data_fiduciary, status, created_at, last_updated_at FROM fiduciaries WHERE status is not null");
         List<Object> params = new ArrayList<>();
         params.add(DbEncryption.key()); // param 1: decrypt key for email_enc
+
+        // vAIb-ae11: hard tenant scope — a tenant operator only ever sees their own row.
+        if (ownFid != null) {
+            sqlBuilder.append(" AND id = ?");
+            params.add(ownFid);
+        }
 
         if (statusFilter != null && !statusFilter.isEmpty()) {
             sqlBuilder.append(" AND status = ?");

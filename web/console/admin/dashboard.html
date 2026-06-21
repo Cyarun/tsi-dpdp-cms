@@ -132,7 +132,7 @@
     </div>
     <nav class="flex flex-col space-y-1 mt-4 px-3">
       <a href="#" class="nav-link active">Dashboard</a>
-      <a href="fiduciaries.html" class="nav-link">Fiduciaries</a>
+      <a href="fiduciaries.html" id="nav-fiduciaries" class="nav-link">Fiduciaries</a>
       <a href="apps.html" class="nav-link">Apps</a>
       <a href="users.html" class="nav-link">CMS Users</a>
       <a href="apikeys.html" class="nav-link">API Keys</a>
@@ -449,5 +449,7 @@
             loadRecentAuditActivity();
         });
     </script>
+    <!-- vAIb-ae11: hide platform-only Fiduciaries tab + deactivation for tenant-scoped operators -->
+    <script src="../tenant-scope.js"></script>
 </body>
 </html>

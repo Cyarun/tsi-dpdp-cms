@@ -84,15 +84,17 @@ public class App implements Action {
                 }
             }
 
-            UUID fiduciaryId = null;
-            String fiduciaryIdStr = (String) input.get("fiduciary_id"); // Required for create and often for list/get
-            if (fiduciaryIdStr != null && !fiduciaryIdStr.isEmpty()) {
-                try {
-                    fiduciaryId = UUID.fromString(fiduciaryIdStr);
-                } catch (IllegalArgumentException e) {
-                    OutputProcessor.errorResponse(res, HttpServletResponse.SC_BAD_REQUEST, "Bad Request", "Invalid 'fiduciary_id' format.", req.getRequestURI());
-                    return;
-                }
+            // vAIb-ae11: the fiduciary (tenant) is ALWAYS the server-derived scope, never the
+            // client body. A tenant operator is hard-scoped to their own fiduciary; a PLATFORM
+            // admin may target a tenant via the body fiduciary_id. For list_apps a platform admin
+            // with no target lists across all tenants; every other op requires a concrete target.
+            boolean isListApps = "list_apps".equalsIgnoreCase(func);
+            UUID fiduciaryId = InputProcessor.resolveTenantScope(req, res, !isListApps);
+            if (fiduciaryId == null) return;                          // error already sent
+            // For list_apps, a platform admin with no body fid yields PLATFORM_ADMIN_FID; map it
+            // to null so listAppsFromDb applies NO tenant filter (platform admin = all tenants).
+            if (InputProcessor.PLATFORM_ADMIN_FID.equals(fiduciaryId)) {
+                fiduciaryId = null;
             }
 
             switch (func.toLowerCase()) {

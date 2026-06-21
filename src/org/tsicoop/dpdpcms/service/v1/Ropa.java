@@ -53,7 +53,8 @@ public class Ropa implements Action {
     // --- Handlers ---
 
     private void handleCreateEntry(JSONObject input, HttpServletResponse res, HttpServletRequest req) throws SQLException {
-        UUID fiduciaryId = requireUUID(input, "fiduciary_id", res, req);
+        // vAIb-ae11: tenant scope is server-derived (never the raw body fiduciary_id).
+        UUID fiduciaryId = resolveEffectiveFid(input, res, req);
         if (fiduciaryId == null) return;
 
         String activityName = (String) input.get("activity_name");
@@ -218,7 +219,8 @@ public class Ropa implements Action {
     }
 
     private void handleListEntries(JSONObject input, HttpServletResponse res, HttpServletRequest req) throws SQLException {
-        UUID fiduciaryId = requireUUID(input, "fiduciary_id", res, req);
+        // vAIb-ae11: tenant scope is server-derived (never the raw body fiduciary_id).
+        UUID fiduciaryId = resolveEffectiveFid(input, res, req);
         if (fiduciaryId == null) return;
 
         String statusFilter    = (String) input.get("status");
@@ -273,7 +275,8 @@ public class Ropa implements Action {
     }
 
     private void handleExportRopa(JSONObject input, HttpServletResponse res, HttpServletRequest req) throws Exception {
-        UUID fiduciaryId = requireUUID(input, "fiduciary_id", res, req);
+        // vAIb-ae11: tenant scope is server-derived (never the raw body fiduciary_id).
+        UUID fiduciaryId = resolveEffectiveFid(input, res, req);
         if (fiduciaryId == null) return;
 
         JSONArray entries = listEntriesWithConsentCount(fiduciaryId);
@@ -310,7 +313,8 @@ public class Ropa implements Action {
     }
 
     private void handleDeriveFromPolicy(JSONObject input, HttpServletResponse res, HttpServletRequest req) throws Exception {
-        UUID fiduciaryId = requireUUID(input, "fiduciary_id", res, req);
+        // vAIb-ae11: tenant scope is server-derived (never the raw body fiduciary_id).
+        UUID fiduciaryId = resolveEffectiveFid(input, res, req);
         if (fiduciaryId == null) return;
 
         String policyId = (String) input.get("policy_id");
@@ -719,38 +723,14 @@ public class Ropa implements Action {
      * no current internal caller needs a genuine cross-tenant ADMIN op — see report.)
      */
     /**
-     * Hardening: uniform "ADMIN is still scoped by the body fiduciary_id" resolution.
-     * Returns the effective tenant fid (and sends the appropriate error + returns null on
-     * failure): for ADMIN, the body fiduciary_id (403 if absent/invalid); otherwise the
-     * verified caller fid (401 if unresolvable). The caller must `return` when this is null.
+     * vAIb-ae11: server-derived tenant scope. Replaces the previous role==ADMIN -> trust body
+     * fiduciary_id logic, which leaked across tenants for the Wix-owner operator (role=ADMIN but
+     * bound to a CONCRETE tenant). A tenant-scoped operator is hard-scoped to their own fiduciary
+     * (any mismatching body fiduciary_id is 403); only a PLATFORM admin (null fiduciary) may name
+     * a target tenant in the body. Sends the error + returns null on failure — caller must return.
      */
     private UUID resolveEffectiveFid(JSONObject input, HttpServletResponse res, HttpServletRequest req) {
-        boolean isAdmin = "ADMIN".equalsIgnoreCase(InputProcessor.getVerifiedRole(req));
-        if (isAdmin) {
-            return requireBodyFiduciaryId(input, res, req);
-        }
-        UUID callerFid = InputProcessor.getVerifiedFiduciaryId(req);
-        if (callerFid == null) {
-            OutputProcessor.errorResponse(res, HttpServletResponse.SC_UNAUTHORIZED, "Unauthorized",
-                    "Unable to resolve authenticated fiduciary.", req.getRequestURI());
-        }
-        return callerFid;
-    }
-
-    private UUID requireBodyFiduciaryId(JSONObject input, HttpServletResponse res, HttpServletRequest req) {
-        String fidStr = (String) input.get("fiduciary_id");
-        if (fidStr == null || fidStr.isEmpty()) {
-            OutputProcessor.errorResponse(res, HttpServletResponse.SC_FORBIDDEN, "Forbidden",
-                    "Admin operations must specify the target tenant via 'fiduciary_id'.", req.getRequestURI());
-            return null;
-        }
-        try {
-            return UUID.fromString(fidStr);
-        } catch (IllegalArgumentException e) {
-            OutputProcessor.errorResponse(res, HttpServletResponse.SC_FORBIDDEN, "Forbidden",
-                    "Invalid 'fiduciary_id' for admin-scoped operation.", req.getRequestURI());
-            return null;
-        }
+        return InputProcessor.resolveTenantScope(req, res, true);
     }
 
     private UUID requireUUID(JSONObject input, String field, HttpServletResponse res, HttpServletRequest req) {

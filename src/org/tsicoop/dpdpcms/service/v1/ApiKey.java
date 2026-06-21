@@ -78,18 +78,20 @@ public class ApiKey implements Action {
             // Get the ID of the Admin performing the action
             UUID loginUserId = InputProcessor.getAuthenticatedUserId(req);
 
-            // F3: DB-verified caller role and fiduciary (tenant) scope. Non-ADMIN callers are
-            // confined to their own fiduciary so by-id reads/mutations cannot cross tenants.
+            // vAIb-ae11: tenant scope is derived from the VERIFIED fiduciary, not the JWT role.
+            // The auto-created Wix-owner is role=ADMIN but bound to a CONCRETE tenant, so it must
+            // NOT be treated as a cross-tenant platform admin. A tenant-scoped operator is hard-
+            // scoped to their own fiduciary; only the PLATFORM admin (null fiduciary) may target a
+            // tenant via the body fiduciary_id.
             String callerRole = InputProcessor.getVerifiedRole(req);
-            UUID callerFid = InputProcessor.getVerifiedFiduciaryId(req);
-            boolean isAdmin = "ADMIN".equalsIgnoreCase(callerRole);
 
             switch (func.toLowerCase()) {
-                case "generate_api_key":
-                    if (fiduciaryId == null) {
-                        OutputProcessor.errorResponse(res, HttpServletResponse.SC_BAD_REQUEST, "Bad Request", "'fiduciary_id' is required to generate a key.", req.getRequestURI());
-                        return;
-                    }
+                case "generate_api_key": {
+                    // Provisioning: scope must be the caller's own tenant (or, for platform admin,
+                    // the named target tenant in the body).
+                    UUID genFid = InputProcessor.resolveTenantScope(req, res, true);
+                    if (genFid == null) return;
+                    fiduciaryId = genFid;
                     String description = (String) input.get("description");
                     JSONArray permissionsJson = (JSONArray) input.get("permissions");
                     String appIdStr = (String) input.get("app_id");
@@ -114,22 +116,18 @@ public class ApiKey implements Action {
                     output = generateAndSaveApiKey(fiduciaryId, appId, description, permissionsJson, loginUserId);
                     OutputProcessor.send(res, HttpServletResponse.SC_CREATED, output);
                     break;
+                }
 
                 case "get_api_key_details":
                     if (keyId == null) {
                         OutputProcessor.errorResponse(res, HttpServletResponse.SC_BAD_REQUEST, "Bad Request", "'key_id' is required.", req.getRequestURI());
                         return;
                     }
-                    // Hardening: ADMIN is still scoped by the body fiduciary_id (the shared wix
-                    // platform-ADMIN must name the target tenant; 403 if absent/invalid). The
-                    // predicate is now applied unconditionally — no isAdmin bypass.
-                    UUID getFid = isAdmin ? requireBodyFiduciaryId(fiduciaryId, res, req) : callerFid;
-                    if (getFid == null) {
-                        if (!isAdmin) {
-                            OutputProcessor.errorResponse(res, HttpServletResponse.SC_UNAUTHORIZED, "Unauthorized", "Unable to resolve authenticated fiduciary.", req.getRequestURI());
-                        }
-                        return;
-                    }
+                    // vAIb-ae11: scope the by-id read to the SERVER-DERIVED tenant. A tenant
+                    // operator is hard-scoped to their own fiduciary; only a PLATFORM admin may
+                    // name the target tenant via the body (403 if absent/invalid).
+                    UUID getFid = InputProcessor.resolveTenantScope(req, res, true);
+                    if (getFid == null) return;
                     Optional<JSONObject> keyOptional = getApiKeyDetailsFromDb(keyId, getFid);
                     if (keyOptional.isPresent()) {
                         output = keyOptional.get();
@@ -139,60 +137,49 @@ public class ApiKey implements Action {
                     }
                     break;
 
-                case "list_api_keys":
+                case "list_api_keys": {
                     String statusFilter = (String) input.get("status");
                     String search = (String) input.get("search");
 
-                    // A3: list_api_keys previously passed an empty fiduciary filter, returning
-                    // EVERY tenant's keys to any caller. Scope to the caller's tenant: ADMIN may
-                    // target a specific tenant via the body fiduciary_id (provisioning path),
-                    // non-ADMIN callers are confined to their own verified fiduciary.
-                    String listFid = isAdmin
-                            ? (fiduciaryId != null ? fiduciaryId.toString() : null)
-                            : (callerFid != null ? callerFid.toString() : null);
-                    if (!isAdmin && (listFid == null || listFid.isEmpty())) {
-                        OutputProcessor.errorResponse(res, HttpServletResponse.SC_FORBIDDEN, "Forbidden", "A verified fiduciary is required to list API keys.", req.getRequestURI());
-                        return;
-                    }
+                    // vAIb-ae11: scope to the SERVER-DERIVED tenant. A tenant operator only ever
+                    // sees their own keys; a PLATFORM admin with no body target sees all tenants'.
+                    UUID listScope = InputProcessor.resolveTenantScope(req, res, false);
+                    if (listScope == null) return;
+                    String listFid = InputProcessor.PLATFORM_ADMIN_FID.equals(listScope) ? null : listScope.toString();
                     outputArray = listApiKeysFromDb(listFid, statusFilter, search);
                     OutputProcessor.send(res, HttpServletResponse.SC_OK, outputArray);
                     break;
+                }
 
-                case "revoke_api_key": // Deactivates key instantly
+                case "revoke_api_key": { // Deactivates key instantly
                     if (keyId == null) {
                         OutputProcessor.errorResponse(res, HttpServletResponse.SC_BAD_REQUEST, "Bad Request", "'key_id' is required for revocation.", req.getRequestURI());
                         return;
                     }
-                    // Hardening: ADMIN is still scoped by the body fiduciary_id (403 if
-                    // absent/invalid); non-ADMIN scoped to own verified tenant. Always scoped.
-                    UUID revokeFid = isAdmin ? requireBodyFiduciaryId(fiduciaryId, res, req) : callerFid;
-                    if (revokeFid == null) {
-                        if (!isAdmin) {
-                            OutputProcessor.errorResponse(res, HttpServletResponse.SC_UNAUTHORIZED, "Unauthorized", "Unable to resolve authenticated fiduciary.", req.getRequestURI());
-                        }
-                        return;
-                    }
+                    // vAIb-ae11: scope to the SERVER-DERIVED tenant (hard-scoped for tenant
+                    // operators; platform admin names the target). Always scoped.
+                    UUID revokeFid = InputProcessor.resolveTenantScope(req, res, true);
+                    if (revokeFid == null) return;
                     revokeApiKeyInDb(keyId, loginUserId, revokeFid);
                     OutputProcessor.send(res, HttpServletResponse.SC_OK, new JSONObject() {{ put("success", true); put("message", "API Key revoked successfully."); }});
                     break;
+                }
 
-                case "update_api_key_status":
+                case "update_api_key_status": {
                     if (keyId == null) {
                         OutputProcessor.errorResponse(res, HttpServletResponse.SC_BAD_REQUEST, "Bad Request", "'key_id' is required.", req.getRequestURI());
                         return;
                     }
                     // F4: require DB-verified ADMIN role (not the JWT claim) to change key status.
-                    // (callerRole resolved once at the top of this method.)
                     if (!"ADMIN".equalsIgnoreCase(callerRole)) {
                         OutputProcessor.errorResponse(res, HttpServletResponse.SC_FORBIDDEN, "Forbidden", "ADMIN role required to change API key status.", req.getRequestURI());
                         return;
                     }
-                    // F4: require fiduciary scope so an admin can only act within a single tenant.
-                    if (fiduciaryId == null) {
-                        OutputProcessor.errorResponse(res, HttpServletResponse.SC_BAD_REQUEST, "Bad Request", "'fiduciary_id' is required to change key status.", req.getRequestURI());
-                        return;
-                    }
-                    statusFilter = (String) input.get("status"); // Expected status: ACTIVE, INACTIVE, EXPIRED
+                    // vAIb-ae11: scope to the SERVER-DERIVED tenant (hard-scoped for tenant
+                    // operators; platform admin names the target). Replaces the trusted body fid.
+                    UUID statusFid = InputProcessor.resolveTenantScope(req, res, true);
+                    if (statusFid == null) return;
+                    String statusFilter = (String) input.get("status"); // Expected status: ACTIVE, INACTIVE, EXPIRED
                     if (statusFilter == null || statusFilter.isEmpty()) {
                         OutputProcessor.errorResponse(res, HttpServletResponse.SC_BAD_REQUEST, "Bad Request", "'status' is required for updating key status.", req.getRequestURI());
                         return;
@@ -207,9 +194,10 @@ public class ApiKey implements Action {
                         OutputProcessor.errorResponse(res, HttpServletResponse.SC_BAD_REQUEST, "Bad Request", "Unsupported status value.", req.getRequestURI());
                         return;
                     }
-                    updateApiKeyStatusInDb(keyId, statusFilter, fiduciaryId, loginUserId);
+                    updateApiKeyStatusInDb(keyId, statusFilter, statusFid, loginUserId);
                     OutputProcessor.send(res, HttpServletResponse.SC_OK, new JSONObject() {{ put("success", true); put("message", "API Key status updated successfully."); }});
                     break;
+                }
 
                 default:
                     OutputProcessor.errorResponse(res, HttpServletResponse.SC_BAD_REQUEST, "Bad Request", "Unknown or unsupported '_func' value: " + func, req.getRequestURI());
@@ -239,23 +227,6 @@ public class ApiKey implements Action {
             return false;
         }
         return InputProcessor.validate(req, res);
-    }
-
-    /**
-     * Hardening: for the shared platform-ADMIN (wix) caller, the body fiduciary_id IS the
-     * intended tenant for a by-id operation. The body fid is parsed once at the top of post();
-     * 403 if it was absent. Never grant an unscoped cross-tenant ADMIN op silently — the
-     * predicate is always applied to the returned fid. No _platform_maintenance bypass is
-     * offered: provisioning (generate_api_key) carries the tenant in the body and is not a
-     * by-id op, and no current internal caller needs a genuine cross-tenant by-id ADMIN op.
-     */
-    private UUID requireBodyFiduciaryId(UUID parsedBodyFid, HttpServletResponse res, HttpServletRequest req) {
-        if (parsedBodyFid == null) {
-            OutputProcessor.errorResponse(res, HttpServletResponse.SC_FORBIDDEN, "Forbidden",
-                    "Admin operations must specify the target tenant via 'fiduciary_id'.", req.getRequestURI());
-            return null;
-        }
-        return parsedBodyFid;
     }
 
     /**

@@ -38,24 +38,21 @@ public class Job implements Action {
                 return;
             }
 
-            UUID fiduciaryId = null;
-            String fiduciaryIdStr = (String) input.get("fiduciary_id");
-            if (fiduciaryIdStr != null && !fiduciaryIdStr.isEmpty()) {
-                try {
-                    fiduciaryId = UUID.fromString(fiduciaryIdStr);
-                } catch (IllegalArgumentException e) {
-                    OutputProcessor.errorResponse(res, HttpServletResponse.SC_BAD_REQUEST, "Bad Request", "Invalid 'fiduciary_id' format.", req.getRequestURI());
-                    return;
-                }
-            }
-
             switch (func) {
-                case "create_job":
+                case "create_job": {
+                    // vAIb-ae11: a job (CES/EXPORT) is bound to the SERVER-DERIVED tenant — never
+                    // the client body. This prevents queuing an export of ANOTHER tenant's data.
+                    UUID fiduciaryId = InputProcessor.resolveTenantScope(req, res, true);
+                    if (fiduciaryId == null) return;
                     handleCreateJob(fiduciaryId, input, res);
                     break;
-                case "list_jobs":
+                }
+                case "list_jobs": {
+                    UUID fiduciaryId = InputProcessor.resolveTenantScope(req, res, true);
+                    if (fiduciaryId == null) return;
                     handleListJobs(fiduciaryId, input, res);
                     break;
+                }
                 case "download_file":
                     handleDownloadFile(req, res);
                     break;
@@ -160,6 +157,28 @@ public class Job implements Action {
     private static final java.util.regex.Pattern UUID_PATTERN =
             java.util.regex.Pattern.compile("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$");
 
+    /** vAIb-ae11: true iff the job row is owned by the given fiduciary (tenant). */
+    private boolean jobBelongsToFiduciary(String jobId, UUID fiduciaryId) {
+        PoolDB pool = null;
+        Connection conn = null;
+        PreparedStatement pstmt = null;
+        ResultSet rs = null;
+        try {
+            pool = new PoolDB();
+            conn = pool.getConnection();
+            pstmt = conn.prepareStatement("SELECT 1 FROM jobs WHERE id = ?::uuid AND fiduciary_id = ?");
+            pstmt.setString(1, jobId);
+            pstmt.setObject(2, fiduciaryId);
+            rs = pstmt.executeQuery();
+            return rs.next();
+        } catch (Exception e) {
+            System.err.println("[ERROR] Job.jobBelongsToFiduciary: " + e);
+            return false; // fail closed
+        } finally {
+            if (pool != null) pool.cleanup(rs, pstmt, conn);
+        }
+    }
+
     /**
      * Streams a completed CSV artifact to the client.
      */
@@ -175,6 +194,21 @@ public class Job implements Action {
             return;
         }
         jobId = jobId.trim();
+
+        // vAIb-ae11: cross-tenant exfiltration fix — the export CSV belongs to a tenant. A tenant
+        // operator may ONLY download a job owned by their own fiduciary; a PLATFORM admin (null
+        // fiduciary) may download any. The job_id is a query param, so we hard-check ownership in
+        // the DB against the SERVER-DERIVED fiduciary rather than trusting the file path.
+        UUID callerScope = InputProcessor.getVerifiedFiduciaryId(req);
+        if (callerScope == null) {
+            res.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Authentication required.");
+            return;
+        }
+        if (!InputProcessor.PLATFORM_ADMIN_FID.equals(callerScope) && !jobBelongsToFiduciary(jobId, callerScope)) {
+            // Not found (don't reveal existence of another tenant's job).
+            res.sendError(HttpServletResponse.SC_NOT_FOUND, "The requested export file is not available or has expired.");
+            return;
+        }
 
         File file = new File(EXPORT_DIR + jobId + ".csv");
         try {

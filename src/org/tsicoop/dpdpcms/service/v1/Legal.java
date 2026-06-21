@@ -59,16 +59,18 @@ public class Legal implements Action {
      */
     private void handleGenerateCertificate(JSONObject input, HttpServletRequest req, HttpServletResponse res) throws SQLException {
         String userId = (String) input.get("user_id");
-        String fiduciaryIdStr = (String) input.get("fiduciary_id");
         String caseRefId = (String) input.get("case_ref_id");
         UUID officerId = InputProcessor.getAuthenticatedUserId(req);
 
-        if (userId == null || fiduciaryIdStr == null) {
-            OutputProcessor.errorResponse(res, 400, "Bad Request", "user_id and fiduciary_id required.", req.getRequestURI());
+        if (userId == null) {
+            OutputProcessor.errorResponse(res, 400, "Bad Request", "user_id required.", req.getRequestURI());
             return;
         }
 
-        UUID fiduciaryId = UUID.fromString(fiduciaryIdStr);
+        // vAIb-ae11: the certificate's fiduciary is the SERVER-DERIVED tenant scope — a tenant
+        // operator can only generate evidence for their OWN tenant's principals/audit trail.
+        UUID fiduciaryId = InputProcessor.resolveTenantScope(req, res, true);
+        if (fiduciaryId == null) return;
         PoolDB pool = new PoolDB();
         Connection conn = null;
         PreparedStatement pstmt = null;
@@ -223,11 +225,9 @@ public class Legal implements Action {
      * Retrieves a list of previously generated certificates for a fiduciary.
      */
     private void handleListCertificates(JSONObject input, HttpServletResponse res, HttpServletRequest req) throws SQLException {
-        String fidStr = (String) input.get("fiduciary_id");
-        if (fidStr == null) {
-            OutputProcessor.errorResponse(res, 400, "Bad Request", "fiduciary_id required.", req.getRequestURI());
-            return;
-        }
+        // vAIb-ae11: scope to the SERVER-DERIVED tenant — list only this tenant's certificates.
+        UUID scope = InputProcessor.resolveTenantScope(req, res, true);
+        if (scope == null) return;
 
         PoolDB pool = new PoolDB();
         Connection conn = null;
@@ -239,7 +239,7 @@ public class Legal implements Action {
             conn = pool.getConnection();
             String sql = "SELECT id, subject_principal_id, case_ref_id, generated_at FROM evidence_certificates WHERE fiduciary_id = ? ORDER BY generated_at DESC";
             pstmt = conn.prepareStatement(sql);
-            pstmt.setObject(1, UUID.fromString(fidStr));
+            pstmt.setObject(1, scope);
             rs = pstmt.executeQuery();
             
             while (rs.next()) {
@@ -265,6 +265,10 @@ public class Legal implements Action {
             return;
         }
 
+        // vAIb-ae11: scope the by-id read to the SERVER-DERIVED tenant (cross-tenant = not found).
+        UUID scope = InputProcessor.resolveTenantScope(req, res, true);
+        if (scope == null) return;
+
         PoolDB pool = new PoolDB();
         Connection conn = null;
         PreparedStatement pstmt = null;
@@ -272,8 +276,9 @@ public class Legal implements Action {
 
         try {
             conn = pool.getConnection();
-            pstmt = conn.prepareStatement("SELECT * FROM evidence_certificates WHERE id = ?");
+            pstmt = conn.prepareStatement("SELECT * FROM evidence_certificates WHERE id = ? AND fiduciary_id = ?");
             pstmt.setObject(1, UUID.fromString(certId));
+            pstmt.setObject(2, scope);
             rs = pstmt.executeQuery();
             
             if (rs.next()) {

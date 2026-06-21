@@ -332,6 +332,96 @@ public class InputProcessor {
         return null;
     }
 
+    /** The all-zeros sentinel fiduciary that marks a PLATFORM admin (operator with a null fiduciary_id). */
+    public static final UUID PLATFORM_ADMIN_FID = UUID.fromString("00000000-0000-0000-0000-000000000000");
+
+    /**
+     * vAIb-ae11 — single source of truth for per-tenant scoping of operator-console requests.
+     *
+     * Resolves the fiduciary (tenant) an authenticated operator may act on, derived ENTIRELY
+     * server-side from the operator's own DB record (getVerifiedFiduciaryId), NEVER from any
+     * client-supplied "fiduciary_id" in the request body. This closes the cross-tenant leak
+     * where every admin/dpo endpoint trusted the body fiduciary_id.
+     *
+     * Rules (the discriminator is the VERIFIED FIDUCIARY, not the JWT role — note the
+     * auto-created Wix-owner operator is role=ADMIN but carries a CONCRETE tenant fiduciary):
+     *   - TENANT-SCOPED operator (verified fiduciary is a concrete tenant UUID):
+     *       HARD-SCOPED to that tenant. Any client-supplied fiduciary_id is IGNORED, and if it
+     *       names a DIFFERENT tenant the request is DENIED (403) — fail closed, no silent
+     *       cross-tenant fallthrough.
+     *   - PLATFORM admin (verified fiduciary == PLATFORM_ADMIN_FID, i.e. null fiduciary_id):
+     *       may target a specific tenant via the body fiduciary_id (provisioning/support path);
+     *       403 if the body fiduciary_id is absent/malformed (never an unscoped cross-tenant op).
+     *
+     * On any failure this sends the appropriate error response and returns null — callers MUST
+     * `return` immediately when the result is null.
+     *
+     * @param requireTargetForPlatform when true a PLATFORM admin MUST name a tenant in the body
+     *        (used by by-id / mutation ops); when false a PLATFORM admin with no body fid yields
+     *        PLATFORM_ADMIN_FID so the caller can decide to list across all tenants.
+     */
+    public static UUID resolveTenantScope(HttpServletRequest req, HttpServletResponse res,
+                                          boolean requireTargetForPlatform) {
+        UUID verified = getVerifiedFiduciaryId(req);
+        if (verified == null) {
+            OutputProcessor.errorResponse(res, HttpServletResponse.SC_UNAUTHORIZED, "Unauthorized",
+                    "Unable to resolve authenticated fiduciary.", req.getRequestURI());
+            return null;
+        }
+
+        String bodyFidStr = null;
+        try {
+            JSONObject input = getInput(req);
+            if (input != null) {
+                Object o = input.get("fiduciary_id");
+                if (o == null) o = input.get("fiduciary_id_filter"); // Policy.list_policies alias
+                if (o != null) bodyFidStr = o.toString();
+            }
+        } catch (Exception ignored) { /* body unavailable/unparseable -> treated as absent */ }
+
+        boolean isPlatform = PLATFORM_ADMIN_FID.equals(verified);
+
+        if (!isPlatform) {
+            // Tenant-scoped operator: hard-scope to own fiduciary; deny any mismatching target.
+            if (bodyFidStr != null && !bodyFidStr.isEmpty()
+                    && !bodyFidStr.equalsIgnoreCase(verified.toString())) {
+                OutputProcessor.errorResponse(res, HttpServletResponse.SC_FORBIDDEN, "Forbidden",
+                        "Cross-tenant access denied: request is scoped to your own fiduciary.",
+                        req.getRequestURI());
+                return null;
+            }
+            return verified;
+        }
+
+        // Platform admin: the body fiduciary_id selects the target tenant.
+        if (bodyFidStr == null || bodyFidStr.isEmpty()) {
+            if (requireTargetForPlatform) {
+                OutputProcessor.errorResponse(res, HttpServletResponse.SC_FORBIDDEN, "Forbidden",
+                        "Platform admin must specify the target tenant via 'fiduciary_id'.",
+                        req.getRequestURI());
+                return null;
+            }
+            return PLATFORM_ADMIN_FID; // caller may interpret as "all tenants"
+        }
+        try {
+            return UUID.fromString(bodyFidStr);
+        } catch (IllegalArgumentException e) {
+            OutputProcessor.errorResponse(res, HttpServletResponse.SC_FORBIDDEN, "Forbidden",
+                    "Invalid 'fiduciary_id' for platform-scoped operation.", req.getRequestURI());
+            return null;
+        }
+    }
+
+    /** Convenience: requires a concrete target tenant (by-id reads, mutations). */
+    public static UUID resolveTenantScope(HttpServletRequest req, HttpServletResponse res) {
+        return resolveTenantScope(req, res, true);
+    }
+
+    /** True when the authenticated operator is the PLATFORM admin (null fiduciary_id). */
+    public static boolean isPlatformAdmin(HttpServletRequest req) {
+        return PLATFORM_ADMIN_FID.equals(getVerifiedFiduciaryId(req));
+    }
+
     /** Returns the role from the database for the authenticated user, not from the JWT claim. */
     public static String getVerifiedRole(HttpServletRequest req) {
         JSONObject authToken = (JSONObject) req.getAttribute(InputProcessor.AUTH_TOKEN);

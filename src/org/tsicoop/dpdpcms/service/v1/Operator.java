@@ -569,12 +569,11 @@ public class Operator implements Action {
             OutputProcessor.errorResponse(res, 403, "Forbidden", "Only ADMIN users may assign the ADMIN role.", req.getRequestURI());
             return;
         }
-        String fidStr = (String) input.get("fiduciary_id");
-        UUID fid = (fidStr != null && !fidStr.isEmpty()) ? UUID.fromString(fidStr) : ADMIN_FID_UUID;
-        // F3: a non-ADMIN caller (e.g. DPO) cannot create users in another tenant; force the caller's fiduciary.
-        if (!"ADMIN".equalsIgnoreCase(callerRole)) {
-            fid = InputProcessor.getVerifiedFiduciaryId(req);
-        }
+        // vAIb-ae11: the new user is created in the SERVER-DERIVED tenant. A tenant operator
+        // (incl. the Wix-owner ADMIN) can ONLY create users in their own fiduciary; only a
+        // PLATFORM admin (null fiduciary) may target another tenant via the body fiduciary_id.
+        UUID fid = InputProcessor.resolveTenantScope(req, res, false);
+        if (fid == null) return;
 
         if (mail == null || !EMAIL_PATTERN.matcher(mail).matches() || pass == null || !PASSWORD_PATTERN.matcher(pass).matches()) {
             OutputProcessor.errorResponse(res, 400, "Bad Request", "Invalid email or weak password.", req.getRequestURI());
@@ -630,19 +629,12 @@ public class Operator implements Action {
             OutputProcessor.errorResponse(res, 403, "Forbidden", "DPO users may only update their own profile.", req.getRequestURI());
             return;
         }
-        // F3 + hardening: DB-verified ADMIN flag. ADMIN is still scoped by the body
-        // fiduciary_id (the shared wix platform-ADMIN must name the target tenant; 403 if
-        // absent/invalid) — no silent unscoped cross-tenant mutation. Non-ADMIN callers are
-        // scoped to their own verified tenant. effectiveFid is applied unconditionally below.
-        boolean isAdmin = "ADMIN".equalsIgnoreCase(callerRole);
-        UUID effectiveFid = isAdmin ? requireBodyFiduciaryId(input, res, req)
-                                    : InputProcessor.getVerifiedFiduciaryId(req);
-        if (effectiveFid == null) {
-            if (!isAdmin) {
-                OutputProcessor.errorResponse(res, 401, "Unauthorized", "Unable to resolve authenticated fiduciary.", req.getRequestURI());
-            }
-            return;  // 403 already sent by requireBodyFiduciaryId for the ADMIN path
-        }
+        // vAIb-ae11: SERVER-DERIVED tenant scope. A tenant operator (incl. the Wix-owner, who is
+        // role=ADMIN but bound to a concrete tenant) is hard-scoped to their own fiduciary; only a
+        // PLATFORM admin (null fiduciary) may name the target tenant. The op never moves a user
+        // across tenants (the UPDATE below is scoped to effectiveFid).
+        UUID effectiveFid = InputProcessor.resolveTenantScope(req, res, true);
+        if (effectiveFid == null) return;
         String user = (String) input.get("username");
         String pass = (String) input.get("password");
         // The target row stays within effectiveFid; this op never moves a user across tenants.
@@ -715,17 +707,10 @@ public class Operator implements Action {
             OutputProcessor.errorResponse(res, 403, "Forbidden", "DPO users may only deactivate their own profile.", req.getRequestURI());
             return;
         }
-        // F3 + hardening: DB-verified ADMIN flag. ADMIN is still scoped by the body
-        // fiduciary_id (403 if absent/invalid); non-ADMIN scoped to own verified tenant.
-        boolean isAdmin = "ADMIN".equalsIgnoreCase(callerRole);
-        UUID effectiveFid = isAdmin ? requireBodyFiduciaryId(input, res, req)
-                                    : InputProcessor.getVerifiedFiduciaryId(req);
-        if (effectiveFid == null) {
-            if (!isAdmin) {
-                OutputProcessor.errorResponse(res, 401, "Unauthorized", "Unable to resolve authenticated fiduciary.", req.getRequestURI());
-            }
-            return;
-        }
+        // vAIb-ae11: SERVER-DERIVED tenant scope (hard-scoped for tenant operators incl. the
+        // Wix-owner ADMIN; platform admin names the target). The UPDATE below is scoped to it.
+        UUID effectiveFid = InputProcessor.resolveTenantScope(req, res, true);
+        if (effectiveFid == null) return;
         PoolDB pool = new PoolDB();
         Connection conn = null;
         PreparedStatement pstmt = null;
@@ -823,18 +808,10 @@ public class Operator implements Action {
 
     private void handleGenerateRecoveryKey(JSONObject input, UUID loginUserId, HttpServletResponse res, HttpServletRequest req) throws SQLException {
         UUID uid = UUID.fromString((String) input.get("user_id"));
-        // F3 + hardening: DB-verified ADMIN flag. ADMIN is still scoped by the body
-        // fiduciary_id (403 if absent/invalid); non-ADMIN scoped to own verified tenant.
-        String callerRole = InputProcessor.getVerifiedRole(req);
-        boolean isAdmin = "ADMIN".equalsIgnoreCase(callerRole);
-        UUID effectiveFid = isAdmin ? requireBodyFiduciaryId(input, res, req)
-                                    : InputProcessor.getVerifiedFiduciaryId(req);
-        if (effectiveFid == null) {
-            if (!isAdmin) {
-                OutputProcessor.errorResponse(res, 401, "Unauthorized", "Unable to resolve authenticated fiduciary.", req.getRequestURI());
-            }
-            return;
-        }
+        // vAIb-ae11: SERVER-DERIVED tenant scope (hard-scoped for tenant operators incl. the
+        // Wix-owner ADMIN; platform admin names the target). The lookup/UPDATE are scoped to it.
+        UUID effectiveFid = InputProcessor.resolveTenantScope(req, res, true);
+        if (effectiveFid == null) return;
         String plainKey = PassphraseGenerator.generate();
 
         PoolDB pool = new PoolDB();
@@ -904,6 +881,13 @@ public class Operator implements Action {
     }
 
     private void handleListUsers(JSONObject input, HttpServletResponse res, HttpServletRequest req) throws SQLException {
+        // vAIb-ae11: scope to the SERVER-DERIVED tenant. Previously this returned EVERY tenant's
+        // operators (names + emails) to any caller. A tenant operator now sees ONLY their own
+        // tenant's CMS users; a PLATFORM admin (null fiduciary) sees all.
+        UUID scope = InputProcessor.resolveTenantScope(req, res, false);
+        if (scope == null) return;
+        boolean platform = InputProcessor.PLATFORM_ADMIN_FID.equals(scope);
+
         PoolDB pool = new PoolDB();
         Connection conn = null;
         PreparedStatement pstmt = null;
@@ -913,11 +897,13 @@ public class Operator implements Action {
         try {
             String sql = "SELECT u.id, u.name, " + DbEncryption.decryptCol("u.email_enc") + " AS email, u.status, u.role, u.fiduciary_id, f.name as fiduciary_name " +
                     "FROM operators u LEFT JOIN fiduciaries f ON u.fiduciary_id = f.id " +
+                    (platform ? "" : "WHERE u.fiduciary_id = ? ") +
                     "ORDER BY u.created_at DESC";
 
             conn = pool.getConnection();
             pstmt = conn.prepareStatement(sql);
-            DbEncryption.bindKey(pstmt, 1);
+            int li = DbEncryption.bindKey(pstmt, 1);
+            if (!platform) pstmt.setObject(li, scope);
             rs = pstmt.executeQuery();
 
             while (rs.next()) {
@@ -939,18 +925,10 @@ public class Operator implements Action {
 
     private void handleGetUser(JSONObject input, HttpServletResponse res, HttpServletRequest req) throws SQLException {
         UUID uid = UUID.fromString((String) input.get("user_id"));
-        // Hardening: scope the by-id read so a caller who learns another tenant's operator id
-        // cannot read it. ADMIN is still scoped by the body fiduciary_id (403 if absent/invalid);
-        // non-ADMIN scoped to own verified tenant. The predicate is applied unconditionally.
-        boolean isAdmin = "ADMIN".equalsIgnoreCase(InputProcessor.getVerifiedRole(req));
-        UUID effectiveFid = isAdmin ? requireBodyFiduciaryId(input, res, req)
-                                    : InputProcessor.getVerifiedFiduciaryId(req);
-        if (effectiveFid == null) {
-            if (!isAdmin) {
-                OutputProcessor.errorResponse(res, 401, "Unauthorized", "Unable to resolve authenticated fiduciary.", req.getRequestURI());
-            }
-            return;
-        }
+        // vAIb-ae11: scope the by-id read to the SERVER-DERIVED tenant. A tenant operator is
+        // hard-scoped to their own fiduciary; only a PLATFORM admin may name the target tenant.
+        UUID effectiveFid = InputProcessor.resolveTenantScope(req, res, true);
+        if (effectiveFid == null) return;
         PoolDB pool = new PoolDB();
         Connection conn = null;
         PreparedStatement pstmt = null;
@@ -975,30 +953,6 @@ public class Operator implements Action {
             }
         } finally {
             pool.cleanup(rs, pstmt, conn);
-        }
-    }
-
-    /**
-     * Hardening: for the shared platform-ADMIN (wix) caller, the body fiduciary_id IS the
-     * intended tenant for a by-id operation. Read it and 403 if absent or malformed — never
-     * grant an unscoped cross-tenant ADMIN op silently. The predicate is always applied to the
-     * returned fid. No _platform_maintenance bypass is offered: no current internal caller
-     * needs a genuine cross-tenant by-id ADMIN op (provisioning uses create_user, which carries
-     * the target tenant in the body and is not a by-id mutation on an existing row).
-     */
-    private UUID requireBodyFiduciaryId(JSONObject input, HttpServletResponse res, HttpServletRequest req) {
-        String fidStr = (String) input.get("fiduciary_id");
-        if (fidStr == null || fidStr.isEmpty()) {
-            OutputProcessor.errorResponse(res, 403, "Forbidden",
-                    "Admin operations must specify the target tenant via 'fiduciary_id'.", req.getRequestURI());
-            return null;
-        }
-        try {
-            return UUID.fromString(fidStr);
-        } catch (IllegalArgumentException e) {
-            OutputProcessor.errorResponse(res, 403, "Forbidden",
-                    "Invalid 'fiduciary_id' for admin-scoped operation.", req.getRequestURI());
-            return null;
         }
     }
 

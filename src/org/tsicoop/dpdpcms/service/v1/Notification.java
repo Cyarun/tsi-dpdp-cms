@@ -75,14 +75,25 @@ public class Notification implements Action {
                 return;
             }
 
+            // vAIb-ae11: when reached via an operator JWT (admin/console path), the fiduciary is
+            // SERVER-DERIVED (hard-scoped tenant operator; platform admin names the target) and
+            // the client body fiduciary_id is NEVER trusted. The api-key/principal client path
+            // (no operator JWT) keeps deriving the tenant from the key, as before.
             UUID fiduciaryId = null;
-            String fiduciaryIdStr = input.get("fiduciary_id") != null?(String) input.get("fiduciary_id"):new Fiduciary().getFiduciaryId(UUID.fromString(apiKey),apiSecret);
-            if (fiduciaryIdStr != null && !fiduciaryIdStr.isEmpty()) {
-                try {
-                    fiduciaryId = UUID.fromString(fiduciaryIdStr);
-                } catch (IllegalArgumentException e) {
-                    OutputProcessor.errorResponse(res, HttpServletResponse.SC_BAD_REQUEST, "Bad Request", "Invalid 'fiduciary_id' format.", req.getRequestURI());
-                    return;
+            boolean viaOperator = req.getAttribute(InputProcessor.AUTH_TOKEN) != null && apiKey == null;
+            if (viaOperator) {
+                fiduciaryId = InputProcessor.resolveTenantScope(req, res, true);
+                if (fiduciaryId == null) return;
+            } else {
+                String fiduciaryIdStr = input.get("fiduciary_id") != null ? (String) input.get("fiduciary_id")
+                        : (apiKey != null ? new Fiduciary().getFiduciaryId(UUID.fromString(apiKey), apiSecret) : null);
+                if (fiduciaryIdStr != null && !fiduciaryIdStr.isEmpty()) {
+                    try {
+                        fiduciaryId = UUID.fromString(fiduciaryIdStr);
+                    } catch (IllegalArgumentException e) {
+                        OutputProcessor.errorResponse(res, HttpServletResponse.SC_BAD_REQUEST, "Bad Request", "Invalid 'fiduciary_id' format.", req.getRequestURI());
+                        return;
+                    }
                 }
             }
 
@@ -114,7 +125,7 @@ public class Notification implements Action {
                         OutputProcessor.errorResponse(res, HttpServletResponse.SC_BAD_REQUEST, "Bad Request", "'instance_id' is required for 'mark_notification_read'.", req.getRequestURI());
                         return;
                     }
-                    markNotificationReadInDb(notifId);
+                    markNotificationReadInDb(notifId, fiduciaryId);
                     OutputProcessor.send(res, HttpServletResponse.SC_OK, new JSONObject() {{ put("success", true); put("message", "Notification marked as read."); }});
                     break;
 
@@ -221,15 +232,19 @@ public class Notification implements Action {
     /**
      * Marks a notification instance as read.
      */
-    private void markNotificationReadInDb(UUID instanceId) throws SQLException {
+    private void markNotificationReadInDb(UUID instanceId, UUID fiduciaryId) throws SQLException {
         Connection conn = null;
         PreparedStatement pstmt = null;
         PoolDB pool = new PoolDB();
-        String sql = "UPDATE notifications SET read_at = NOW() WHERE id = ?";
+        // vAIb-ae11: scope the by-id mutation to the caller's tenant (when known) so a caller
+        // cannot mark another tenant's notification. null fiduciary (platform admin) = no filter.
+        boolean scoped = fiduciaryId != null && !InputProcessor.PLATFORM_ADMIN_FID.equals(fiduciaryId);
+        String sql = "UPDATE notifications SET read_at = NOW() WHERE id = ?" + (scoped ? " AND fiduciary_id = ?" : "");
         try {
             conn = pool.getConnection();
             pstmt = conn.prepareStatement(sql);
             pstmt.setObject(1, instanceId);
+            if (scoped) pstmt.setObject(2, fiduciaryId);
             int affectedRows = pstmt.executeUpdate();
             if (affectedRows == 0) {
                 throw new SQLException("Marking notification as read failed, instance not found.");

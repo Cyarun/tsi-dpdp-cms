@@ -93,18 +93,17 @@ public class Audit implements Action {
 
     private void handleListLogs(JSONObject input, HttpServletResponse res, HttpServletRequest req) throws SQLException {
         String search = (String) input.get("search");
-        String fidFilter = (String) input.get("fiduciary_id");
         String actFilter = (String) input.get("action_filter");
 
-        if (fidFilter == null) {
-            OutputProcessor.errorResponse(res, 400, "Bad Request", "fiduciary_id required.", req.getRequestURI());
-            return;
-        }
+        // vAIb-ae11: scope to the SERVER-DERIVED tenant — a tenant operator can read ONLY their
+        // own audit trail. A platform admin must name the target tenant (audit is per-tenant).
+        UUID scope = InputProcessor.resolveTenantScope(req, res, true);
+        if (scope == null) return;
 
         int page = (input.get("page") instanceof Long) ? ((Long)input.get("page")).intValue() : 1;
         int limit = (input.get("limit") instanceof Long) ? ((Long)input.get("limit")).intValue() : 50;
 
-        JSONArray outputArray = listAuditLogsFromDb(search, UUID.fromString(fidFilter), actFilter, page, limit);
+        JSONArray outputArray = listAuditLogsFromDb(search, scope, actFilter, page, limit);
         OutputProcessor.send(res, 200, outputArray);
     }
    
@@ -305,12 +304,17 @@ public class Audit implements Action {
             return;
         }
 
-        Optional<JSONObject> logEntry = getAuditLogEntryFromDb(UUID.fromString(logIdStr));
+        // vAIb-ae11: scope the by-id read to the SERVER-DERIVED tenant so a caller who learns
+        // another tenant's log id cannot read it (cross-tenant = not found).
+        UUID scope = InputProcessor.resolveTenantScope(req, res, true);
+        if (scope == null) return;
+
+        Optional<JSONObject> logEntry = getAuditLogEntryFromDb(UUID.fromString(logIdStr), scope);
         if (logEntry.isPresent()) OutputProcessor.send(res, 200, logEntry.get());
         else OutputProcessor.errorResponse(res, 404, "Not Found", "Audit log not found.", req.getRequestURI());
     }
 
-    private Optional<JSONObject> getAuditLogEntryFromDb(UUID id) throws SQLException {
+    private Optional<JSONObject> getAuditLogEntryFromDb(UUID id, UUID scope) throws SQLException {
         PoolDB pool = new PoolDB();
         Connection conn = null;
         PreparedStatement pstmt = null;
@@ -318,8 +322,10 @@ public class Audit implements Action {
 
         try {
             conn = pool.getConnection();
-            pstmt = conn.prepareStatement("SELECT * FROM audit_logs WHERE id = ?");
+            // vAIb-ae11: hard tenant scope on the by-id lookup.
+            pstmt = conn.prepareStatement("SELECT * FROM audit_logs WHERE id = ? AND fiduciary_id = ?");
             pstmt.setObject(1, id);
+            pstmt.setObject(2, scope);
             rs = pstmt.executeQuery();
             if (rs.next()) {
                 JSONObject log = new JSONObject();

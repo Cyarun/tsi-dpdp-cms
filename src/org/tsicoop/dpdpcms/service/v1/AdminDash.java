@@ -34,19 +34,39 @@ public class AdminDash implements Action {
                 return;
             }
 
+            // vAIb-ae11: server-derived tenant scope for ALL dashboard metrics. A tenant
+            // operator is hard-scoped to their own fiduciary; a PLATFORM admin may target a
+            // tenant via the body fiduciary_id. resolveTenantScope sends the error + returns
+            // null on failure, so we must return immediately.
             switch (func.toLowerCase()) {
                 case "get_admin_metrics":
+                    // Platform-wide aggregate counts: PLATFORM admins only.
+                    if (!InputProcessor.isPlatformAdmin(req)) {
+                        OutputProcessor.errorResponse(res, 403, "Forbidden", "Platform metrics are restricted to platform administrators.", req.getRequestURI());
+                        return;
+                    }
                     OutputProcessor.send(res, 200, getAdminMetrics());
                     break;
-                case "get_dpo_metrics":
-                    OutputProcessor.send(res, 200, getDpoMetrics(input));
+                case "get_dpo_metrics": {
+                    UUID scope = InputProcessor.resolveTenantScope(req, res);
+                    if (scope == null) return;
+                    OutputProcessor.send(res, 200, getDpoMetrics(input, scope));
                     break;
-                case "list_pending_grievances":
-                    OutputProcessor.send(res, 200, listPendingGrievances(input));
+                }
+                case "list_pending_grievances": {
+                    UUID scope = InputProcessor.resolveTenantScope(req, res);
+                    if (scope == null) return;
+                    OutputProcessor.send(res, 200, listPendingGrievances(input, scope));
                     break;
-                case "list_access_logs":
-                    OutputProcessor.send(res, 200, listAuditLogsFromDb());
+                }
+                case "list_access_logs": {
+                    // Recent admin-console audit logs, scoped to the caller's tenant (platform
+                    // admin -> all tenants when no target named).
+                    UUID scope = InputProcessor.resolveTenantScope(req, res, false);
+                    if (scope == null) return;
+                    OutputProcessor.send(res, 200, listAuditLogsFromDb(scope));
                     break;
+                }
                 default:
                     OutputProcessor.errorResponse(res, 400, "Bad Request", "Unknown function", req.getRequestURI());
             }
@@ -55,9 +75,14 @@ public class AdminDash implements Action {
         }
     }
 
-    protected JSONArray listAuditLogsFromDb() throws SQLException {
+    protected JSONArray listAuditLogsFromDb(UUID scope) throws SQLException {
         JSONArray logs = new JSONArray();
-        StringBuilder sql = new StringBuilder("SELECT * FROM audit_logs where service_type='"+ Constants.SERVICE_TYPE_ADMIN_CONSOLE+"' ORDER BY timestamp DESC LIMIT 5");
+        // vAIb-ae11: scope to the caller's tenant. PLATFORM_ADMIN_FID -> no tenant predicate
+        // (platform admin sees all tenants' admin-console logs).
+        boolean platform = InputProcessor.PLATFORM_ADMIN_FID.equals(scope);
+        StringBuilder sql = new StringBuilder("SELECT * FROM audit_logs WHERE service_type=?");
+        if (!platform) sql.append(" AND fiduciary_id = ?");
+        sql.append(" ORDER BY timestamp DESC LIMIT 5");
         PoolDB pool = new PoolDB();
         Connection conn = null;
         PreparedStatement pstmt = null;
@@ -65,6 +90,8 @@ public class AdminDash implements Action {
         try {
             conn = pool.getConnection();
             pstmt = conn.prepareStatement(sql.toString());
+            pstmt.setString(1, Constants.SERVICE_TYPE_ADMIN_CONSOLE);
+            if (!platform) pstmt.setObject(2, scope);
             rs = pstmt.executeQuery();
             while (rs.next()) {
                 JSONObject log = new JSONObject();
@@ -122,11 +149,11 @@ public class AdminDash implements Action {
      * Retrieves counts for Active Policies, Consents, Principals, Purge Requests,
      * and Grievances, filtered by fiduciary and a specific date range.
      */
-    private JSONObject getDpoMetrics(JSONObject input) throws SQLException {
+    private JSONObject getDpoMetrics(JSONObject input, UUID fiduciaryId) throws SQLException {
+        // vAIb-ae11: fiduciaryId is the SERVER-DERIVED tenant scope, never the client body.
         JSONObject metrics = new JSONObject();
         String start = (String) input.get("start_date");
         String end = (String) input.get("end_date");
-        UUID fiduciaryId = UUID.fromString((String) input.get("fiduciary_id"));
 
         PoolDB pool = new PoolDB();
         Connection conn = null;
@@ -184,10 +211,10 @@ public class AdminDash implements Action {
     /**
      * Retrieves list of pending grievances for the dashboard table, scoped to a fiduciary.
      */
-    private JSONArray listPendingGrievances(JSONObject input) throws SQLException {
+    private JSONArray listPendingGrievances(JSONObject input, UUID fiduciaryId) throws SQLException {
+        // vAIb-ae11: fiduciaryId is the SERVER-DERIVED tenant scope, never the client body.
         JSONArray arr = new JSONArray();
         int limit = (input.get("limit") instanceof Long) ? ((Long) input.get("limit")).intValue() : 10;
-        UUID fiduciaryId = UUID.fromString((String) input.get("fiduciary_id"));
 
         String sql = "SELECT id, type, submission_timestamp, due_date, status FROM grievances " +
                 "WHERE fiduciary_id = ? AND status NOT IN ('RESOLVED', 'CLOSED', 'COMPLETED') " +

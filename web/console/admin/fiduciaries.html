@@ -382,10 +382,11 @@ function createFiduciaryRow(fiduciary) {
     // Determine if the Deactivate button should be shown
     const showDeactivate = fiduciary.status === 'ACTIVE' || fiduciary.status === 'PENDING';
 
+    // vAIb-ae11: 'deactivate-fiduciary' class lets tenant-scope.js hide this platform-only control.
     const actionsHtml = `
         <button class="text-indigo-600 hover:text-indigo-900 font-medium text-sm mr-2" onclick="editFiduciary('${fiduciary.fiduciary_id}')">Edit</button>
         ${showDeactivate ?
-            `<button class="text-red-600 hover:text-red-900 font-medium text-sm" onclick="deactivateFiduciary('${fiduciary.fiduciary_id}')">Deactivate</button>`
+            `<button class="deactivate-fiduciary text-red-600 hover:text-red-900 font-medium text-sm" onclick="deactivateFiduciary('${fiduciary.fiduciary_id}')">Deactivate</button>`
             : `<span class="text-gray-500 text-xs">Access Suspended</span>`}
     `;
 
@@ -452,6 +453,8 @@ async function loadFiduciaries(searchTerm = "") {
                     tableBody.appendChild(createFiduciaryRow(fiduciary));
                 });
                 countSpan.textContent = `Showing 1 - ${fiduciaries.length} of ${fiduciaries.length} Total`;
+                // vAIb-ae11: re-hide row-level deactivate controls for tenant operators.
+                if (window.applyTenantScopeUi) window.applyTenantScopeUi();
             }
         } else {
             // Handle API-level error (e.g., success: false)
@@ -677,6 +680,9 @@ window.editFiduciary = editFiduciary;
 window.deactivateFiduciary = deactivateFiduciary;
 
 </script>
+<!-- vAIb-ae11: defense-in-depth — hide deactivation for tenant-scoped operators (they should
+     never reach this platform-only page; the backend also tenant-scopes list_fiduciaries). -->
+<script src="../tenant-scope.js"></script>
 </body>
 
 </html>
