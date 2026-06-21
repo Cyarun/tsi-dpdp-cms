@@ -569,11 +569,54 @@ public class Operator implements Action {
             OutputProcessor.errorResponse(res, 403, "Forbidden", "Only ADMIN users may assign the ADMIN role.", req.getRequestURI());
             return;
         }
+
+        // vAIb-2yn0 -- validate the assigned role against the KNOWN set (default-deny unknown
+        // roles, so a typo / injected value can never create an operator with an unrecognised,
+        // un-gated role). Recognised: ADMIN, DPO (tenant) + the 3 platform roles.
+        String roleU = (role == null) ? "" : role.trim().toUpperCase();
+        boolean isTenantRole = "ADMIN".equals(roleU) || "DPO".equals(roleU);
+        boolean isPlatformRole = InputProcessor.isPlatformRole(roleU);
+        if (!isTenantRole && !isPlatformRole) {
+            OutputProcessor.errorResponse(res, 400, "Bad Request",
+                    "Unrecognised role. Allowed: ADMIN, DPO, SUPER_ADMIN, ONBOARDING_MANAGER, SUPPORT_ASSISTANT.",
+                    req.getRequestURI());
+            return;
+        }
+
+        // vAIb-2yn0 -- only a PLATFORM SUPER_ADMIN may provision the platform roles
+        // (SUPER_ADMIN / ONBOARDING_MANAGER / SUPPORT_ASSISTANT). A tenant operator (incl. the
+        // Wix-owner ADMIN, concrete fiduciary) can NEVER mint a platform-scope user. The caller
+        // role is server-verified (JWT/DB), never a client field. Default-deny: anything other
+        // than a verified SUPER_ADMIN caller assigning a platform role is rejected.
+        if (isPlatformRole && !InputProcessor.ROLE_SUPER_ADMIN.equalsIgnoreCase(callerRole)) {
+            OutputProcessor.errorResponse(res, 403, "Forbidden",
+                    "Only a platform SUPER_ADMIN may create platform-scope operators.", req.getRequestURI());
+            return;
+        }
+
         // vAIb-ae11: the new user is created in the SERVER-DERIVED tenant. A tenant operator
         // (incl. the Wix-owner ADMIN) can ONLY create users in their own fiduciary; only a
         // PLATFORM admin (null fiduciary) may target another tenant via the body fiduciary_id.
         UUID fid = InputProcessor.resolveTenantScope(req, res, false);
         if (fid == null) return;
+
+        // vAIb-2yn0 -- a PLATFORM-scope role MUST be created with the NULL fiduciary (platform
+        // scope). The discriminator is fiduciary NULL-vs-concrete: a SUPER_ADMIN bound to a
+        // concrete tenant would be a contradiction (a tenant operator wearing a platform label),
+        // so reject it. SUPER_ADMIN provisions platform users with NO body fiduciary_id (-> the
+        // resolver yields PLATFORM_ADMIN_FID, persisted as NULL below). Conversely a TENANT role
+        // (ADMIN/DPO) must NOT be created at platform scope (it needs a concrete fiduciary).
+        boolean targetIsPlatformScope = InputProcessor.PLATFORM_ADMIN_FID.equals(fid);
+        if (isPlatformRole && !targetIsPlatformScope) {
+            OutputProcessor.errorResponse(res, 400, "Bad Request",
+                    "A platform role must be created at platform scope (omit 'fiduciary_id').", req.getRequestURI());
+            return;
+        }
+        if (isTenantRole && targetIsPlatformScope) {
+            OutputProcessor.errorResponse(res, 400, "Bad Request",
+                    "A tenant role (ADMIN/DPO) requires a concrete tenant -- specify 'fiduciary_id'.", req.getRequestURI());
+            return;
+        }
 
         if (mail == null || !EMAIL_PATTERN.matcher(mail).matches() || pass == null || !PASSWORD_PATTERN.matcher(pass).matches()) {
             OutputProcessor.errorResponse(res, 400, "Bad Request", "Invalid email or weak password.", req.getRequestURI());

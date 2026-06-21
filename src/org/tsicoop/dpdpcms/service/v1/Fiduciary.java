@@ -101,6 +101,15 @@ public class Fiduciary implements Action {
                 return;
             }
 
+            // vAIb-2yn0 -- Fiduciary scopes via getVerifiedFiduciaryId directly (NOT
+            // resolveTenantScope), so the CENTRAL platform role matrix is enforced HERE for
+            // the platform path. ONBOARDING_MANAGER may create/update fiduciaries but is
+            // DENIED delete_fiduciary (destroy) -- SUPER_ADMIN only; SUPPORT_ASSISTANT is
+            // read-only. enforcePlatformAuthz emits 403 + AUDIT on deny (default-deny).
+            if (isPlatformAdmin && !InputProcessor.enforcePlatformAuthz(req, res, func)) {
+                return;
+            }
+
             switch (func.toLowerCase()) {
                 case "list_fiduciaries":
                     String statusFilter = (String) input.get("status");

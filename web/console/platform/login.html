@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TSI Platform Console - Operator Login</title>
+    <!--
+      vAIb-2yn0 — DEDICATED PLATFORM login page (OUTSIDE Wix).
+
+      This is the login surface for the THREE TSI platform-scope operators
+      (SUPER_ADMIN / ONBOARDING_MANAGER / SUPPORT_ASSISTANT). It reuses the EXACT
+      existing password-login path (Operator.handleLogin, _func="login" against
+      /api/v1/admin/operator) — NO new auth code, NO new secret. The server returns
+      role + fiduciary_id; a PLATFORM operator carries the all-zeros (NULL) fiduciary.
+
+      PLATFORM-ONLY GATE (client-side UX guard, NOT the security boundary): if the
+      login succeeds but the operator is a TENANT operator (concrete fiduciary), we
+      REFUSE to seed a platform session and tell them to use their Wix dashboard. The
+      AUTHORITATIVE block lives server-side (InputProcessor platform role matrix +
+      the fabric cross-surface block); this guard just avoids seeding a confusing
+      session in the browser. The discriminator is fiduciary NULL-vs-concrete.
+
+      The PAGE is public (served by fabric); the POST is gated by the operator
+      password (password_hash / checkPassword). Same posture as the /index.html login.
+    -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root {
+            --tsi-primary: #006A67; /* Primary Dark Teal */
+            --tsi-platform: #0B3D3B; /* Deeper teal to visually distinguish the platform surface */
+            --background: #eef5f4;
+            --border: 20 5.9% 90%;
+            --radius: 0.5rem;
+        }
+
+        body {
+            background-color: var(--background);
+            font-family: ui-sans-serif, system-ui, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+
+        .animated-button {
+            position: relative;
+            overflow: hidden;
+            z-index: 0;
+            background-color: var(--tsi-platform);
+            color: #FFFFFF;
+            transition: background-color 0.3s ease;
+        }
+
+        .animated-button::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -75%;
+            width: 50%;
+            height: 100%;
+            background: linear-gradient(120deg,
+                    rgba(255, 255, 255, 0.2) 0%,
+                    rgba(255, 255, 255, 0.6) 50%,
+                    rgba(255, 255, 255, 0.2) 100%);
+            transform: skewX(-20deg);
+            z-index: 1;
+        }
+
+        .animated-button:hover::before {
+            animation: shine 1.2s ease-in-out forwards;
+        }
+
+        @keyframes shine {
+            0% { left: -75%; }
+            100% { left: 125%; }
+        }
+
+        .input-style {
+            height: 40px;
+            border-color: hsl(var(--border));
+        }
+
+        .login-card {
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .platform-text {
+            color: var(--tsi-platform);
+        }
+    </style>
+</head>
+
+<body>
+<div class="w-full max-w-lg p-8 bg-white rounded-lg border border-gray-200 login-card">
+
+    <!-- Header / Logo Area -->
+    <div class="text-center mb-8">
+        <span class="text-3xl font-black platform-text tracking-tight uppercase">TSI Platform</span>
+        <p class="text-[10px] text-slate-400 mt-1 font-bold uppercase tracking-[0.2em]">Operator Console &middot; Cross-Tenant</p>
+        <h1 class="text-lg font-bold mt-4 text-gray-700">Platform Operator Login</h1>
+        <p class="text-[11px] text-slate-400 mt-2">For TSI platform staff only. Tenant owners &amp; DPOs use their Wix dashboard.</p>
+    </div>
+
+    <!-- Login Form -->
+    <form onsubmit="handlePlatformLogin(event)">
+        <div class="space-y-5">
+            <div>
+                <label for="email" class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Email (Login ID)</label>
+                <input type="email" id="email" name="email" required
+                       class="input-style w-full px-3 py-2 border border-slate-200 rounded-md focus:ring-2 focus:ring-teal-700 focus:border-teal-700 outline-none transition-all text-sm"
+                       placeholder="operator@thesilentintelligence.com">
+            </div>
+
+            <div>
+                <div class="flex justify-between items-center mb-1">
+                    <label for="password" class="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Password</label>
+                </div>
+                <input type="password" id="password" name="password" required
+                       class="input-style w-full px-3 py-2 border border-slate-200 rounded-md focus:ring-2 focus:ring-teal-700 focus:border-teal-700 outline-none transition-all text-sm"
+                       placeholder="••••••••••••">
+            </div>
+
+            <button type="submit"
+                    class="animated-button w-full h-11 inline-flex items-center justify-center rounded-md font-bold text-sm uppercase tracking-widest shadow-lg hover:bg-opacity-90 transition-all">
+                Secure Platform Login
+            </button>
+        </div>
+    </form>
+
+    <!-- Message/Error Area -->
+    <div id="login-message" class="mt-6 text-center text-xs font-bold hidden"></div>
+
+</div>
+
+<script>
+/**
+ * vAIb-2yn0 — platform operator login. Reuses Operator.handleLogin (_func="login")
+ * verbatim; the ONLY addition is the platform-scope check after a successful login.
+ */
+const PLATFORM_NULL_FID = '00000000-0000-0000-0000-000000000000';
+
+async function handlePlatformLogin(event) {
+    // The page is served under /console/platform/login.html, so the CMS API is two
+    // levels up. Use an absolute root path so it resolves regardless of how fabric
+    // mounts the page.
+    const API_LOGIN_URL = '/api/v1/admin/operator';
+    // The platform console is the cross-tenant admin dashboard (a NULL-fiduciary
+    // operator drives get_admin_metrics / list_fiduciaries cross-tenant). Another
+    // agent owns the console page's name/branding; we only point at it.
+    const PLATFORM_CONSOLE_URL = '/console/admin/dashboard.html';
+
+    event.preventDefault();
+    const email = document.getElementById('email').value;
+    const password = document.getElementById('password').value;
+    const messageArea = document.getElementById('login-message');
+
+    messageArea.textContent = '';
+    messageArea.classList.add('hidden');
+    messageArea.classList.remove('text-red-500', 'text-teal-600', 'text-blue-500');
+
+    if (password.length < 12) {
+        messageArea.textContent = "Error: Password must be at least 12 characters long.";
+        messageArea.classList.remove('hidden');
+        messageArea.classList.add('text-red-500');
+        return;
+    }
+
+    messageArea.textContent = "Verifying platform credentials...";
+    messageArea.classList.remove('hidden');
+    messageArea.classList.add('text-blue-500');
+
+    try {
+        const payload = { _func: "login", identifier: email, password: password };
+
+        const response = await fetch(API_LOGIN_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        const responseData = await response.json();
+
+        if (response.ok && responseData.success === true) {
+            // PLATFORM-SCOPE GUARD (UX): a platform operator carries the NULL (all-zeros)
+            // fiduciary. A TENANT operator (concrete fiduciary — e.g. a Wix owner ADMIN or
+            // a tenant DPO) is NOT a platform user; refuse to seed a platform session and
+            // send them to Wix. (Server-side authz is the real boundary; this is a guard.)
+            const fid = responseData.fiduciary_id || '';
+            if (fid !== PLATFORM_NULL_FID) {
+                messageArea.textContent = "This is the TSI platform console. Tenant owners and DPOs sign in from their Wix dashboard.";
+                messageArea.classList.replace('text-blue-500', 'text-red-500');
+                return;
+            }
+
+            // Seed the platform session (NULL fiduciary). Same keys the console pages read.
+            localStorage.setItem('authToken', responseData.token);
+            localStorage.setItem('username', responseData.username);
+            localStorage.setItem('role', responseData.role);
+            localStorage.setItem('fiduciary_id', responseData.fiduciary_id); // NULL/all-zeros
+            localStorage.setItem('fiduciary_name', responseData.fiduciary_name || 'TSI Platform');
+
+            messageArea.textContent = "Login successful. Loading platform console...";
+            messageArea.classList.replace('text-blue-500', 'text-teal-600');
+
+            setTimeout(() => { window.location.href = PLATFORM_CONSOLE_URL; }, 800);
+        } else {
+            const errorText = responseData.message || "Invalid credentials. Please verify your login ID and password.";
+            messageArea.textContent = errorText;
+            messageArea.classList.replace('text-blue-500', 'text-red-500');
+        }
+    } catch (error) {
+        messageArea.textContent = 'Network Error: Cannot reach the platform service.';
+        messageArea.classList.replace('text-blue-500', 'text-red-500');
+        console.error('Connection error:', error);
+    }
+}
+</script>
+</body>
+</html>

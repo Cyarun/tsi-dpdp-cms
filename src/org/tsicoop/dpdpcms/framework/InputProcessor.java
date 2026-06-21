@@ -346,25 +346,173 @@ public class InputProcessor {
     /** The all-zeros sentinel fiduciary that marks a PLATFORM admin (operator with a null fiduciary_id). */
     public static final UUID PLATFORM_ADMIN_FID = UUID.fromString("00000000-0000-0000-0000-000000000000");
 
+    // -- vAIb-2yn0: TSI PLATFORM ROLES + central per-function authorization matrix --
+    //
+    // THREE platform-scope roles. The platform scope is ALWAYS the NULL fiduciary_id
+    // (all-zeros sentinel above) -- a CONCRETE fiduciary_id is ALWAYS a tenant operator,
+    // regardless of role label. So a tenant ADMIN (the Wix owner, concrete fiduciary) is
+    // NOT a platform SUPER_ADMIN: the discriminator is fiduciary NULL-vs-concrete, NOT the
+    // role string. These role constants gate ONLY the platform path (verified fiduciary ==
+    // PLATFORM_ADMIN_FID); the tenant path is unchanged (hard-scoped by fiduciary).
+    public static final String ROLE_SUPER_ADMIN        = "SUPER_ADMIN";        // everything, cross-tenant
+    public static final String ROLE_ONBOARDING_MANAGER = "ONBOARDING_MANAGER"; // create/manage; NO destroy/billing/deactivate/revoke
+    public static final String ROLE_SUPPORT_ASSISTANT  = "SUPPORT_ASSISTANT";  // READ-ONLY cross-tenant; NO mutation, NO secrets
+
+    /** All recognised platform-scope roles (a NULL-fiduciary operator MUST carry one of these). */
+    private static final Set<String> PLATFORM_ROLES = new HashSet<>(Arrays.asList(
+            ROLE_SUPER_ADMIN, ROLE_ONBOARDING_MANAGER, ROLE_SUPPORT_ASSISTANT));
+
     /**
-     * vAIb-ae11 — single source of truth for per-tenant scoping of operator-console requests.
+     * READ-only platform functions (list_x / get_x / metrics view). ONBOARDING_MANAGER and
+     * SUPPORT_ASSISTANT may both read; SUPPORT_ASSISTANT may ONLY read. Names are the
+     * lower-cased ``_func`` values across every CMS service (Fiduciary/Policy/Ropa/App/
+     * Operator/AdminDash/Grievance/Compliance/Legal/Job/Consent/Audit/Notification).
+     * NOTE: api-key reads (get_api_key_details) are NOT here -- they expose secrets and so
+     * are SUPER_ADMIN-only (see SECRET_FUNCS / matrix below).
+     */
+    private static final Set<String> PLATFORM_READ_FUNCS = new HashSet<>(Arrays.asList(
+            "list_fiduciaries", "get_fiduciary", "validate_fiduciary_domain",
+            "list_policies", "list_active_policies", "get_policy", "get_active_policy",
+            "list_entries", "get_entry", "validate_completeness", "export_ropa",
+            "list_apps", "get_app",
+            "list_users", "get_user",
+            "get_admin_metrics", "get_dpo_metrics", "list_pending_grievances", "list_access_logs",
+            "list_grievances", "get_grievance", "list_user_grievances",
+            "list_purge_requests", "get_purge_request",
+            "list_certificates", "get_certificate",
+            "list_jobs", "download_file",
+            "get_active_consent", "get_consent_record_details", "list_consent_history", "validate_consent",
+            "list_audit_logs", "get_audit_log",
+            "list_notifications",
+            "list_api_keys"  // metadata only (no key material); secret-bearing get/generate are SECRET_FUNCS
+    ));
+
+    /**
+     * Functions the ONBOARDING_MANAGER may PERFORM (create/manage fiduciaries+policies+
+     * RoPA+apps+operators). Reads are inherited from PLATFORM_READ_FUNCS. Explicitly
+     * EXCLUDES destroy (delete_x / retire_x), billing, deactivate-fiduciary, and any key
+     * revoke/secret op -- those stay SUPER_ADMIN-only (DENY for onboarding/support).
+     */
+    private static final Set<String> ONBOARDING_MANAGE_FUNCS = new HashSet<>(Arrays.asList(
+            // Fiduciaries: create/update only (NOT delete_fiduciary / deactivate).
+            "create_fiduciary", "update_fiduciary",
+            // Policies: author + publish (NOT delete_policy -- a destroy op).
+            "create_policy", "update_policy", "publish_policy",
+            // RoPA: author lifecycle (NOT retire_entry -- a destroy/withdraw op).
+            "create_entry", "update_entry", "publish_entry", "derive_from_policy",
+            // Apps: create/update only (NOT delete_app).
+            "create_app", "update_app",
+            // Operators: provision/manage tenant operators (NOT deactivate_user -- destroy).
+            "create_user", "update_user",
+            // Grievance / compliance workflow management (operational, not destructive).
+            "update_grievance_status", "update_purge_status", "initiate_purge_request",
+            "mark_notification_read"
+    ));
+
+    /**
+     * SECRET / key-material functions -- SUPER_ADMIN ONLY. Even SUPPORT_ASSISTANT's read
+     * scope must NEVER reach these (they expose or rotate API keys). Listed separately so
+     * the default-deny matrix can fail closed on anything that touches a secret.
+     */
+    private static final Set<String> SECRET_FUNCS = new HashSet<>(Arrays.asList(
+            "generate_api_key", "get_api_key_details", "revoke_api_key", "update_api_key_status",
+            "generate_recovery_key", "verify_recovery_key", "reset_password_via_recovery"
+    ));
+
+    /** True iff this role is one of the three platform-scope roles. */
+    public static boolean isPlatformRole(String role) {
+        return role != null && PLATFORM_ROLES.contains(role.trim().toUpperCase());
+    }
+
+    /**
+     * vAIb-2yn0 -- CENTRAL platform authorization matrix (default-deny).
+     *
+     * Decides whether a PLATFORM-scope operator (NULL fiduciary) with verified ``role``
+     * may invoke ``func``. This is the SINGLE source of truth; it is invoked from the
+     * platform branch of resolveTenantScope (and from Fiduciary's platform branch, which
+     * scopes via getVerifiedFiduciaryId directly). Tenant-scoped operators NEVER reach
+     * here -- they are hard-scoped by fiduciary and keep the legacy ADMIN/DPO behaviour.
+     *
+     * Rules:
+     *   - SUPER_ADMIN          -> everything (legacy platform-admin behaviour, mapped cleanly).
+     *   - ONBOARDING_MANAGER   -> PLATFORM_READ_FUNCS  +  ONBOARDING_MANAGE_FUNCS; DENY all
+     *                            destroy/billing/deactivate-fiduciary/revoke-keys/secrets.
+     *   - SUPPORT_ASSISTANT    -> PLATFORM_READ_FUNCS only (minus SECRET_FUNCS); DENY all mutation.
+     *   - ADMIN (legacy null-fiduciary platform admin) -> treated as SUPER_ADMIN for back-compat
+     *                            (the current platform-admin maps cleanly to SUPER_ADMIN).
+     *   - anything else / null role / unknown func for a constrained role -> DENY (fail closed).
+     *
+     * @return true if ALLOWED; false if DENIED (caller MUST 403 + audit).
+     */
+    public static boolean isPlatformFuncAllowed(String role, String func) {
+        if (func == null) return false;            // no function -> deny
+        String f = func.trim().toLowerCase();
+        String r = (role == null) ? "" : role.trim().toUpperCase();
+
+        // SUPER_ADMIN (and the legacy null-fiduciary ADMIN it maps from) -> all funcs.
+        if (ROLE_SUPER_ADMIN.equals(r) || "ADMIN".equals(r)) return true;
+
+        // Secret/key-material funcs are SUPER_ADMIN-only -- deny everyone else outright.
+        if (SECRET_FUNCS.contains(f)) return false;
+
+        if (ROLE_SUPPORT_ASSISTANT.equals(r)) {
+            // READ-ONLY: allow reads only, deny every mutation (fail closed).
+            return PLATFORM_READ_FUNCS.contains(f);
+        }
+
+        if (ROLE_ONBOARDING_MANAGER.equals(r)) {
+            // Reads + the explicit manage set; everything else (destroy/billing/etc.) denied.
+            return PLATFORM_READ_FUNCS.contains(f) || ONBOARDING_MANAGE_FUNCS.contains(f);
+        }
+
+        // Unknown / null platform role on a NULL-fiduciary operator -> DENY (default-deny).
+        return false;
+    }
+
+    /**
+     * vAIb-2yn0 -- enforce the platform matrix for the current request, fail-closed.
+     *
+     * Resolves the verified role, applies isPlatformFuncAllowed, and on DENY sends a 403,
+     * AUDIT-logs the rejected attempt (role + func + denied -- NO PII), and returns false.
+     * Returns true when ALLOWED. Callers in the platform branch MUST ``return null`` (or
+     * stop) when this returns false. The role is read SERVER-SIDE (getVerifiedRole / JWT),
+     * never from a client body field.
+     */
+    public static boolean enforcePlatformAuthz(HttpServletRequest req, HttpServletResponse res, String func) {
+        String role = getVerifiedRole(req);
+        if (isPlatformFuncAllowed(role, func)) return true;
+        // DENY: audit the rejected platform action (role + func, no PII/secret) then 403.
+        try {
+            new Audit().logEventAsync(
+                    (role == null ? "UNKNOWN" : role), PLATFORM_ADMIN_FID,
+                    Constants.SERVICE_TYPE_ADMIN_CONSOLE, getAuthenticatedUserId(req),
+                    "PLATFORM_AUTHZ_DENIED",
+                    "role=" + (role == null ? "null" : role) + " func=" + (func == null ? "null" : func.toLowerCase()) + " denied");
+        } catch (Exception ignored) { /* audit must never break the deny */ }
+        OutputProcessor.errorResponse(res, HttpServletResponse.SC_FORBIDDEN, "Forbidden",
+                "Your platform role is not permitted to perform this action.", req.getRequestURI());
+        return false;
+    }
+
+    /**
+     * vAIb-ae11 -- single source of truth for per-tenant scoping of operator-console requests.
      *
      * Resolves the fiduciary (tenant) an authenticated operator may act on, derived ENTIRELY
      * server-side from the operator's own DB record (getVerifiedFiduciaryId), NEVER from any
      * client-supplied "fiduciary_id" in the request body. This closes the cross-tenant leak
      * where every admin/dpo endpoint trusted the body fiduciary_id.
      *
-     * Rules (the discriminator is the VERIFIED FIDUCIARY, not the JWT role — note the
+     * Rules (the discriminator is the VERIFIED FIDUCIARY, not the JWT role -- note the
      * auto-created Wix-owner operator is role=ADMIN but carries a CONCRETE tenant fiduciary):
      *   - TENANT-SCOPED operator (verified fiduciary is a concrete tenant UUID):
      *       HARD-SCOPED to that tenant. Any client-supplied fiduciary_id is IGNORED, and if it
-     *       names a DIFFERENT tenant the request is DENIED (403) — fail closed, no silent
+     *       names a DIFFERENT tenant the request is DENIED (403) -- fail closed, no silent
      *       cross-tenant fallthrough.
      *   - PLATFORM admin (verified fiduciary == PLATFORM_ADMIN_FID, i.e. null fiduciary_id):
      *       may target a specific tenant via the body fiduciary_id (provisioning/support path);
      *       403 if the body fiduciary_id is absent/malformed (never an unscoped cross-tenant op).
      *
-     * On any failure this sends the appropriate error response and returns null — callers MUST
+     * On any failure this sends the appropriate error response and returns null -- callers MUST
      * `return` immediately when the result is null.
      *
      * @param requireTargetForPlatform when true a PLATFORM admin MUST name a tenant in the body
@@ -381,12 +529,15 @@ public class InputProcessor {
         }
 
         String bodyFidStr = null;
+        String bodyFunc = null;
         try {
             JSONObject input = getInput(req);
             if (input != null) {
                 Object o = input.get("fiduciary_id");
                 if (o == null) o = input.get("fiduciary_id_filter"); // Policy.list_policies alias
                 if (o != null) bodyFidStr = o.toString();
+                Object fn = input.get("_func");
+                if (fn != null) bodyFunc = fn.toString();
             }
         } catch (Exception ignored) { /* body unavailable/unparseable -> treated as absent */ }
 
@@ -394,6 +545,8 @@ public class InputProcessor {
 
         if (!isPlatform) {
             // Tenant-scoped operator: hard-scope to own fiduciary; deny any mismatching target.
+            // The platform role matrix does NOT apply to tenant operators (legacy ADMIN/DPO,
+            // hard-scoped by fiduciary) — their authz is the cross-tenant strip+inject above.
             if (bodyFidStr != null && !bodyFidStr.isEmpty()
                     && !bodyFidStr.equalsIgnoreCase(verified.toString())) {
                 OutputProcessor.errorResponse(res, HttpServletResponse.SC_FORBIDDEN, "Forbidden",
@@ -402,6 +555,14 @@ public class InputProcessor {
                 return null;
             }
             return verified;
+        }
+
+        // vAIb-2yn0 — PLATFORM-scope operator (NULL fiduciary): CENTRAL default-deny role
+        // matrix runs BEFORE any tenant is selected. SUPER_ADMIN → all; ONBOARDING_MANAGER →
+        // create/manage (no destroy/billing/deactivate/revoke); SUPPORT_ASSISTANT → read-only;
+        // anything else → DENY (403 + audit). enforcePlatformAuthz emits the 403 + AUDIT on deny.
+        if (!enforcePlatformAuthz(req, res, bodyFunc)) {
+            return null;
         }
 
         // Platform admin: the body fiduciary_id selects the target tenant.
