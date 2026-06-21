@@ -76,6 +76,17 @@ public class Policy implements Action {
                 return;
             }
 
+            // vAIb-2yn0 SEC FIX (security-review HIGH): Policy scopes via resolveFiduciaryId
+            // (which falls back to the CLIENT body fiduciary_id for a platform/NULL-fid operator)
+            // and does NOT route through resolveTenantScope, so the central platform role matrix
+            // was bypassed — a read-only SUPPORT_ASSISTANT could delete_policy for ANY tenant by
+            // naming it in the body. Gate the platform path through enforcePlatformAuthz HERE
+            // (mirrors Fiduciary.java:109): default-deny, 403 + AUDIT, ONBOARDING_MANAGER keeps
+            // create/update/publish, delete denied to all but SUPER_ADMIN.
+            if (InputProcessor.isPlatformAdmin(req) && !InputProcessor.enforcePlatformAuthz(req, res, func)) {
+                return;
+            }
+
             // Extract common parameters
             String policyIdStr = (String) input.get("policy_id");
             String versionStr = (String) input.get("version");

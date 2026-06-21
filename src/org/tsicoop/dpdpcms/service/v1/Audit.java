@@ -72,6 +72,14 @@ public class Audit implements Action {
                 return;
             }
 
+            // vAIb-2yn0 SEC FIX (security-review MEDIUM): log_event trusts the client body
+            // fiduciary_id with no role gate — a platform operator could forge audit entries for
+            // any tenant. Gate the platform path through the central matrix (log_event is in NO
+            // allow-set, so it is denied for all platform roles; default-deny).
+            if (InputProcessor.isPlatformAdmin(req) && !InputProcessor.enforcePlatformAuthz(req, res, func)) {
+                return;
+            }
+
             switch (func.toLowerCase()) {
                 case "log_event":
                     handleLogRequest(input, res, req);
