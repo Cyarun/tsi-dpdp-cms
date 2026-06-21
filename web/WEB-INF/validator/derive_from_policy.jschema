@@ -6,7 +6,9 @@
     "_func":        { "type": "string" },
     "fiduciary_id": { "type": "string" },
     "policy_id":    { "type": "string" },
-    "version":      { "type": "string" }
+    "version":      { "type": "string" },
+    "vertical":     { "type": "string" },
+    "apps":         { "type": "array", "items": { "type": "string" } }
   },
   "required": ["_func", "fiduciary_id", "policy_id"]
 }

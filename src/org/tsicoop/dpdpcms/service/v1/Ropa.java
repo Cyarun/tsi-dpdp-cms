@@ -157,6 +157,31 @@ public class Ropa implements Action {
             return;
         }
 
+        // WRITER != APPROVER (vAIb-aqip) — publishing a RoPA entry is the DPO's formal
+        // APPROVAL (DPDP Act 2023, Section 8 accountability). The owner who DRAFTED the
+        // RoPA (via the wizard / owner console — role=ADMIN) MUST NOT be able to approve
+        // their own record. Only a DPO-role session may publish. A small tenant whose
+        // owner IS the DPO self-approves in one explicit step by opening the DPO console:
+        // fabric proves they are the registered DPO (member countersign + dpo_email gate)
+        // and the operator_session mint binds them a DISTINCT role=DPO operator
+        // (Operator.autoCreateDpoOperator) — so even then the approver identity is the
+        // DPO, never the drafting ADMIN. SUPER_ADMIN (platform operator) is permitted for
+        // platform-level remediation. The role is read from the SIGNED operator JWT
+        // (getVerifiedRole — never client input). Fail CLOSED: no/unknown role -> 403.
+        String approverRole = InputProcessor.getVerifiedRole(req);
+        boolean isDpo = approverRole != null
+                && ("DPO".equalsIgnoreCase(approverRole) || "SUPER_ADMIN".equalsIgnoreCase(approverRole));
+        if (!isDpo) {
+            new Audit().logEventAsync("DPO", effectiveFid, Constants.SERVICE_TYPE_DPO_CONSOLE, effectiveFid,
+                    "ROPA_PUBLISH_DENIED_WRITER_NEQ_APPROVER",
+                    "id:" + entryId + " role:" + (approverRole == null ? "none" : approverRole));
+            OutputProcessor.errorResponse(res, HttpServletResponse.SC_FORBIDDEN, "Forbidden",
+                    "Only the Data Protection Officer (DPO) may approve a RoPA entry. The person who "
+                    + "drafted the policy cannot approve it unless they sign in as the designated DPO.",
+                    req.getRequestURI());
+            return;
+        }
+
         // Auto-record publishing DPO from session — sets dpo_id so validator sees it as complete
         UUID dpoFromSession = InputProcessor.getAuthenticatedUserId(req);
         if (dpoFromSession != null) {
@@ -324,7 +349,25 @@ public class Ropa implements Action {
         }
         String version = input.get("version") != null ? (String) input.get("version") : "";
 
-        UUID entryId = RopaDeriver.deriveFromPolicy(policyId, version, fiduciaryId);
+        // vAIb-aqip — RoPA AUTOFILL inputs (the expedite engine). The wizard forwards the
+        // owner-confirmed vertical + the detected apps so the deriver can BACKFILL the
+        // completeness-checklist gaps (retention/security_measures) from the vertical
+        // template defaults, making the derived entries DPO-approvable without manual
+        // typing. Both are OPTIONAL: absent -> a safe DPDPA baseline. Validated/bounded
+        // here (the deriver re-escapes app names before they touch stored text).
+        String vertical = input.get("vertical") instanceof String ? ((String) input.get("vertical")).trim() : null;
+        List<String> appNames = new ArrayList<>();
+        Object appsObj = input.get("apps");
+        if (appsObj instanceof JSONArray) {
+            for (Object o : (JSONArray) appsObj) {
+                if (o instanceof String && appNames.size() < 24) {
+                    String s = ((String) o).trim();
+                    if (!s.isEmpty()) appNames.add(s);
+                }
+            }
+        }
+
+        UUID entryId = RopaDeriver.deriveFromPolicy(policyId, version, fiduciaryId, vertical, appNames);
         if (entryId == null) {
             OutputProcessor.errorResponse(res, HttpServletResponse.SC_BAD_REQUEST, "Bad Request",
                     "Policy not found or not yet active. Only active policies can be derived.", req.getRequestURI());

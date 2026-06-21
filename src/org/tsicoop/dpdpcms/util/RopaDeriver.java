@@ -20,6 +20,26 @@ public class RopaDeriver {
      * @return UUID of the last created/updated entry, or null on failure.
      */
     public static UUID deriveFromPolicy(String policyId, String version, UUID fiduciaryId) throws Exception {
+        return deriveFromPolicy(policyId, version, fiduciaryId, null, null);
+    }
+
+    /**
+     * vAIb-aqip — AUTOFILL overload (the "expedite engine"). Same upsert as above, but
+     * when the source policy does NOT carry the structured fields the RoPA completeness
+     * checklist (RopaValidator) requires — retention_period_days, retention_start_event,
+     * security_measures — we BACKFILL them from the chosen VERTICAL template defaults +
+     * the detected apps, so the DERIVED entries reach 'complete' (all-green checklist)
+     * and become approvable by the DPO WITHOUT manual typing. The autofill ONLY fills
+     * GAPS: any value the policy DOES carry always wins (the owner's wizard choices are
+     * never overwritten). vertical may be null (-> a safe DPDPA baseline); appNames may
+     * be null/empty (-> a generic security-measures sentence).
+     *
+     * @param vertical the owner-confirmed business vertical (datacentre/education/
+     *                 finance/health/media/retail/social), or null for the baseline.
+     * @param appNames detected processor/app names to name in the security-measures text.
+     */
+    public static UUID deriveFromPolicy(String policyId, String version, UUID fiduciaryId,
+                                        String vertical, List<String> appNames) throws Exception {
         String policyContentStr = loadPolicyContent(policyId, version, fiduciaryId);
         if (policyContentStr == null) return null;
 
@@ -33,10 +53,19 @@ public class RopaDeriver {
         JSONArray purposes = (JSONArray) langObj.get("data_processing_purposes");
         if (purposes == null || purposes.isEmpty()) return null;
 
+        // vAIb-aqip: resolve the vertical defaults once (null vertical -> baseline).
+        VerticalDefaults vd = VerticalDefaults.forVertical(vertical);
+
         // Policy-level fields shared across all purposes
         JSONArray dataSubjectCategories = extractOrDefault(
                 (JSONArray) langObj.get("data_subject_categories"), "data_principal");
         String securityMeasures = (String) langObj.get("security_measures");
+        // AUTOFILL GAP: a policy that does not carry security_measures would leave every
+        // derived entry incomplete (RopaValidator requires it). Backfill from the
+        // vertical default + the detected apps so the entry is approvable.
+        if (securityMeasures == null || securityMeasures.trim().isEmpty()) {
+            securityMeasures = vd.securityMeasures(appNames);
+        }
         JSONArray processorsArr = langObj.get("processors") instanceof JSONArray
                 ? (JSONArray) langObj.get("processors") : new JSONArray();
         JSONArray crossBorderArr = langObj.get("cross_border_transfers") instanceof JSONArray
@@ -68,7 +97,19 @@ public class RopaDeriver {
                     retentionDays = toDays((int)(long) valObj, unitObj.toString().toUpperCase());
                 } catch (Exception ignored) {}
             }
+            // AUTOFILL GAP (vAIb-aqip): the checklist requires retention_period_days > 0.
+            // When the policy purpose carries no usable retention, use the vertical default
+            // (legal-basis aware — consent purposes get the shorter window).
+            if (retentionDays == null || retentionDays <= 0) {
+                retentionDays = vd.retentionDays(legalBasis);
+            }
             String retentionStartEvent = (String) purpose.get("retention_start_event");
+            // AUTOFILL GAP: the checklist requires retention_start_event ∈ {COLLECTION,
+            // CESSATION}. Default per the vertical when absent/invalid.
+            if (retentionStartEvent == null || !("COLLECTION".equals(retentionStartEvent)
+                    || "CESSATION".equals(retentionStartEvent))) {
+                retentionStartEvent = vd.retentionStartEvent();
+            }
 
             // Filter processors and cross-border transfers to those named by this purpose
             Set<String> rtp = new HashSet<>();
@@ -308,5 +349,107 @@ public class RopaDeriver {
         JSONArray a = new JSONArray();
         a.add(fallback);
         return a;
+    }
+
+    // -----------------------------------------------------------------------
+    // vAIb-aqip — VERTICAL TEMPLATE DEFAULTS (the RoPA autofill source).
+    // Per-vertical sane DPDPA-aligned defaults used to BACKFILL the completeness-
+    // checklist gaps (retention_period_days, retention_start_event, security_measures)
+    // when the source policy did not carry them, so derived entries reach 'complete'
+    // and become DPO-approvable without manual typing. These are GAP-FILLERS only — any
+    // value the policy DOES carry always wins. The 7 verticals mirror the wizard's
+    // suggest_vertical (services/gateway/core/onboarding_draft.py:191).
+    // -----------------------------------------------------------------------
+    private static final class VerticalDefaults {
+        final int retentionDaysConsent;     // shorter window for consent-based purposes
+        final int retentionDaysNonConsent;  // longer window for legal/legit/vital
+        final String retentionStartEvent;   // COLLECTION or CESSATION
+        final String securityBaseline;      // vertical-appropriate safeguards sentence
+
+        private VerticalDefaults(int consentDays, int nonConsentDays,
+                                 String startEvent, String securityBaseline) {
+            this.retentionDaysConsent = consentDays;
+            this.retentionDaysNonConsent = nonConsentDays;
+            this.retentionStartEvent = startEvent;
+            this.securityBaseline = securityBaseline;
+        }
+
+        // Legal-basis-aware retention: consent purposes default to the shorter window
+        // (data minimisation); legal_obligation/legitimate_use/vital_interest to the
+        // longer one (records often must be kept post-relationship).
+        int retentionDays(String legalBasis) {
+            return "consent".equalsIgnoreCase(legalBasis)
+                    ? retentionDaysConsent : retentionDaysNonConsent;
+        }
+
+        String retentionStartEvent() { return retentionStartEvent; }
+
+        // Security-measures text = the vertical baseline + the DETECTED apps named as
+        // sub-processors under DPAs (DPDP Act Section 8(5)). Apps are HTML-escaped: this
+        // text is stored on the RoPA + shown on the DPO console (a principal-facing
+        // surface), and app names are tenant-controlled.
+        String securityMeasures(List<String> appNames) {
+            StringBuilder sb = new StringBuilder(securityBaseline);
+            if (appNames != null && !appNames.isEmpty()) {
+                List<String> safe = new ArrayList<>();
+                for (String n : appNames) {
+                    if (n == null) continue;
+                    String t = n.trim();
+                    if (t.isEmpty()) continue;
+                    safe.add(escape(t.length() > 80 ? t.substring(0, 80) : t));
+                    if (safe.size() >= 12) break;  // bound the list
+                }
+                if (!safe.isEmpty()) {
+                    sb.append(" Sub-processors engaged under data-processing agreements: ")
+                      .append(String.join(", ", safe)).append(".");
+                }
+            }
+            return sb.toString();
+        }
+
+        private static String escape(String s) {
+            return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                    .replace("\"", "&quot;").replace("'", "&#39;");
+        }
+
+        static VerticalDefaults forVertical(String vertical) {
+            String v = vertical == null ? "" : vertical.trim().toLowerCase();
+            switch (v) {
+                case "finance":
+                    // RBI/PMLA records often retained ~8y after relationship end.
+                    return new VerticalDefaults(365 * 2, 365 * 8, "CESSATION",
+                        "Encryption in transit (TLS 1.2+) and at rest (AES-256), role-based "
+                        + "access control, audit logging, and periodic access reviews aligned to "
+                        + "financial-sector record-keeping obligations.");
+                case "health":
+                    // Health records: long retention from cessation of care.
+                    return new VerticalDefaults(365 * 3, 365 * 7, "CESSATION",
+                        "Encryption in transit (TLS 1.2+) and at rest (AES-256), strict need-to-know "
+                        + "access control for sensitive health data, audit logging, and breach-response "
+                        + "procedures.");
+                case "education":
+                    return new VerticalDefaults(365 * 2, 365 * 5, "CESSATION",
+                        "Encryption in transit and at rest, role-based access control, audit logging, "
+                        + "and retention of academic records per institutional policy.");
+                case "datacentre":
+                    return new VerticalDefaults(365, 365 * 3, "CESSATION",
+                        "Encryption in transit and at rest, network segmentation, role-based access "
+                        + "control, continuous monitoring, and audit logging.");
+                case "media":
+                    return new VerticalDefaults(365, 365 * 2, "COLLECTION",
+                        "Encryption in transit and at rest, role-based access control, and audit "
+                        + "logging for content and audience data.");
+                case "social":
+                    return new VerticalDefaults(365, 365 * 2, "CESSATION",
+                        "Encryption in transit and at rest, role-based access control, audit logging, "
+                        + "and account-deletion workflows for member/community data.");
+                case "retail":
+                default:
+                    // Broadest commerce default (also the baseline when vertical is null).
+                    return new VerticalDefaults(365, 365 * 3, "CESSATION",
+                        "Encryption in transit (TLS 1.2+) and at rest, role-based access control, "
+                        + "audit logging, and least-privilege handling of customer data.");
+            }
+        }
     }
 }

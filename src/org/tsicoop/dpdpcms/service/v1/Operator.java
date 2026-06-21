@@ -275,6 +275,21 @@ public class Operator implements Action {
         // Optional caller hint: which console role the owner is landing on. Used only
         // to PREFER a matching operator row; never to grant a role the tenant lacks.
         String rolePref = (String) input.get("role");
+        // vAIb-cnv2 / vAIb-aqip — IDENTITY-BOUND DPO MODE. fabric proves (member
+        // countersign + registered-DPO-email gate, console._verify_dpo_member) that the
+        // caller IS the tenant's REGISTERED DPO, then forwards the whoami-VERIFIED member
+        // email as operator_email + require_role='DPO'. We HONOUR these so the minted JWT
+        // carries role=DPO bound to THAT email. This is load-bearing for the writer!=
+        // approver gate: RoPA publish_entry (Ropa.handlePublishEntry) requires a DPO-role
+        // approver, and a small tenant's owner-as-DPO has only an ADMIN operator, so
+        // without this the DPO console would mint role=ADMIN and the DPO could never
+        // approve. These arrive ONLY on the already-secret-gated path AFTER fabric proved
+        // the DPO identity, so binding/creating a DPO operator for the verified email is
+        // safe + fail-closed.
+        String requireRole   = (String) input.get("require_role");
+        String operatorEmail = (String) input.get("operator_email");
+        boolean dpoBind = requireRole != null && requireRole.equalsIgnoreCase("DPO")
+                && operatorEmail != null && EMAIL_PATTERN.matcher(operatorEmail.trim()).matches();
 
         // Gate 1: the fabric shared secret (constant-time, fail-closed if unset).
         if (OPERATOR_LOGIN_SECRET == null || secret == null
@@ -312,26 +327,43 @@ public class Operator implements Action {
         boolean autoCreated = false;
         try {
             conn = pool.getConnection();
-            // Bind to an EXISTING ACTIVE operator of THIS ACTIVE fiduciary. Prefer a
-            // row matching the caller's role hint (e.g. DPO landing), else the most
-            // recently created ACTIVE operator for the tenant. The JOIN to
-            // fiduciaries enforces the fiduciary is ACTIVE (no session for a
-            // suspended/deleted tenant). We never select the platform null-fiduciary
-            // ADMIN here: fiduciary_id is a concrete tenant UUID.
-            OwnerOperator bound = selectActiveOperator(conn, fiduciaryId, rolePref);
+            OwnerOperator bound;
+            if (dpoBind) {
+                // IDENTITY-BOUND DPO MINT (vAIb-aqip): bind to the ACTIVE DPO operator
+                // whose email matches the verified registered DPO. If the tenant has no
+                // such DPO operator (small tenant where the owner IS the DPO, or first
+                // DPO login), AUTO-CREATE a passwordless DPO operator for the verified
+                // email — distinct from the owner's ADMIN operator, so writer (ADMIN) and
+                // approver (DPO) are SEPARATE identities even when the same person. SAFE:
+                // we are inside the secret-valid path AND fabric already proved this email
+                // is the tenant's registered DPO; fail-closed if the fiduciary is inactive.
+                bound = selectActiveDpoOperator(conn, fiduciaryId, operatorEmail.trim());
+                if (bound == null) {
+                    bound = autoCreateDpoOperator(conn, fiduciaryId, operatorEmail.trim());
+                    if (bound != null) autoCreated = true;
+                }
+            } else {
+                // Bind to an EXISTING ACTIVE operator of THIS ACTIVE fiduciary. Prefer a
+                // row matching the caller's role hint (e.g. DPO landing), else the most
+                // recently created ACTIVE operator for the tenant. The JOIN to
+                // fiduciaries enforces the fiduciary is ACTIVE (no session for a
+                // suspended/deleted tenant). We never select the platform null-fiduciary
+                // ADMIN here: fiduciary_id is a concrete tenant UUID.
+                bound = selectActiveOperator(conn, fiduciaryId, rolePref);
 
-            // vAIb-q3g5: onboarded tenants (unified identity, no Super-Admin-Setup
-            // step) have ZERO operators, so the mint had nothing to bind to and
-            // 401'd. When the SELECT finds none AND the fiduciary is ACTIVE, the
-            // already-secret-gated fabric (which only calls us AFTER verifying the
-            // Wix-signed OWNER instance) is allowed to AUTO-CREATE the owner's
-            // passwordless ADMIN operator, then bind to it. SAFE because we are
-            // already inside the secret-valid + concrete-tenant path; we still
-            // require the fiduciary to be ACTIVE (fail-closed: never create for an
-            // inactive/unknown tenant). Idempotent: a second mint finds the row.
-            if (bound == null) {
-                bound = autoCreateOwnerOperator(conn, fiduciaryId, rolePref);
-                if (bound != null) autoCreated = true;
+                // vAIb-q3g5: onboarded tenants (unified identity, no Super-Admin-Setup
+                // step) have ZERO operators, so the mint had nothing to bind to and
+                // 401'd. When the SELECT finds none AND the fiduciary is ACTIVE, the
+                // already-secret-gated fabric (which only calls us AFTER verifying the
+                // Wix-signed OWNER instance) is allowed to AUTO-CREATE the owner's
+                // passwordless ADMIN operator, then bind to it. SAFE because we are
+                // already inside the secret-valid + concrete-tenant path; we still
+                // require the fiduciary to be ACTIVE (fail-closed: never create for an
+                // inactive/unknown tenant). Idempotent: a second mint finds the row.
+                if (bound == null) {
+                    bound = autoCreateOwnerOperator(conn, fiduciaryId, rolePref);
+                    if (bound != null) autoCreated = true;
+                }
             }
 
             if (bound != null) {
@@ -511,6 +543,112 @@ public class Operator implements Action {
             // 4) Bind: re-SELECT (covers both our fresh INSERT and the concurrent-winner
             //    case). The SELECT re-enforces fiduciary ACTIVE + operator ACTIVE.
             OwnerOperator bound = selectActiveOperator(conn, fiduciaryId, rolePref);
+            conn.commit();
+            return bound;
+        } catch (SQLException e) {
+            try { conn.rollback(); } catch (SQLException ignore) {}
+            throw e;
+        } finally {
+            conn.setAutoCommit(priorAutoCommit);
+        }
+    }
+
+    /**
+     * vAIb-aqip — SELECT the ACTIVE role=DPO operator of THIS ACTIVE fiduciary whose
+     * email matches the verified registered DPO email. Used by the identity-bound DPO
+     * mint so the minted JWT carries role=DPO bound to the proven DPO email. Matched on
+     * the email_hmac (deterministic keyed hash) so it works over the encrypted column.
+     * The JOIN enforces the fiduciary is ACTIVE. Pure read; caller owns the connection.
+     */
+    private OwnerOperator selectActiveDpoOperator(Connection conn, UUID fiduciaryId, String email) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement(
+                "SELECT o.id, o.name, " + DbEncryption.decryptCol("o.email_enc") + " AS email, o.role, f.name AS fiduciary_name " +
+                "FROM operators o JOIN fiduciaries f ON o.fiduciary_id = f.id " +
+                "WHERE o.fiduciary_id = ? AND o.status = 'ACTIVE' AND f.status = 'ACTIVE' " +
+                "AND UPPER(o.role) = 'DPO' AND o.email_hmac = " + DbEncryption.HMAC + " " +
+                "ORDER BY o.created_at DESC LIMIT 1")) {
+            int qi = DbEncryption.bindKey(ps, 1);             // param 1: decrypt key for email_enc
+            ps.setObject(qi++, fiduciaryId);                   // fiduciary_id
+            qi = DbEncryption.bindHmac(ps, qi, email);         // email_hmac match
+            try (ResultSet r = ps.executeQuery()) {
+                if (r.next()) {
+                    return new OwnerOperator(
+                            (UUID) r.getObject("id"),
+                            r.getString("name"),
+                            r.getString("email"),
+                            r.getString("role"),
+                            r.getString("fiduciary_name"));
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * vAIb-aqip — AUTO-CREATE a passwordless role=DPO operator bound to the VERIFIED
+     * registered DPO email, then return it for the mint. Called ONLY from the secret-
+     * gated operator_session DPO-bind path AFTER fabric proved (member countersign +
+     * registered-DPO-email gate) that this email is the tenant's DPO, and ONLY when no
+     * DPO operator exists yet.
+     *
+     * WHY a SEPARATE DPO operator (not reuse the owner ADMIN row): the writer!=approver
+     * gate (Ropa.handlePublishEntry) requires a DPO-role approver. A small tenant whose
+     * owner IS the DPO still gets TWO distinct operator identities — an ADMIN (drafts)
+     * and a DPO (approves) — so the approval is an explicit DPO action, never an implicit
+     * self-approve by the drafting ADMIN. Same fail-closed invariants as
+     * autoCreateOwnerOperator: fiduciary re-confirmed ACTIVE FOR UPDATE; role=DPO,
+     * status=ACTIVE; password_hash=UNUSABLE (mint-only, never a login); name globally
+     * unique (carries the fiduciary UUID); idempotent on 23505 (concurrent winner ->
+     * re-SELECT). Returns the bound DPO operator, or null if the fiduciary is not ACTIVE.
+     */
+    private OwnerOperator autoCreateDpoOperator(Connection conn, UUID fiduciaryId, String dpoEmail) throws SQLException {
+        boolean priorAutoCommit = conn.getAutoCommit();
+        conn.setAutoCommit(false);
+        try {
+            // 1) Re-confirm the fiduciary is ACTIVE inside the tx (FOR UPDATE serialises
+            //    concurrent first-mints). Inactive/unknown -> create nothing (fail-closed).
+            try (PreparedStatement fp = conn.prepareStatement(
+                    "SELECT status FROM fiduciaries WHERE id = ? FOR UPDATE")) {
+                fp.setObject(1, fiduciaryId);
+                try (ResultSet fr = fp.executeQuery()) {
+                    if (!fr.next() || !"ACTIVE".equals(fr.getString("status"))) {
+                        conn.rollback();
+                        return null;
+                    }
+                }
+            }
+
+            // 2) INSERT the passwordless DPO operator. name is GLOBALLY unique (the unique
+            //    index is global), so embed the fiduciary UUID. email is the VERIFIED DPO
+            //    email (an identity label here, NEVER a login credential — password_hash
+            //    is the unusable sentinel).
+            String dpoName = "DPO (Wix) " + fiduciaryId;
+            try {
+                String sql = "INSERT INTO operators (id, name, email_plaintext, email_enc, email_hmac, password_hash, recovery_key_hash, role, status, fiduciary_id, created_at, last_updated_at) " +
+                        "VALUES (uuid_generate_v4(), ?, ?, " + DbEncryption.ENCRYPT + ", " + DbEncryption.HMAC + ", ?, NULL, 'DPO', 'ACTIVE', ?, NOW(), NOW())";
+                try (PreparedStatement ins = conn.prepareStatement(sql)) {
+                    int ci = 1;
+                    ins.setString(ci++, dpoName);
+                    ins.setString(ci++, dpoEmail);                   // email_plaintext
+                    ci = DbEncryption.bindEncrypt(ins, ci, dpoEmail); // email_enc
+                    ci = DbEncryption.bindHmac(ins, ci, dpoEmail);    // email_hmac
+                    ins.setString(ci++, UNUSABLE_PASSWORD_HASH);      // password_hash (unusable)
+                    ins.setObject(ci++, fiduciaryId);                  // fiduciary_id
+                    ins.executeUpdate();
+                }
+                conn.commit();
+            } catch (SQLException e) {
+                // 23505 = unique_violation: a concurrent mint (or an existing DPO row with
+                // this email) won the race. Roll back and fall through to re-SELECT.
+                if (!"23505".equals(e.getSQLState())) {
+                    conn.rollback();
+                    throw e;
+                }
+                conn.rollback();
+            }
+
+            // 3) Bind: re-SELECT the DPO operator (covers our INSERT + the concurrent case).
+            OwnerOperator bound = selectActiveDpoOperator(conn, fiduciaryId, dpoEmail);
             conn.commit();
             return bound;
         } catch (SQLException e) {
