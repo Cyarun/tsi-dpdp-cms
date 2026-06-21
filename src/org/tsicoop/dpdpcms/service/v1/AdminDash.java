@@ -48,13 +48,18 @@ public class AdminDash implements Action {
                     OutputProcessor.send(res, 200, getAdminMetrics());
                     break;
                 case "get_dpo_metrics": {
-                    UUID scope = InputProcessor.resolveTenantScope(req, res);
+                    // vAIb-c7jg: READ func — a tenant operator is hard-scoped to their
+                    // OWN fiduciary and need NOT name a target, so requireTarget=false
+                    // (requireTarget=true 403'd the dashboard's own metrics call →
+                    // cards showed '--'). Platform admin may still target via body.
+                    UUID scope = InputProcessor.resolveTenantScope(req, res, false);
                     if (scope == null) return;
                     OutputProcessor.send(res, 200, getDpoMetrics(input, scope));
                     break;
                 }
                 case "list_pending_grievances": {
-                    UUID scope = InputProcessor.resolveTenantScope(req, res);
+                    // vAIb-c7jg: READ func — requireTarget=false (see get_dpo_metrics).
+                    UUID scope = InputProcessor.resolveTenantScope(req, res, false);
                     if (scope == null) return;
                     OutputProcessor.send(res, 200, listPendingGrievances(input, scope));
                     break;
