@@ -521,15 +521,18 @@ public class ApiKey implements Action {
         List<Object> params = new ArrayList<>();
 
         if (fiduciaryId != null && !fiduciaryId.isEmpty()) {
-            sqlBuilder.append(" AND fiduciary_id = ?");
+            // ak. qualifier REQUIRED: api_keys ak + apps ap both have fiduciary_id/status
+            // -> a bare column is ambiguous -> 500 "column reference fiduciary_id is
+            // ambiguous" (browser-confirmed on the API Keys page). (vAIb)
+            sqlBuilder.append(" AND ak.fiduciary_id = ?");
             params.add(fiduciaryId);
         }
         if (statusFilter != null && !statusFilter.isEmpty()) {
-            sqlBuilder.append(" AND status = ?");
+            sqlBuilder.append(" AND ak.status = ?");
             params.add(statusFilter.toUpperCase());
         }
         if (search != null && !search.isEmpty()) {
-            sqlBuilder.append(" AND description LIKE ?");
+            sqlBuilder.append(" AND ak.description LIKE ?");
             params.add("%" + search + "%");
         }
         sqlBuilder.append(" ORDER BY created_at DESC");
