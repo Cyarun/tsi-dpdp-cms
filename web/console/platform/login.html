@@ -143,9 +143,13 @@ const PLATFORM_NULL_FID = '00000000-0000-0000-0000-000000000000';
 
 async function handlePlatformLogin(event) {
     // The page is served under /console/platform/login.html, so the CMS API is two
-    // levels up. Use an absolute root path so it resolves regardless of how fabric
-    // mounts the page.
-    const API_LOGIN_URL = '/api/v1/admin/operator';
+    // vAIb-2yn0: the platform login POST must hit fabric's UNGATED /cms/platform-login
+    // (TSI staff have no Wix instance; the owner-gated /cms/api/* would 401 before the
+    // CMS). Derive the console base from THIS page's path (we are at <base>/platform/
+    // login.html) so it resolves under the public /vaib/fabric/console/cms prefix.
+    const _P = location.pathname;
+    const _BASE = _P.slice(0, _P.indexOf('/platform/'));   // .../console/cms
+    const API_LOGIN_URL = _BASE + '/platform-login';
     // The platform console is the cross-tenant admin dashboard (a NULL-fiduciary
     // operator drives get_admin_metrics / list_fiduciaries cross-tenant). Another
     // agent owns the console page's name/branding; we only point at it.
