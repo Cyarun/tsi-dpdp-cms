@@ -157,8 +157,13 @@ public class AdminDash implements Action {
     private JSONObject getDpoMetrics(JSONObject input, UUID fiduciaryId) throws SQLException {
         // vAIb-ae11: fiduciaryId is the SERVER-DERIVED tenant scope, never the client body.
         JSONObject metrics = new JSONObject();
+        // The dashboard cards call get_dpo_metrics with NO date range; null start/end built
+        // "null 00:00:00" -> 500 "invalid input syntax for type timestamp" (browser-confirmed).
+        // Default to all-time (epoch .. far-future) so the cards always populate.
         String start = (String) input.get("start_date");
         String end = (String) input.get("end_date");
+        if (start == null || start.isEmpty()) start = "1970-01-01";
+        if (end == null || end.isEmpty()) end = "2999-12-31";
 
         PoolDB pool = new PoolDB();
         Connection conn = null;
