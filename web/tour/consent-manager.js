@@ -1,5 +1,5 @@
 /**
- * TSI DPDP Consent Manager
+ * DPDPA.center Consent Manager
  * Version: 1.3 (Identity Consolidation Update)
  * Features: Robust JSON parsing, Tour Link interception, and Interactive Link User flow.
  */

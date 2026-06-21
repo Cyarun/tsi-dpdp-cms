@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TSI DPDP CMS - Admin Dashboard</title>
+  <title>DPDPA.center - Admin Dashboard</title>
   <!-- Load Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
@@ -128,7 +128,7 @@
 <div id="sidebar" class="sidebar lg:relative flex flex-col justify-between">
   <div>
     <div class="px-5 pb-6 border-b border-gray-200 lg:block hidden">
-      <span class="text-xl font-bold primary-text">TSI DPDP CMS</span>
+      <span class="text-xl font-bold primary-text">DPDPA.center</span>
     </div>
     <nav class="flex flex-col space-y-1 mt-4 px-3">
       <a href="#" class="nav-link active">Dashboard</a>
@@ -162,7 +162,7 @@
   </div>
 
   <!-- Metric Widgets Section -->
-  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 mb-8">
     <div id="metric-fiduciaries" class="card p-5 border-l-4 border-green-500 hover:shadow-md transition duration-200 cursor-pointer">
       <p class="text-sm font-medium text-gray-500">Data Principals</p>
       <p class="text-3xl font-bold text-gray-900 mt-1" id="metric-fiduciaries-value">--</p>
@@ -173,10 +173,20 @@
       <p class="text-3xl font-bold text-gray-900 mt-1" id="metric-processors-value">--</p>
       <p class="text-xs text-gray-400 mt-2">Processing activities governed.</p>
     </div>
+    <div id="metric-ropa" class="card p-5 border-l-4 border-amber-500 hover:shadow-md transition duration-200 cursor-pointer">
+      <p class="text-sm font-medium text-gray-500">RoPA Entries</p>
+      <p class="text-3xl font-bold text-gray-900 mt-1" id="metric-ropa-value">--</p>
+      <p class="text-xs text-gray-400 mt-2">Records of Processing Activities formulated.</p>
+    </div>
+    <div id="metric-consents" class="card p-5 border-l-4 border-teal-500 hover:shadow-md transition duration-200 cursor-pointer">
+      <p class="text-sm font-medium text-gray-500">Consents Recorded</p>
+      <p class="text-3xl font-bold text-gray-900 mt-1" id="metric-consents-value">--</p>
+      <p class="text-xs text-gray-400 mt-2">Consent records in the ledger.</p>
+    </div>
     <div id="metric-purge" class="card p-5 border-l-4 border-red-500 hover:shadow-md transition duration-200 cursor-pointer">
-      <p class="text-sm font-medium text-gray-500">Pending Erasure Requests</p>
+      <p class="text-sm font-medium text-gray-500">Pending Actions</p>
       <p class="text-3xl font-bold text-gray-900 mt-1" id="metric-purge-value">--</p>
-      <p class="text-xs text-gray-400 mt-2">Erasure requests awaiting action.</p>
+      <p class="text-xs text-gray-400 mt-2">Open grievances + erasure requests.</p>
     </div>
   </div>
 
@@ -282,7 +292,12 @@
         const API_URL_DASHBOARD = '/api/v1/admin/admindash';
         const API_URL_JOBS = '/api/v1/admin/job';
         const AUTH_TOKEN = localStorage.getItem('authToken');
-        const USER_NAME = localStorage.getItem('username');
+        // Show the real business/owner name, NEVER the "Site Owner (Wix) <uuid>" operator name.
+        // Prefer fiduciary_name (the Wix business name, e.g. "NailTalk & Spa Pvt. Ltd."); fall
+        // back to the username only if it's not the uuid-laden placeholder. (user 2026-06-22)
+        const _rawUser = localStorage.getItem('username') || '';
+        const _fidName = localStorage.getItem('fiduciary_name') || '';
+        const USER_NAME = _fidName || (/^Site Owner \(Wix\)\s+[0-9a-f-]{8,}/.test(_rawUser) ? 'Site Owner' : _rawUser) || 'Site Owner';
 
         // Defaulting to the Global Null UUID
         const FIDUCIARY_ID = localStorage.getItem('fiduciary_id') || '00000000-0000-0000-0000-000000000000';
@@ -337,7 +352,9 @@
                     // Active Policies (apps/processing governed), Pending Purges.
                     document.getElementById('metric-fiduciaries-value').textContent = m.data_principals ?? '0';
                     document.getElementById('metric-processors-value').textContent = m.active_policies ?? '0';
-                    document.getElementById('metric-purge-value').textContent = m.purge_pending ?? '0';
+                    document.getElementById('metric-ropa-value').textContent = (Number(m.ropa_active ?? 0) + Number(m.ropa_draft ?? 0));
+                    document.getElementById('metric-consents-value').textContent = m.total_consents ?? '0';
+                    document.getElementById('metric-purge-value').textContent = (Number(m.grievances_pending ?? 0) + Number(m.purge_pending ?? 0));
                 }
             } catch (error) { console.error("Metrics load failed", error); }
         }
