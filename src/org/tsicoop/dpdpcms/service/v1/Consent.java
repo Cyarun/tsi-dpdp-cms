@@ -139,7 +139,13 @@ public class Consent implements Action {
             switch (func.toLowerCase()) {
                 case "record_consent": // Used for initial grant, update, or withdrawal
                     String policyId = (String) input.get("policy_id");
-                    String policyVersion = "";
+                    // vAIb-sv91: HONOUR the caller-supplied policy_version. Was hardcoded
+                    // to "" which only matched a LEGACY empty-version policy row; against a
+                    // real-versioned ACTIVE policy (e.g. dpdp-104b17c3 v=d040929) the lookup
+                    // got no match -> 400 "Referenced policy not found" -> every consent
+                    // write (backfill AND live) failed. Fall back to "" for legacy rows.
+                    String policyVersion = (String) input.get("policy_version");
+                    if (policyVersion == null) policyVersion = "";
                     String timestampStr = (String) input.get("timestamp");
                     String jurisdiction = "IN";
                     String languageSelected = input.get("language_selected")!=null?(String) input.get("language_selected"):"en";
