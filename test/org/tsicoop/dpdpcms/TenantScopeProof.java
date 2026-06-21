@@ -64,6 +64,17 @@ public class TenantScopeProof {
         catch (IllegalArgumentException e) { return Outcome.deny(403); }
     }
 
+    /**
+     * Mirror of the FIXED InputProcessor.getVerifiedFiduciaryId DB branch (vAIb-ae11 SEC HIGH):
+     *   - ACTIVE row with a concrete fiduciary_id  -> that UUID (tenant-scoped)
+     *   - ACTIVE row with NULL  fiduciary_id        -> PLATFORM_ADMIN_FID (genuine platform admin)
+     *   - NO ACTIVE row (deactivated/deleted/none)  -> null  (FAIL CLOSED, was the fail-open bug)
+     */
+    static UUID simulateGetVerifiedFiduciaryId(boolean hasActiveRow, boolean rowFidNull) {
+        if (!hasActiveRow) return null;                 // the fix: no row -> deny, NOT sentinel
+        return rowFidNull ? PLATFORM_ADMIN_FID : UUID.fromString("cccccccc-cccc-cccc-cccc-cccccccccccc");
+    }
+
     static int failures = 0;
 
     static void check(String name, boolean cond) {
@@ -132,6 +143,22 @@ public class TenantScopeProof {
         Outcome o10 = resolveTenantScope(null, B.toString(), true);
         check("unresolvable caller -> DENY 401 (fail closed)",
                 !o10.allowed() && o10.denyCode == 401);
+
+        // 11. SEC HIGH (vAIb-ae11 re-review): getVerifiedFiduciaryId for a DEACTIVATED /
+        // deleted / no-operator-row caller MUST return null (NOT the all-zeros platform
+        // sentinel) — else a deactivated operator (JWT valid ~10d) would be elevated to
+        // PLATFORM ADMIN -> full cross-tenant breach. Model that production contract:
+        // no ACTIVE row -> verifiedFid=null -> resolveTenantScope DENIES 401. (The fix:
+        // InputProcessor.getVerifiedFiduciaryId no-rows branch returns null.)
+        UUID verifiedForDeactivated = simulateGetVerifiedFiduciaryId(/*hasActiveRow=*/false, /*rowFidNull=*/false);
+        check("deactivated/no-row operator -> verifiedFid=null (NOT platform sentinel)",
+                verifiedForDeactivated == null);
+        Outcome o11 = resolveTenantScope(verifiedForDeactivated, B.toString(), false);
+        check("deactivated operator -> DENY 401 (no platform-admin escalation)",
+                !o11.allowed() && o11.denyCode == 401);
+        // sanity: an ACTIVE row WITH null fiduciary_id IS the genuine platform admin.
+        check("ACTIVE row, null fiduciary_id -> platform sentinel (legit platform admin)",
+                PLATFORM_ADMIN_FID.equals(simulateGetVerifiedFiduciaryId(true, true)));
 
         System.out.println(failures == 0
                 ? "\nALL TENANT-SCOPE PROOFS PASSED"

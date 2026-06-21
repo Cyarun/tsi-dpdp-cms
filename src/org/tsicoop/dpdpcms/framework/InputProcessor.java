@@ -299,8 +299,10 @@ public class InputProcessor {
      * Returns the verified fiduciary (tenant) id for the authenticated caller from the database,
      * not from any client-supplied claim. The req.setAttribute("fiduciary_id") at line 85 is set
      * ONLY in the app/API-key path, not the operator JWT path, so this DB lookup is required.
-     * Returns the ADMIN fiduciary (all-zeros UUID) when the operator has a null fiduciary_id.
-     * Returns null only on error.
+     * Returns the ADMIN fiduciary (all-zeros UUID) ONLY when an ACTIVE operator row
+     * genuinely has a null fiduciary_id (the platform admin). Returns null (FAIL CLOSED)
+     * for NO ACTIVE row (deactivated/deleted/none), bad input, or any error — never the
+     * platform sentinel (vAIb-ae11 SEC HIGH: that fail-open elevated deactivated operators).
      */
     public static UUID getVerifiedFiduciaryId(HttpServletRequest req) {
         final UUID ADMIN_FID_UUID = UUID.fromString("00000000-0000-0000-0000-000000000000");
@@ -321,9 +323,18 @@ public class InputProcessor {
             rs = pstmt.executeQuery();
             if (rs.next()) {
                 Object fid = rs.getObject("fiduciary_id");
+                // ACTIVE row found: a NULL fiduciary_id is the genuine PLATFORM ADMIN
+                // (all-zeros sentinel); a concrete UUID is a tenant-scoped operator.
                 return fid != null ? (UUID) fid : ADMIN_FID_UUID;
             }
-            return ADMIN_FID_UUID;
+            // NO ACTIVE operator row (deactivated / deleted / valid-signature JWT for an
+            // email with no operator) MUST FAIL CLOSED -> null (deny). Returning the
+            // all-zeros sentinel here was a FAIL-OPEN: it elevated any deactivated
+            // operator (JWT valid ~10d) to PLATFORM ADMIN -> full cross-tenant breach
+            // (vAIb-ae11 SEC HIGH). Callers (resolveTenantScope / Job / Fiduciary) all
+            // already deny on null. The platform sentinel ONLY comes from the line above
+            // when an ACTIVE row genuinely has fiduciary_id IS NULL.
+            return null;
         } catch (Exception e) {
             System.err.println("[ERROR] InputProcessor.getVerifiedFiduciaryId: " + e);
         } finally {
