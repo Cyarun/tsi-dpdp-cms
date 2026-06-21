@@ -847,7 +847,11 @@
         if (!SESSION) return;
 
         document.getElementById('header-fiduciary').textContent = SESSION.fiduciaryName;
-        document.getElementById('header-user').textContent = 'Logged in as: ' + SESSION.userId;
+        // Show the data principal's REAL name (whoami-verified, injected by the widget),
+        // falling back to the user_id (email) when no name is available — NEVER a uuid.
+        // textContent (not innerHTML) so the value cannot inject markup. (user 2026-06-22)
+        document.getElementById('header-user').textContent =
+            'Logged in as: ' + (SESSION.memberName || SESSION.userId);
 
         // Populate privacy card
         document.getElementById('pca-user-id').textContent = SESSION.userId;

@@ -399,8 +399,12 @@
     function handleLogout() { localStorage.clear(); window.location.href = "../index.html"; }
 
     window.onload = () => {
-        // Dynamically populating the Officer Identification from the logged-in session
-        const currentUserName = localStorage.getItem('username') || 'AUTHORIZED_OFFICER';
+        // Dynamically populating the Officer Identification from the logged-in session.
+        // NEVER a "Site Owner (Wix) <uuid>" placeholder or a bare uuid (defence in depth —
+        // the DPO launch overrides username server-side with the verified DPO name).
+        const _rawUser = localStorage.getItem('username') || '';
+        const _clean = (/^Site Owner \(Wix\)\s+[0-9a-f-]{8,}/.test(_rawUser) || /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.test(_rawUser)) ? '' : _rawUser;
+        const currentUserName = _clean || 'AUTHORIZED_OFFICER';
         document.getElementById('officer-name').value = currentUserName;
         document.getElementById('username-display').textContent = currentUserName;
         loadCertificates();

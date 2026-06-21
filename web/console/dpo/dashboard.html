@@ -342,7 +342,11 @@
         loadDpoMetrics();
         loadPendingGrievances();
 
-        const storedUser = localStorage.getItem('username');
+        // Show the real DPO/owner name, NEVER a "Site Owner (Wix) <uuid>" placeholder or
+        // a bare uuid (defence in depth — the DPO launch overrides username server-side
+        // with the verified DPO name). (user 2026-06-22)
+        const _rawUser = localStorage.getItem('username') || '';
+        const storedUser = (/^Site Owner \(Wix\)\s+[0-9a-f-]{8,}/.test(_rawUser) || /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.test(_rawUser)) ? '' : _rawUser;
         if (storedUser) document.getElementById('username').textContent = storedUser;
     };
 </script>

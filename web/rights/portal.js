@@ -39,7 +39,12 @@ const SESSION_KEYS = {
     // every call: the CMS-signed Bearer + the fabric-verified Wix countersign.
     instance:       'pp_instance',
     memberSig:      'pp_member_sig',
-    memberTs:       'pp_member_ts'
+    memberTs:       'pp_member_ts',
+    // DISPLAY-ONLY: the whoami-verified Wix member name (firstName lastName / nickname),
+    // injected by the widget alongside the session. Used ONLY for the header greeting so
+    // the principal sees their REAL name instead of an email-only/uuid. It is NEVER sent
+    // on a data call (user_id stays the identity key) — purely cosmetic.
+    memberName:     'pp_member_name'
 };
 
 function getSession() {
@@ -53,7 +58,8 @@ function getSession() {
         policies:      getSessionPolicies(),
         instance:      sessionStorage.getItem(SESSION_KEYS.instance),
         memberSig:     sessionStorage.getItem(SESSION_KEYS.memberSig),
-        memberTs:      sessionStorage.getItem(SESSION_KEYS.memberTs)
+        memberTs:      sessionStorage.getItem(SESSION_KEYS.memberTs),
+        memberName:    sessionStorage.getItem(SESSION_KEYS.memberName)
     };
 }
 
@@ -67,6 +73,9 @@ function saveSession(data) {
     sessionStorage.setItem(SESSION_KEYS.instance,      data.instance       || '');
     sessionStorage.setItem(SESSION_KEYS.memberSig,     data.member_sig     || '');
     sessionStorage.setItem(SESSION_KEYS.memberTs,      data.member_ts      || '');
+    // Display-only member name (cosmetic header greeting); absent -> '' (header falls
+    // back to user_id). Sanitised at the boundary by /whoami; rendered via textContent.
+    sessionStorage.setItem(SESSION_KEYS.memberName,    data.member_name    || '');
 }
 
 function getSessionPolicies() {

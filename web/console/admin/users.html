@@ -134,7 +134,15 @@
     const TOKEN = localStorage.getItem('authToken');
     let FiduciaryList = {};
 
-    document.getElementById('username-display').textContent = localStorage.getItem('username') || 'Admin User';
+    // Show the real business/owner name, NEVER the "Site Owner (Wix) <uuid>" operator
+    // placeholder. Prefer fiduciary_name (the Wix business name); fall back to username
+    // only if it is not the uuid-laden placeholder. (user 2026-06-22)
+    (function () {
+        const _rawUser = localStorage.getItem('username') || '';
+        const _fidName = localStorage.getItem('fiduciary_name') || '';
+        const _display = _fidName || (/^Site Owner \(Wix\)\s+[0-9a-f-]{8,}/.test(_rawUser) ? 'Site Owner' : _rawUser) || 'Admin User';
+        document.getElementById('username-display').textContent = _display;
+    })();
 
     /**
      * Loads Fiduciaries for mapping IDs to names in the table and dropdown.
