@@ -237,11 +237,43 @@
     </div>
 </div>
 
+<!-- vAIb-kyog: shared audience dictionary + tenant/staff gate (clean labels vs raw IDs/discovery) -->
+<script src="../audience-view.js"></script>
+<script src="../tenant-scope.js"></script>
 <script>
     // --- Configuration ---
     const API_URL_AUDIT = '/api/v1/admin/audit';
     const AUTH_TOKEN = localStorage.getItem('authToken');
     const FIDUCIARY_ID = localStorage.getItem('fiduciary_id');
+    // vAIb-kyog: audience flag — TENANT sees humanized actions + short refs + a CLEAN context
+    // summary (NEVER the raw discovery/internal JSON); TSI staff get the full raw artifact.
+    const AV = window.AudienceView;
+    const IS_STAFF = AV ? AV.isStaffView() : false;
+    // Humanize an audit action enum, e.g. CONSENT_WITHDRAWN -> 'Consent withdrawn'.
+    function actionLabel(a) {
+        if (!a) return '—';
+        return String(a).toLowerCase().replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase());
+    }
+    // vAIb-kyog: render audit context for the TENANT as a short, plain-language summary — never the
+    // raw discovery/internal JSON. Pull only safe, human fields; humanize known machine values.
+    function contextSummary(ctx) {
+        if (ctx == null || ctx === '') return '—';
+        let obj = ctx;
+        if (typeof ctx === 'string') { try { obj = JSON.parse(ctx); } catch (e) { return AV.esc(ctx); } }
+        if (typeof obj !== 'object') return AV.esc(String(obj));
+        const parts = [];
+        const add = (lbl, val) => { if (val != null && String(val).trim() !== '') parts.push(`<span class="text-slate-400">${AV.esc(lbl)}:</span> ${AV.esc(val)}`); };
+        if (obj.message) add('Note', obj.message);
+        if (obj.purpose_id) add('Purpose', AV.purpose(obj.purpose_id));
+        if (obj.policy_id) add('Policy', AV.policyTitle(obj.policy_id));
+        if (obj.app_name) add('App', AV.appName(obj.app_name) || obj.app_name);
+        if (obj.trigger_event) add('Trigger', AV.humanize(obj.trigger_event));
+        if (obj.consent_mechanism) add('Mechanism', AV.humanize(obj.consent_mechanism));
+        if (obj.activity_name) add('Activity', obj.activity_name);
+        if (obj.reason) add('Reason', obj.reason);
+        if (!parts.length) return '<span class="text-slate-400 italic">Recorded</span>';
+        return parts.join(' &nbsp;·&nbsp; ');
+    }
     // Show the real DPO/owner name, NEVER a "Site Owner (Wix) <uuid>" placeholder or a
     // bare uuid (defence in depth — the DPO launch already overrides username server-side
     // with the verified DPO name). (user 2026-06-22)
@@ -266,10 +298,14 @@
         if (type === 'APP') tagClass = 'tag-app';
         if (type === 'USER') tagClass = 'tag-user';
 
+        // vAIb-kyog: tenant sees the actor type + a short ref (no raw uuid); staff see the full id.
+        const idLine = IS_STAFF
+            ? `<span class="text-[9px] font-mono text-gray-400 truncate max-w-[120px]" title="${AV.esc(id)}">ID: ${AV.esc(id || 'N/A')}</span>`
+            : (id ? `<span class="text-[9px] text-gray-400 truncate max-w-[120px]">${AV.esc(AV.shortRef(id, 'REF'))}</span>` : '');
         return `
             <div class="flex flex-col gap-0.5">
-                <span class="actor-tag ${tagClass}">${type}</span>
-                <span class="text-[9px] font-mono text-gray-400 truncate max-w-[120px]" title="${id}">ID: ${id || 'N/A'}</span>
+                <span class="actor-tag ${tagClass}">${AV.esc(type)}</span>
+                ${idLine}
             </div>
         `;
     }
@@ -283,27 +319,29 @@
             ? 'bg-red-50 text-red-700 border-red-100'
             : 'bg-teal-50 text-teal-700 border-teal-100';
 
-        // Format context details for inline display
+        // vAIb-kyog: context — tenant gets a clean plain-language summary, NEVER the raw JSON dump;
+        // staff get the full raw artifact for debugging.
         const context = log.context_details;
-        const contextDisplay = typeof context === 'string' ? context : JSON.stringify(context, null, 2);
+        const rawContext = typeof context === 'string' ? context : JSON.stringify(context, null, 2);
+        const principalCell = IS_STAFF
+            ? `<span class="text-sm font-mono text-gray-600 bg-gray-100 px-2 py-0.5 rounded">${AV.esc(log.user_id)}</span>`
+            : `<span class="text-sm text-gray-600">${AV.esc(AV.shortRef(log.user_id, 'DP'))}</span>`;
+        const actionCell = IS_STAFF ? AV.esc(log.audit_action) : AV.esc(actionLabel(log.audit_action));
+        const contextCell = IS_STAFF
+            ? `<div class="bg-slate-50 border border-slate-200 rounded-lg p-3 font-mono text-[10px] text-slate-600 overflow-x-auto max-h-[150px] scrollbar-thin"><pre class="whitespace-pre-wrap break-words">${AV.esc(rawContext || "{}")}</pre></div>`
+            : `<div class="text-xs text-slate-600">${contextSummary(context)}</div>`;
 
         row.innerHTML = `
             <td class="px-4 py-3 whitespace-nowrap">
-                <p class="text-sm font-semibold text-gray-700">${new Date(log.timestamp).toLocaleDateString()}</p>
-                <p class="text-[10px] text-gray-400 font-bold uppercase">${new Date(log.timestamp).toLocaleTimeString()}</p>
+                <p class="text-sm font-semibold text-gray-700">${AV.esc(new Date(log.timestamp).toLocaleDateString())}</p>
+                <p class="text-[10px] text-gray-400 font-bold uppercase">${AV.esc(new Date(log.timestamp).toLocaleTimeString())}</p>
             </td>
+            <td class="px-4 py-3 whitespace-nowrap">${principalCell}</td>
             <td class="px-4 py-3 whitespace-nowrap">
-                <span class="text-sm font-mono text-gray-600 bg-gray-100 px-2 py-0.5 rounded">${log.user_id}</span>
-            </td>
-            <td class="px-4 py-3 whitespace-nowrap">
-                <span class="text-[11px] font-bold px-2 py-1 rounded border ${actionClass}">${log.audit_action}</span>
+                <span class="text-[11px] font-bold px-2 py-1 rounded border ${actionClass}">${actionCell}</span>
             </td>
             <td class="px-4 py-3 whitespace-nowrap">${getActorTag(log.service_type, log.service_id)}</td>
-            <td class="px-4 py-3 min-w-[300px]">
-                <div class="bg-slate-50 border border-slate-200 rounded-lg p-3 font-mono text-[10px] text-slate-600 overflow-x-auto max-h-[150px] scrollbar-thin">
-                    <pre class="whitespace-pre-wrap break-words">${contextDisplay || "{}"}</pre>
-                </div>
-            </td>
+            <td class="px-4 py-3 min-w-[300px]">${contextCell}</td>
         `;
         return row;
     }
@@ -371,9 +409,14 @@
             const log = await response.json();
             const context = log.context_details || log.data?.context_details;
 
-            document.getElementById('modal-log-id').textContent = `Log Ref: ${id}`;
-            const contextDisplay = typeof context === 'string' ? context : JSON.stringify(context, null, 2);
-            document.getElementById('modal-context-content').textContent = contextDisplay || "{}";
+            // vAIb-kyog: tenant sees a short log ref + clean context summary; staff get raw id + JSON.
+            document.getElementById('modal-log-id').textContent = IS_STAFF ? `Log Ref: ${id}` : `Log Ref: ${AV.shortRef(id, 'LOG')}`;
+            const ctxEl = document.getElementById('modal-context-content');
+            if (IS_STAFF) {
+                ctxEl.textContent = (typeof context === 'string' ? context : JSON.stringify(context, null, 2)) || "{}";
+            } else {
+                ctxEl.innerHTML = contextSummary(context);
+            }
 
             modalOverlay.style.display = 'flex';
         } catch (e) { console.error("Error fetching context artifact:", e); }
@@ -440,6 +483,17 @@
         clearTimeout(searchTimeout);
         searchTimeout = setTimeout(loadLogs, 300);
     });
+
+    // vAIb-kyog: preload policy_id -> human title so context summaries show the policy NAME.
+    (async function () {
+        try {
+            if (!FIDUCIARY_ID) return;
+            const r = await fetch('/api/v1/policy', { method:'POST', headers:{ 'Content-Type':'application/json','Authorization':`Bearer ${AUTH_TOKEN}` }, body: JSON.stringify({ _func:'list_active_policies', fiduciary_id: FIDUCIARY_ID }) });
+            if (!r.ok) return;
+            const d = await r.json();
+            (Array.isArray(d) ? d : (d.data || [])).forEach(p => { if (p && p.policy_id && p.title) AV.registerPolicyTitle(p.policy_id, p.title); });
+        } catch (e) { /* non-fatal */ }
+    })();
 
     loadLogs();
 

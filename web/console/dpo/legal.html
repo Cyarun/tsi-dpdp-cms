@@ -167,7 +167,7 @@
                 <thead>
                     <tr class="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">
                         <th class="pb-4 px-2">Artifact Reference</th>
-                        <th class="pb-4 px-2">Principal ID</th>
+                        <th class="pb-4 px-2">Data Principal</th>
                         <th class="pb-4 px-2">Case Reference</th>
                         <th class="pb-4 px-2">Timestamp (IST)</th>
                         <th class="pb-4 px-2 text-right">Actions</th>
@@ -260,11 +260,17 @@
     </div>
 </div>
 
+<!-- vAIb-kyog: shared audience dictionary + tenant/staff gate (clean labels vs raw IDs) -->
+<script src="../audience-view.js"></script>
+<script src="../tenant-scope.js"></script>
 <script>
     // --- Setup & Connectivity ---
     const API_URL = ENV_SERVER_URL + '/api/v1/admin/legal';
     const AUTH_TOKEN = localStorage.getItem('authToken');
     const FIDUCIARY_ID = localStorage.getItem('fiduciary_id');
+    // vAIb-kyog: audience flag — TENANT sees short refs (no raw uuids); TSI staff see raw ids.
+    const AV = window.AudienceView;
+    const IS_STAFF = AV ? AV.isStaffView() : false;
 
     /**
      * Fetches the full list of previously crystallized certificates.
@@ -283,20 +289,25 @@
             if (response.ok) {
                 const list = await response.json();
                 if(list.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="5" class="py-12 text-center text-slate-400">No certified artifacts found in this fiduciary context.</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="5" class="py-12 text-center text-slate-400">No certificates have been generated yet.</td></tr>';
                     return;
                 }
-                tbody.innerHTML = list.map(c => `
+                tbody.innerHTML = list.map(c => {
+                    // vAIb-kyog: tenant sees short artifact/principal refs (no raw uuids); staff raw.
+                    const certRef = IS_STAFF ? ('...' + AV.esc(c.id.slice(-12).toUpperCase())) : AV.esc(AV.shortRef(c.id, 'CERT'));
+                    const princRef = IS_STAFF ? AV.esc(c.principal_id) : AV.esc(AV.shortRef(c.principal_id, 'DP'));
+                    return `
                     <tr class="hover:bg-teal-50/30 transition-colors group">
-                        <td class="py-4 px-2 font-mono text-[11px] text-slate-500">...${c.id.slice(-12).toUpperCase()}</td>
-                        <td class="py-4 px-2 font-bold text-slate-700 text-xs">${c.principal_id}</td>
-                        <td class="py-4 px-2 text-slate-600 font-medium text-xs underline decoration-dotted">${c.case_ref || 'GENERAL_TRACE'}</td>
+                        <td class="py-4 px-2 text-[11px] ${IS_STAFF ? 'font-mono ' : ''}text-slate-500">${certRef}</td>
+                        <td class="py-4 px-2 font-bold text-slate-700 text-xs">${princRef}</td>
+                        <td class="py-4 px-2 text-slate-600 font-medium text-xs underline decoration-dotted">${AV.esc(c.case_ref || 'General')}</td>
                         <td class="py-4 px-2 text-slate-400 text-[10px] font-bold">${new Date(c.timestamp).toLocaleString()}</td>
                         <td class="py-4 px-2 text-right">
                             <button onclick="viewCertificate('${c.id}')" class="bg-slate-100 text-slate-600 px-3 py-1 rounded-lg font-black hover:bg-teal-600 hover:text-white text-[9px] uppercase tracking-tighter transition-all">Open Viewer</button>
                         </td>
                     </tr>
-                `).join('');
+                `;
+                }).join('');
             }
         } catch (e) { 
             tbody.innerHTML = '<tr><td colspan="5" class="py-12 text-center text-red-500 font-black">Registry Connection Failed.</td></tr>'; 
@@ -318,8 +329,9 @@
             // Backend returns 'data' as a JSON string
             const data = typeof cert.data === 'string' ? JSON.parse(cert.data) : cert.data;
 
-            document.getElementById('view-cert-id').textContent = cert.id.toUpperCase();
-            document.getElementById('view-principal').textContent = data.principal_id;
+            // vAIb-kyog: tenant sees short refs (no raw uuids); staff see the full ids for audit.
+            document.getElementById('view-cert-id').textContent = IS_STAFF ? cert.id.toUpperCase() : AV.shortRef(cert.id, 'CERT');
+            document.getElementById('view-principal').textContent = IS_STAFF ? data.principal_id : AV.shortRef(data.principal_id, 'DP');
             
             // Display Inquiry Reference defaulting to requested value
             document.getElementById('view-case').textContent = data.case_ref_id;

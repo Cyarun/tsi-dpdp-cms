@@ -219,10 +219,10 @@
             <table class="min-w-full divide-y divide-gray-200">
                 <thead>
                 <tr class="table-header">
-                    <th class="px-4 py-3 text-sm">Request ID</th>
-                    <th class="px-4 py-3 text-sm">User ID</th>
-                    <th class="px-4 py-3 text-sm">Purpose ID</th>
-                    <th class="px-4 py-3 text-sm">Trigger Event</th>
+                    <th class="px-4 py-3 text-sm">Request</th>
+                    <th class="px-4 py-3 text-sm">Data Principal</th>
+                    <th class="px-4 py-3 text-sm">Purpose</th>
+                    <th class="px-4 py-3 text-sm">Trigger</th>
                     <th class="px-4 py-3 text-sm">Target App</th>
                     <th class="px-4 py-3 text-sm">Initiated At</th>
                     <th class="px-4 py-3 text-sm">Status</th>
@@ -351,12 +351,22 @@
     </div>
 </div>
 
+<!-- vAIb-kyog: shared audience dictionary + tenant/staff gate (clean labels vs raw IDs) -->
+<script src="../audience-view.js"></script>
+<script src="../tenant-scope.js"></script>
 <script>
     // --- Configuration ---
     const API_URL_PURGE = '/api/v1/admin/compliance';
     const API_URL_JOBS = '/api/v1/admin/job';
     const AUTH_TOKEN = localStorage.getItem('authToken');
     const FIDUCIARY_ID = localStorage.getItem('fiduciary_id');
+    // vAIb-kyog: audience flag — TENANT sees short refs + labels; TSI staff see raw uuids/enums.
+    const AV = window.AudienceView;
+    const IS_STAFF = AV ? AV.isStaffView() : false;
+    function triggerLabel(t) {
+        const map = { account_deletion:'Account deletion', consent_withdrawal:'Consent withdrawn', retention_expiry:'Retention expired', erasure_request:'Erasure requested', cessation:'Service ended' };
+        return map[(t||'').toLowerCase()] || (AV ? AV.humanize(t) : (t||'—'));
+    }
     // Show the real DPO/owner name, NEVER a "Site Owner (Wix) <uuid>" placeholder or a
     // bare uuid (defence in depth — the DPO launch already overrides username server-side
     // with the verified DPO name). (user 2026-06-22)
@@ -396,12 +406,18 @@
 
     function createRequestRow(req) {
         const row = document.createElement('tr');
+        // vAIb-kyog: tenant sees short refs (not raw uuids) + human purpose/trigger labels;
+        // staff keep the raw ids/enums for debugging.
+        const reqRef  = IS_STAFF ? ('...' + AV.esc(req.id.slice(-8)))   : AV.esc(AV.shortRef(req.id, 'REQ'));
+        const userRef = IS_STAFF ? AV.esc(req.user_id)                  : AV.esc(AV.shortRef(req.user_id, 'DP'));
+        const purpose = IS_STAFF ? AV.esc(req.purpose_id)               : AV.esc(AV.purpose(req.purpose_id));
+        const trigger = IS_STAFF ? AV.esc(req.trigger_event)            : AV.esc(triggerLabel(req.trigger_event));
         row.innerHTML = `
-            <td class="px-4 py-3 text-sm font-mono text-gray-600">...${req.id.slice(-8)}</td>
-            <td class="px-4 py-3 text-sm text-gray-800">${req.user_id}</td>
-            <td class="px-4 py-3 text-sm text-gray-800">${req.purpose_id}</td>
-            <td class="px-4 py-3 text-sm text-gray-600">${req.trigger_event}</td>
-            <td class="px-4 py-3 text-sm text-gray-600">${req.app_name}</td>
+            <td class="px-4 py-3 text-sm ${IS_STAFF ? 'font-mono ' : ''}text-gray-600">${reqRef}</td>
+            <td class="px-4 py-3 text-sm text-gray-800">${userRef}</td>
+            <td class="px-4 py-3 text-sm text-gray-800">${purpose}</td>
+            <td class="px-4 py-3 text-sm text-gray-600">${trigger}</td>
+            <td class="px-4 py-3 text-sm text-gray-600">${AV.esc(AV.appName(req.app_name) || req.app_name || '—')}</td>
             <td class="px-4 py-3 text-sm text-gray-600">${new Date(req.initiated_at).toLocaleDateString()}</td>
             <td class="px-4 py-3 whitespace-nowrap text-sm">${createStatusBadge(req.status)}</td>
             <td class="px-4 py-3 text-sm">
@@ -458,10 +474,11 @@
             });
             const req = await response.json();
 
-            document.getElementById('modal-app-name').textContent = req.app_name;
-            document.getElementById('detail-user-id').textContent = req.user_id;
-            document.getElementById('detail-purpose-id').textContent = req.purpose_id;
-            document.getElementById('detail-trigger').textContent = req.trigger_event;
+            // vAIb-kyog: tenant sees app/purpose/trigger labels + a short principal ref (no uuid).
+            document.getElementById('modal-app-name').textContent = IS_STAFF ? req.app_name : (AV.appName(req.app_name) || req.app_name || '—');
+            document.getElementById('detail-user-id').textContent = IS_STAFF ? req.user_id : AV.shortRef(req.user_id, 'DP');
+            document.getElementById('detail-purpose-id').textContent = IS_STAFF ? req.purpose_id : (AV.purpose(req.purpose_id) || '—');
+            document.getElementById('detail-trigger').textContent = IS_STAFF ? req.trigger_event : triggerLabel(req.trigger_event);
             document.getElementById('detail-status').innerHTML = createStatusBadge(req.status);
             document.getElementById('detail-initiated').textContent = new Date(req.initiated_at).toLocaleString();
             document.getElementById('detail-context').textContent = req.details || "No additional context provided.";
@@ -511,13 +528,18 @@
             } else {
                 cesJobs.forEach(job => {
                      const statusColor = job.status === 'PURGE_COMPLETED' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600';
+                     // vAIb-kyog: tenant sees a short job ref + humanized type/subtype/status; staff raw.
+                     const jobRef  = IS_STAFF ? ('...' + AV.esc(job.id.slice(-8))) : AV.esc(AV.shortRef(job.id, 'JOB'));
+                     const jType   = IS_STAFF ? AV.esc(job.job_type)               : AV.esc(AV.humanize(job.job_type === 'CES' ? 'Consent enforcement' : job.job_type));
+                     const jSub    = IS_STAFF ? AV.esc(job.subtype || 'FULL_RUN')  : AV.esc(AV.humanize(job.subtype || 'Full run'));
+                     const jStatus = IS_STAFF ? AV.esc(job.status)                 : AV.esc(AV.humanize(job.status));
                      tbody.innerHTML += `
                         <tr class="hover:bg-slate-50 border-b border-slate-50">
-                            <td class="p-3 font-mono text-[11px] text-slate-500">...${job.id.slice(-8)}</td>
-                            <td class="p-3 font-bold text-xs text-slate-700">${job.job_type}</td>
-                            <td class="p-3 text-xs text-slate-600">${job.subtype || 'FULL_RUN'}</td>
-                            <td class="p-3 text-xs text-slate-500">${new Date(job.created_at).toLocaleString()}</td>
-                            <td class="p-3"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${statusColor}">${job.status}</span></td>
+                            <td class="p-3 text-[11px] ${IS_STAFF ? 'font-mono ' : ''}text-slate-500">${jobRef}</td>
+                            <td class="p-3 font-bold text-xs text-slate-700">${jType}</td>
+                            <td class="p-3 text-xs text-slate-600">${jSub}</td>
+                            <td class="p-3 text-xs text-slate-500">${AV.esc(new Date(job.created_at).toLocaleString())}</td>
+                            <td class="p-3"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${statusColor}">${jStatus}</span></td>
                         </tr>
                      `;
                 });

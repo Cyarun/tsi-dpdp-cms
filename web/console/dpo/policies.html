@@ -269,7 +269,7 @@
             <table class="min-w-full divide-y divide-gray-200">
                 <thead>
                 <tr class="table-header">
-                    <th class="px-4 py-3 text-sm">Policy ID</th>
+                    <th id="th-policy-col" class="px-4 py-3 text-sm">Policy</th>
                     <th class="px-4 py-3 text-sm">Jurisdiction</th>
                     <th class="px-4 py-3 text-sm">Status</th>
                     <th class="px-4 py-3 text-sm">Effective Date</th>
@@ -383,7 +383,9 @@
         <!-- READ-ONLY VIEW (uses same scrollable container) -->
         <div id="policy-view-details" class="modal-body hidden">
             <h3 class="font-semibold text-gray-800 mb-2">Policy Content Breakdown:</h3>
-            <pre id="policy-json-output" class="text-xs font-mono whitespace-pre-wrap bg-slate-50 border border-slate-200 p-6 rounded-lg overflow-x-auto"></pre>
+            <!-- vAIb-kyog: tenant sees a clean human summary; TSI staff see the raw JSON artifact. -->
+            <div id="policy-human-output" class="text-sm text-slate-700 hidden"></div>
+            <pre id="policy-json-output" class="text-xs font-mono whitespace-pre-wrap bg-slate-50 border border-slate-200 p-6 rounded-lg overflow-x-auto hidden"></pre>
             <div class="modal-footer px-0 mt-6 -mx-8 -mb-6">
                 <button type="button" onclick="closeModal()" class="bg-gray-200 text-gray-700 px-8 py-2 rounded-md text-sm font-bold hover:bg-gray-300 transition-all border border-gray-300 shadow-sm">
                     Close Viewer
@@ -452,11 +454,11 @@
                         </div>
                         <div>
                             <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Data Categories</p>
-                            <p id="rem-data-categories" class="text-xs font-mono text-slate-600 mt-1 break-words">—</p>
+                            <p id="rem-data-categories" class="text-xs text-slate-600 mt-1 break-words">—</p>
                         </div>
                         <div>
                             <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Data Subjects</p>
-                            <p id="rem-data-subjects" class="text-xs font-mono text-slate-600 mt-1 break-words">—</p>
+                            <p id="rem-data-subjects" class="text-xs text-slate-600 mt-1 break-words">—</p>
                         </div>
                         <div class="col-span-2">
                             <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Security Measures</p>
@@ -464,11 +466,11 @@
                         </div>
                         <div>
                             <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Processors</p>
-                            <p id="rem-processors" class="text-xs font-mono text-slate-500 mt-1 break-words">—</p>
+                            <p id="rem-processors" class="text-xs text-slate-500 mt-1 break-words">—</p>
                         </div>
                         <div>
                             <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Cross-Border Transfers</p>
-                            <p id="rem-cross-border" class="text-xs font-mono text-slate-500 mt-1 break-words">—</p>
+                            <p id="rem-cross-border" class="text-xs text-slate-500 mt-1 break-words">—</p>
                         </div>
                     </div>
                 </div>
@@ -490,10 +492,25 @@
     </div>
 </div>
 
+<!-- vAIb-kyog: shared audience dictionary + tenant/staff gate (clean labels vs raw IDs) -->
+<script src="../audience-view.js"></script>
+<script src="../tenant-scope.js"></script>
 <script>
     // --- Configuration ---
     const API_URL_POLICY = '/api/v1/policy';
     const AUTH_TOKEN = localStorage.getItem('authToken');
+    // vAIb-kyog: audience flag — TENANT (concrete fiduciary) sees clean human view; TSI staff raw.
+    const AV = window.AudienceView;
+    const IS_STAFF = AV ? AV.isStaffView() : false;
+    // Extract the human title from a multilingual policy_content (string or object).
+    function policyContentTitle(pc) {
+        try {
+            const obj = typeof pc === 'string' ? JSON.parse(pc) : pc;
+            if (!obj || typeof obj !== 'object') return '';
+            const lang = Object.keys(obj)[0];
+            return (obj[lang] && obj[lang].title) ? String(obj[lang].title) : '';
+        } catch (e) { return ''; }
+    }
 
     // Show the real DPO/owner name, NEVER a "Site Owner (Wix) <uuid>" placeholder or a
     // bare uuid (defence in depth — the DPO launch already overrides username server-side
@@ -575,9 +592,13 @@
             ${!isArchived ? `<button class="text-red-600 hover:text-red-800 font-bold text-xs" onclick="deletePolicy('${policy.id}', '${policy.fiduciary_id}')">Delete</button>` : ''}
         `;
 
+        // vAIb-kyog: tenant sees the policy's human title; staff see the raw policy id.
+        const _title = policyContentTitle(policy.policy_content);
+        if (_title) AV.registerPolicyTitle(policy.id, _title);
+        const policyLabel = IS_STAFF ? AV.esc(policy.id) : AV.esc(_title || AV.policyTitle(policy.id));
         row.innerHTML = `
-            <td class="px-4 py-4 whitespace-nowrap text-sm font-bold text-slate-800">${policy.id}</td>
-            <td class="px-4 py-4 whitespace-nowrap text-sm text-slate-500">${policy.jurisdiction}</td>
+            <td class="px-4 py-4 whitespace-nowrap text-sm font-bold text-slate-800">${policyLabel}</td>
+            <td class="px-4 py-4 whitespace-nowrap text-sm text-slate-500">${AV.esc(policy.jurisdiction)}</td>
             <td class="px-4 py-4 whitespace-nowrap">
                 ${createStatusBadge(policy.status)}
                 ${isUnderReview ? '<div class="text-[10px] text-blue-500 mt-0.5">Pending DPO ROPA approval</div>' : ''}
@@ -592,7 +613,11 @@
         showModal('Policy Viewer', false);
         policyForm.classList.add('hidden');
         policyViewDetails.classList.remove('hidden');
-        policyJsonOutput.textContent = 'Parsing artifact...';
+        const jsonEl  = document.getElementById('policy-json-output');
+        const humanEl = document.getElementById('policy-human-output');
+        // vAIb-kyog: tenant -> clean human summary; TSI staff -> raw JSON artifact.
+        if (IS_STAFF) { jsonEl.classList.remove('hidden'); humanEl.classList.add('hidden'); jsonEl.textContent = 'Parsing artifact...'; }
+        else          { humanEl.classList.remove('hidden'); jsonEl.classList.add('hidden'); humanEl.innerHTML = '<p class="text-xs text-slate-400 italic">Loading policy…</p>'; }
         try {
             const res = await fetch(API_URL_POLICY, {
                 method: 'POST',
@@ -601,8 +626,47 @@
             });
             const p = await res.json();
             const content = typeof p.policy_content === 'string' ? JSON.parse(p.policy_content) : p.policy_content;
-            policyJsonOutput.textContent = JSON.stringify(content, null, 2);
-        } catch (e) { policyJsonOutput.textContent = "Error parsing JSON."; }
+            if (IS_STAFF) {
+                jsonEl.textContent = JSON.stringify(content, null, 2);
+            } else {
+                humanEl.innerHTML = renderPolicyHuman(content);
+            }
+        } catch (e) {
+            if (IS_STAFF) jsonEl.textContent = "Error parsing JSON.";
+            else humanEl.innerHTML = '<p class="text-xs text-red-500">Could not load this policy.</p>';
+        }
+    }
+
+    // vAIb-kyog: render a plain-language policy summary for the tenant — purposes by name, legal
+    // basis as a label, retention in plain English, data categories as chips. NO ids, NO raw JSON.
+    function renderPolicyHuman(content) {
+        if (!content || typeof content !== 'object') return '<p class="text-xs text-slate-400">No policy content.</p>';
+        const lang = Object.keys(content)[0];
+        const block = content[lang] || {};
+        const purposes = block.data_processing_purposes || [];
+        const head = `
+            <div class="mb-4">
+                <p class="text-lg font-bold text-slate-800">${AV.esc(block.title || 'Privacy Policy')}</p>
+                ${block.general_purpose_description ? `<p class="text-sm text-slate-600 mt-1">${AV.esc(block.general_purpose_description)}</p>` : ''}
+            </div>`;
+        const purposeCards = purposes.length ? purposes.map(p => {
+            const cats = AV.chips(p.data_categories_involved, AV.dataCategory);
+            const ret = (p.retention_duration_value && p.retention_duration_unit)
+                ? `${AV.esc(p.retention_duration_value)} ${AV.esc(AV.humanize(p.retention_duration_unit))} ${AV.esc(AV.retentionEvent(p.retention_start_event) || '')}`.trim()
+                : '';
+            return `
+            <div class="border border-slate-200 rounded-lg p-4 mb-3">
+                <div class="flex items-center gap-2 flex-wrap">
+                    <span class="font-semibold text-slate-800">${AV.esc(p.name || AV.humanize(p.id))}</span>
+                    ${p.is_mandatory_for_service ? '<span class="text-[10px] font-bold uppercase text-cyan-700">Required for service</span>' : ''}
+                </div>
+                ${p.description ? `<p class="text-xs text-slate-500 mt-1">${AV.esc(p.description)}</p>` : ''}
+                <div class="mt-2 text-xs"><span class="text-slate-400 font-semibold uppercase tracking-wide mr-1">Legal basis:</span>${AV.esc(AV.legalBasis(p.legal_basis) || '—')}</div>
+                <div class="mt-1 text-xs"><span class="text-slate-400 font-semibold uppercase tracking-wide mr-1">Data used:</span>${cats}</div>
+                ${ret ? `<div class="mt-1 text-xs"><span class="text-slate-400 font-semibold uppercase tracking-wide mr-1">Kept for:</span>${ret}</div>` : ''}
+            </div>`;
+        }).join('') : '<p class="text-xs text-slate-400 italic">No processing purposes declared.</p>';
+        return head + purposeCards;
     }
 
     async function editPolicy(id, fid) {
@@ -835,9 +899,9 @@
                 }).join(' ');
                 return `
                 <div class="flex flex-wrap gap-2 text-xs items-center py-0.5">
-                    <span class="font-semibold text-slate-700">${p.name || p.id}</span>
+                    <span class="font-semibold text-slate-700">${AV.esc(p.name || AV.humanize(p.id))}</span>
                     <span class="text-slate-300">·</span>
-                    <span class="text-slate-500 capitalize">${(p.legal_basis || '').replace(/_/g,' ')}</span>
+                    <span class="text-slate-500">${AV.esc(AV.legalBasis(p.legal_basis) || '—')}</span>
                     <span class="text-slate-300">·</span>
                     <span class="text-slate-400">${(p.data_categories_involved || []).length} data cat(s)</span>
                     ${rtpHtml ? `<span class="text-slate-300">·</span>${rtpHtml}` : ''}
@@ -860,7 +924,9 @@
     let currentViewingEntryId = null;
 
     async function reviewRopa(policyId) {
-        document.getElementById('modal-title').textContent = `ROPA Review — ${policyId}`;
+        // vAIb-kyog: tenant sees the policy title; staff see the raw id.
+        const lbl = IS_STAFF ? policyId : AV.policyTitle(policyId);
+        document.getElementById('modal-title').textContent = `ROPA Review — ${lbl}`;
         policyForm.classList.add('hidden');
         policyViewDetails.classList.add('hidden');
         policyModalOverlay.style.display = 'flex';
@@ -869,7 +935,8 @@
 
     async function showRopaReviewPanel(policyId) {
         currentReviewPolicyId = policyId;
-        document.getElementById('modal-title').textContent = `ROPA Review — ${policyId}`;
+        const lbl = IS_STAFF ? policyId : AV.policyTitle(policyId);
+        document.getElementById('modal-title').textContent = `ROPA Review — ${lbl}`;
         const stepHint = document.getElementById('modal-step-hint');
         stepHint.textContent = 'Step 2 of 2 — Review & publish ROPA entries';
         stepHint.classList.remove('hidden');
@@ -918,12 +985,14 @@
             <button class="text-teal-700 hover:text-teal-900 font-bold text-xs mr-2" onclick="viewRopaEntryInline('${e.id}')">View</button>
             ${canPublish ? `<button class="text-green-600 hover:text-green-800 font-bold text-xs" onclick="publishRopaEntry('${e.id}', '${escapedName}')">Publish</button>` : '<span class="text-green-600 font-bold text-xs">Active</span>'}
         `;
+        // vAIb-kyog: entry uuid sub-line is staff-only; tenant never sees it.
+        const idSubline = IS_STAFF ? `<div class="text-[10px] font-mono text-slate-400 mt-0.5">${AV.esc(e.id ? e.id.slice(0,8) + '…' : '')}</div>` : '';
         tr.innerHTML = `
             <td class="px-4 py-3 text-sm font-bold text-slate-800 max-w-[240px]">
-                <div class="truncate" title="${e.activity_name}">${e.activity_name}</div>
-                <div class="text-[10px] font-mono text-slate-400 mt-0.5">${e.id.slice(0,8)}…</div>
+                <div class="truncate" title="${AV.esc(e.activity_name)}">${AV.esc(e.activity_name)}</div>
+                ${idSubline}
             </td>
-            <td class="px-4 py-3 text-xs text-slate-500 whitespace-nowrap capitalize">${(e.legal_basis||'').replace(/_/g,' ')}</td>
+            <td class="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">${AV.esc(AV.legalBasis(e.legal_basis) || '—')}</td>
             <td class="px-4 py-3 whitespace-nowrap">${badge}</td>
             <td class="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">${retention}</td>
             <td class="px-4 py-3 whitespace-nowrap">${actions}</td>
@@ -944,15 +1013,26 @@
             const e = await entryRes.json();
             const v = await validateRes.json();
             document.getElementById('rem-title').textContent = e.activity_name || 'Entry';
-            document.getElementById('rem-subtitle').textContent = `ID: ${e.id} • Status: ${e.status} • v${e.version}`;
-            document.getElementById('rem-legal-basis').textContent = (e.legal_basis || '—').replace(/_/g,' ');
+            // vAIb-kyog: subtitle — tenant sees status/version only (no entry uuid); staff see the id.
+            document.getElementById('rem-subtitle').textContent = IS_STAFF
+                ? `ID: ${e.id} • Status: ${e.status} • v${e.version}`
+                : `Status: ${AV.humanize(e.status)} • Version ${e.version}`;
+            document.getElementById('rem-legal-basis').textContent = AV.legalBasis(e.legal_basis) || '—';
             document.getElementById('rem-purpose').textContent = e.purpose || '—';
-            document.getElementById('rem-retention').textContent = e.retention_period_days ? `${e.retention_period_days} days (${e.retention_start_event || '—'})` : '—';
+            document.getElementById('rem-retention').textContent = e.retention_period_days ? `${e.retention_period_days} days${AV.retentionEvent(e.retention_start_event) ? ' (' + AV.retentionEvent(e.retention_start_event) + ')' : ''}` : '—';
             document.getElementById('rem-security').textContent = e.security_measures || '—';
-            document.getElementById('rem-data-categories').textContent = prettyRopaJson(e.data_categories);
-            document.getElementById('rem-data-subjects').textContent = prettyRopaJson(e.data_subject_categories);
-            document.getElementById('rem-processors').textContent = prettyRopaJson(e.processors);
-            document.getElementById('rem-cross-border').textContent = prettyRopaJson(e.cross_border_transfers);
+            // vAIb-kyog: tenant sees human chips; staff keep raw JSON.
+            if (IS_STAFF) {
+                document.getElementById('rem-data-categories').textContent = prettyRopaJson(e.data_categories);
+                document.getElementById('rem-data-subjects').textContent = prettyRopaJson(e.data_subject_categories);
+                document.getElementById('rem-processors').textContent = prettyRopaJson(e.processors);
+                document.getElementById('rem-cross-border').textContent = prettyRopaJson(e.cross_border_transfers);
+            } else {
+                document.getElementById('rem-data-categories').innerHTML = AV.chips(e.data_categories, AV.dataCategory);
+                document.getElementById('rem-data-subjects').innerHTML = AV.chips(e.data_subject_categories, AV.dataSubject);
+                document.getElementById('rem-processors').innerHTML = AV.chips(AV.parseArr(e.processors).map(p => (p && p.name) ? p.name : '').filter(Boolean), AV.humanize);
+                document.getElementById('rem-cross-border').innerHTML = AV.chips(AV.parseArr(e.cross_border_transfers).map(t => (t && t.destination_country) ? t.destination_country : '').filter(Boolean), function (x){ return x; });
+            }
             const pubBtn = document.getElementById('rem-publish-btn');
             pubBtn.dataset.name = e.activity_name;
             const canPublish = e.status === 'draft' || e.status === 'under_review';

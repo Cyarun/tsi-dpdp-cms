@@ -282,6 +282,9 @@
     </div>
 </div>
 
+<!-- vAIb-kyog: shared audience dictionary + tenant/staff gate (clean labels vs raw IDs) -->
+<script src="../audience-view.js"></script>
+<script src="../tenant-scope.js"></script>
 <script>
     function esc(s) {
         if (s == null) return '';
@@ -291,6 +294,30 @@
     // --- Configuration ---
     const API_URL_CONSENT = '/api/v1/consent';
     const AUTH_TOKEN = localStorage.getItem('authToken');
+    // vAIb-kyog: audience flag — TENANT sees clean labels (consent mechanism, policy); staff raw IDs.
+    const AV = window.AudienceView;
+    const IS_STAFF = AV ? AV.isStaffView() : false;
+    // Human label for a consent mechanism enum (CONSENT_FORM / WITHDRAWAL / ERASURE_REQUEST, etc.).
+    function mechanismLabel(m) {
+        const map = { consent_form:'Consent given', explicit_consent:'Explicit consent', withdrawal:'Withdrawn', erasure_request:'Erasure requested', renewal:'Renewed', update:'Updated' };
+        return map[(m||'').toLowerCase()] || (AV ? AV.humanize(m) : (m||'—'));
+    }
+    // vAIb-kyog: register active-policy titles for clean display (best-effort; clean fallback applies).
+    async function loadPolicyTitles() {
+        try {
+            const fid = localStorage.getItem('fiduciary_id');
+            if (!fid) return;
+            const res = await fetch('/api/v1/policy', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${AUTH_TOKEN}` },
+                body: JSON.stringify({ _func: 'list_active_policies', fiduciary_id: fid })
+            });
+            if (!res.ok) return;
+            const data = await res.json();
+            const list = Array.isArray(data) ? data : (data.data || []);
+            list.forEach(p => { if (p && p.policy_id && p.title) AV.registerPolicyTitle(p.policy_id, p.title); });
+        } catch (e) { /* non-fatal */ }
+    }
     // Show the real DPO/owner name, NEVER a "Site Owner (Wix) <uuid>" placeholder or a
     // bare uuid (defence in depth — the DPO launch already overrides username server-side
     // with the verified DPO name). (user 2026-06-22)
@@ -339,11 +366,18 @@
         const row = document.createElement('tr');
         const isActive = record.is_active_consent;
 
+        // vAIb-kyog: tenant sees a short request reference (not the raw uuid) + the policy TITLE
+        // and a human consent-mechanism label; staff keep the raw id tail + raw policy id + enum.
+        const recRef = IS_STAFF ? ('...' + esc(record.id.slice(-8))) : esc(AV.shortRef(record.id, 'CR'));
+        const policyCell = IS_STAFF
+            ? `${esc(record.policy_id)} (v${esc(record.policy_version)})`
+            : `${esc(AV.policyTitle(record.policy_id))}${record.policy_version ? ' (v' + esc(record.policy_version) + ')' : ''}`;
+        const mechCell = IS_STAFF ? esc(record.consent_mechanism) : esc(mechanismLabel(record.consent_mechanism));
         row.innerHTML = `
-            <td class="px-4 py-3 text-sm font-mono text-gray-700">...${esc(record.id.slice(-8))}</td>
-            <td class="px-4 py-3 text-sm text-gray-600">${esc(record.policy_id)} (v${esc(record.policy_version)})</td>
+            <td class="px-4 py-3 text-sm ${IS_STAFF ? 'font-mono ' : ''}text-gray-700">${recRef}</td>
+            <td class="px-4 py-3 text-sm text-gray-600">${policyCell}</td>
             <td class="px-4 py-3 text-sm text-gray-600">${esc(new Date(record.timestamp).toLocaleString())}</td>
-            <td class="px-4 py-3 text-sm text-gray-600">${esc(record.consent_mechanism)}</td>
+            <td class="px-4 py-3 text-sm text-gray-600">${mechCell}</td>
             <td class="px-4 py-3 text-sm">${createStatusBadge(record.consent_status_general, isActive)}</td>
             <td class="px-4 py-3 text-sm font-bold text-slate-500">${isActive ? 'Yes' : 'No'}</td>
             <td class="px-4 py-3 text-sm">
@@ -434,10 +468,19 @@
                 modalRecordId.textContent = userId;
                 modalRecordStatus.innerHTML = createStatusBadge(record.consent_status_general, record.is_active_consent);
 
+                // vAIb-kyog: tenant sees the policy TITLE, the ROPA activity NAME (never the entry
+                // uuid), and a human consent-mechanism label; staff keep the raw ids/enum.
+                const policyRef = IS_STAFF
+                    ? `${esc(record.policy_id)} (v${esc(record.policy_version || '—')})`
+                    : `${esc(AV.policyTitle(record.policy_id))}${record.policy_version ? ' (v' + esc(record.policy_version) + ')' : ''}`;
+                const ropaRef = record.ropa_activity_name
+                    ? esc(record.ropa_activity_name)
+                    : (IS_STAFF && record.ropa_entry_id ? esc(record.ropa_entry_id) : '');
+                const mech = IS_STAFF ? esc(record.consent_mechanism) : esc(mechanismLabel(record.consent_mechanism));
                 provenanceDetails.innerHTML = `
-                    <p><strong>Policy Ref:</strong> ${esc(record.policy_id)} (v${esc(record.policy_version || '—')})</p>
-                    ${record.ropa_entry_id ? `<p><strong>ROPA Entry:</strong> ${esc(record.ropa_activity_name || record.ropa_entry_id)}</p>` : ''}
-                    <p><strong>Time:</strong> ${esc(new Date(record.timestamp).toLocaleString())} (${esc(record.consent_mechanism)})</p>
+                    <p><strong>Policy:</strong> ${policyRef}</p>
+                    ${ropaRef ? `<p><strong>Processing Activity:</strong> ${ropaRef}</p>` : ''}
+                    <p><strong>Time:</strong> ${esc(new Date(record.timestamp).toLocaleString())} (${mech})</p>
                     <p><strong>IP:</strong> ${esc(record.ip_address || 'N/A')} | <strong>User Agent:</strong> ${esc(record.user_agent || 'N/A')}</p>
                 `;
 
@@ -511,6 +554,9 @@
         principalStatusCard = document.getElementById('principal-status-card');
         overallStatusBadge = document.getElementById('overall-status-badge');
         mainInitiateErasureBtn = document.getElementById('main-initiate-erasure-btn');
+
+        // vAIb-kyog: preload policy_id -> human title so consent history shows the policy NAME.
+        loadPolicyTitles();
 
         menuToggle.addEventListener('click', toggleMenu);
         backdrop.addEventListener('click', toggleMenu);

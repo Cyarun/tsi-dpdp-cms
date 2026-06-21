@@ -191,6 +191,13 @@
         window.location.href = 'index.html';
     }
 
+    // vAIb-kyog: the data principal must NEVER see a raw internal uuid — show a short, friendly
+    // request reference they can quote (their own ticket), derived from the grievance id.
+    function shortReqRef(id) {
+        if (id == null || String(id).trim() === '') return '—';
+        return 'REQ-' + String(id).replace(/-/g, '').slice(-6).toUpperCase();
+    }
+
     // ── Tab management ──────────────────────────────────────────────────
     const tabs = ['consent', 'history', 'grievance'];
     let activeTab = 'consent';
@@ -713,7 +720,7 @@
         let rows = list.length === 0
             ? `<tr><td colspan="5" style="text-align:center;padding:40px;color:#94a3b8;font-style:italic;">No requests or grievances submitted yet.</td></tr>`
             : list.map(r => `<tr>
-                <td style="font-family:monospace;font-size:0.75rem;color:#64748b;">${esc(r.grievance_id)}</td>
+                <td style="font-size:0.75rem;color:#64748b;">${esc(shortReqRef(r.grievance_id))}</td>
                 <td style="font-weight:700;font-size:0.8rem;color:#1e293b;">${esc((r.type||'').replace(/_/g,' '))}</td>
                 <td style="color:#64748b;">${esc(r.subject)}</td>
                 <td style="color:#64748b;">${esc(r.due_date ? formatTimestamp(r.due_date).split(',')[0] : 'N/A')}</td>
