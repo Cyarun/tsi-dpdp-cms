@@ -23,11 +23,6 @@
     }
   },
   "required": [
-    "_func",
-    "fiduciary_id",
-    "status",
-    "search",
-    "page",
-    "limit"
+    "_func"
   ]
 }

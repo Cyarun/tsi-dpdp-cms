@@ -29,7 +29,6 @@
     }
   },
   "required": [
-    "_func",
-    "limit"
+    "_func"
   ]
 }

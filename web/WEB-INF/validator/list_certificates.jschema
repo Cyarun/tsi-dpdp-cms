@@ -11,7 +11,6 @@
     }
   },
   "required": [
-    "_func",
-    "fiduciary_id"
+    "_func"
   ]
 }

@@ -23,8 +23,6 @@
     }
   },
   "required": [
-    "_func",
-    "fiduciary_id",
-    "status"
+    "_func"
   ]
 }

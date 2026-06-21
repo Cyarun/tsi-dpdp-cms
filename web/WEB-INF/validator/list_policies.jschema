@@ -23,9 +23,6 @@
     }
   },
   "required": [
-    "_func",
-    "status",
-    "search",
-    "fiduciary_id_filter"
+    "_func"
   ]
 }
