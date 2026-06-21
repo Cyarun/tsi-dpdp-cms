@@ -29,17 +29,39 @@
     var navFid = document.getElementById('nav-fiduciaries');
     if (navFid) navFid.style.display = 'none';
 
-    // Hide any deactivation / disable controls (fiduciary or app) reachable from the tenant
-    // console. Matched by a stable data attribute and common control ids/classes.
+    // Hide deactivation / disable / revoke controls reachable from the tenant console. These
+    // are PLATFORM-admin-only (the TSI super-admin console lives OUTSIDE the Wix dashboard):
+    // a Wix-dashboard site owner must not deactivate their own fiduciary/app or revoke keys.
     var selectors = [
       '[data-platform-only]',
       '#nav-fiduciaries',
       '.deactivate-fiduciary', '.delete-fiduciary',
       '.deactivate-app', '.delete-app',
-      '#deactivate-app-btn', '#delete-app-btn'
+      '#deactivate-app-btn', '#delete-app-btn',
+      '.revoke-key', '.revoke-api-key', '#revoke-key-btn'  // platform-only (user 2026-06-21)
     ];
     selectors.forEach(function (sel) {
       document.querySelectorAll(sel).forEach(function (el) { el.style.display = 'none'; });
+    });
+
+    // Row-level controls rendered by table JS with no class hook — hide by their action text
+    // (Deactivate / Revoke / Delete) so a tenant owner never sees the destructive actions.
+    var KILL_TEXT = /^\s*(Deactivate|Revoke|Delete)\s*$/i;
+    document.querySelectorAll('table button, table a').forEach(function (el) {
+      if (KILL_TEXT.test(el.textContent || '')) el.style.display = 'none';
+    });
+
+    // Logout: a Wix-dashboard owner's identity is OWNED by Wix (they are inside manage.wix.com),
+    // so there is no app-level logout. Replace it with a non-actionable "Logged in as" label.
+    var owner = (localStorage.getItem('username') || localStorage.getItem('fiduciary_name') || 'Site Owner (Wix)');
+    document.querySelectorAll('a, button').forEach(function (el) {
+      var t = (el.textContent || '').trim();
+      if (/^Logout$/i.test(t) || (el.getAttribute('onclick') || '').indexOf('handleLogout') >= 0) {
+        var span = document.createElement('span');
+        span.className = 'text-xs font-semibold text-gray-500';
+        span.textContent = 'Logged in as ' + owner;
+        if (el.parentNode) el.parentNode.replaceChild(span, el);
+      }
     });
   }
 
@@ -48,6 +70,21 @@
   } else {
     applyTenantScopeUi();
   }
-  // Re-apply after async table renders that may inject row-level deactivate buttons.
+  // Re-apply after async table renders that may inject row-level deactivate/revoke buttons.
   window.applyTenantScopeUi = applyTenantScopeUi;
+  // A MutationObserver makes this robust on EVERY page without each page re-calling us: when a
+  // table re-renders its rows (async fetch -> innerHTML), re-hide the platform-only controls.
+  // Debounced via rAF so a burst of mutations triggers one pass. (user 2026-06-21)
+  if (typeof MutationObserver !== 'undefined') {
+    var scheduled = false;
+    var obs = new MutationObserver(function () {
+      if (scheduled) return; scheduled = true;
+      (window.requestAnimationFrame || window.setTimeout)(function () {
+        scheduled = false; applyTenantScopeUi();
+      }, 0);
+    });
+    var start = function () { obs.observe(document.body, { childList: true, subtree: true }); };
+    if (document.body) start();
+    else document.addEventListener('DOMContentLoaded', start);
+  }
 })();
