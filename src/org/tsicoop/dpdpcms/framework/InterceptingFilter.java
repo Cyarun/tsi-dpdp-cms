@@ -212,7 +212,29 @@ public class InterceptingFilter implements Filter {
                     serviceName = pathSegments[1];
                 }
             }else{
-                apiCategory = ADMIN_URI_PATH; // Default to admin if no explicit category
+                // Unprefixed route (e.g. /api/v1/consent). Historically defaulted to ADMIN, which
+                // forced an operator JWT and made the api-key (server-to-server, per-tenant) auth
+                // surface unreachable here — the fabric gateway posts tenant calls to the
+                // unprefixed path, so a valid X-API-Key record_consent could never authenticate and
+                // 401'd ("Unable to resolve authenticated fiduciary"). The legacy callers used the
+                // explicit /client/ prefix; the gateway dropped it (cms_client._PATH_*).
+                //
+                // vAIb-xk9i: when an unprefixed route carries an X-API-Key, NO admin Bearer, and the
+                // _func is a client-allowed function, classify it as CLIENT so it goes through the
+                // SAME api-key validation + RBAC-scope gate as /api/v1/client/*. This does NOT widen
+                // any admin surface: the CLIENT branch still validates the key against api_keys
+                // (ACTIVE + secret) and rejects any func not in CLIENT_ALLOWED_FUNCS, and the api-key
+                // is inherently tenant-bound (getFiduciaryId(apiKey) -> exactly that key's
+                // fiduciary). Anything else keeps the historical ADMIN default.
+                String apiKeyHeader = req.getHeader("X-API-Key");
+                String authHeader = req.getHeader("Authorization");
+                boolean hasApiKey = apiKeyHeader != null && !apiKeyHeader.trim().isEmpty();
+                boolean hasAdminBearer = authHeader != null && authHeader.startsWith("Bearer ");
+                if (hasApiKey && !hasAdminBearer) {
+                    apiCategory = CLIENT_URI_PATH; // api-key server-to-server tenant call
+                } else {
+                    apiCategory = ADMIN_URI_PATH; // Default to admin if no explicit category
+                }
                 serviceName = pathSegments[0];
             }
         }

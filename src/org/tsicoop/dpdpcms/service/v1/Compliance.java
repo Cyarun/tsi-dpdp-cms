@@ -376,7 +376,11 @@ public class Compliance implements Action {
             params.add("%" + search + "%");
         }
 
-        sqlBuilder.append(" ORDER BY initiated_at DESC LIMIT ? OFFSET ?");
+        // vAIb-xk9i: qualify EVERY column in a JOIN query. This SELECT joins `apps a`, so a bare
+        // column name risks an "ambiguous column reference" PSQLException if both tables ever share
+        // it. `initiated_at` only exists on purge_requests today, but qualify it (pr.) so the query
+        // is robust to future schema changes and consistent with the rest of the JOIN.
+        sqlBuilder.append(" ORDER BY pr.initiated_at DESC LIMIT ? OFFSET ?");
         params.add(limit);
         params.add((page - 1) * limit);
 
