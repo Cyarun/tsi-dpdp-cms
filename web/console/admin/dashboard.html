@@ -164,19 +164,19 @@
   <!-- Metric Widgets Section -->
   <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
     <div id="metric-fiduciaries" class="card p-5 border-l-4 border-green-500 hover:shadow-md transition duration-200 cursor-pointer">
-      <p class="text-sm font-medium text-gray-500">Active Fiduciaries</p>
+      <p class="text-sm font-medium text-gray-500">Data Principals</p>
       <p class="text-3xl font-bold text-gray-900 mt-1" id="metric-fiduciaries-value">--</p>
-      <p class="text-xs text-gray-400 mt-2">Entities currently collecting consent.</p>
+      <p class="text-xs text-gray-400 mt-2">People whose consent you track.</p>
     </div>
     <div id="metric-processors" class="card p-5 border-l-4 border-indigo-500 hover:shadow-md transition duration-200 cursor-pointer">
-      <p class="text-sm font-medium text-gray-500">Active Apps</p>
+      <p class="text-sm font-medium text-gray-500">Active Policies</p>
       <p class="text-3xl font-bold text-gray-900 mt-1" id="metric-processors-value">--</p>
-      <p class="text-xs text-gray-400 mt-2">Apps for injestion / processing.</p>
+      <p class="text-xs text-gray-400 mt-2">Processing activities governed.</p>
     </div>
     <div id="metric-purge" class="card p-5 border-l-4 border-red-500 hover:shadow-md transition duration-200 cursor-pointer">
-      <p class="text-sm font-medium text-gray-500">Purge Operations Failed</p>
+      <p class="text-sm font-medium text-gray-500">Pending Erasure Requests</p>
       <p class="text-3xl font-bold text-gray-900 mt-1" id="metric-purge-value">--</p>
-      <p class="text-xs text-gray-400 mt-2">Critical purge failures (Check Audit Log).</p>
+      <p class="text-xs text-gray-400 mt-2">Erasure requests awaiting action.</p>
     </div>
   </div>
 
@@ -316,10 +316,14 @@
 
         async function loadDashboardMetrics() {
             try {
+                // get_dpo_metrics is TENANT-SCOPED (the owner's own fiduciary). get_admin_metrics
+                // is platform-only and 403s a tenant owner -> cards showed '--'. Use the
+                // tenant metrics and map the 3 cards to tenant-relevant values that actually
+                // exist in the response (data_principals / active_policies / purge_pending).
                 const response = await fetch(API_URL_DASHBOARD, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${AUTH_TOKEN}` },
-                    body: JSON.stringify({ "_func": "get_admin_metrics" })
+                    body: JSON.stringify({ "_func": "get_dpo_metrics" })
                 });
                 const data = await response.json();
                  if (data.status === 401) {
@@ -329,9 +333,11 @@
                 }
                 if (data.success && data.metrics) {
                     const m = data.metrics;
-                    document.getElementById('metric-fiduciaries-value').textContent = m.active_fiduciaries ?? '0';
-                    document.getElementById('metric-processors-value').textContent = m.active_processors ?? '0';
-                    document.getElementById('metric-purge-value').textContent = m.failed_purges ?? '0';
+                    // tenant-scoped: Data Principals (people whose consent is tracked),
+                    // Active Policies (apps/processing governed), Pending Purges.
+                    document.getElementById('metric-fiduciaries-value').textContent = m.data_principals ?? '0';
+                    document.getElementById('metric-processors-value').textContent = m.active_policies ?? '0';
+                    document.getElementById('metric-purge-value').textContent = m.purge_pending ?? '0';
                 }
             } catch (error) { console.error("Metrics load failed", error); }
         }
