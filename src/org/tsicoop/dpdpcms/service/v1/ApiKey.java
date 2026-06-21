@@ -524,7 +524,9 @@ public class ApiKey implements Action {
             // ak. qualifier REQUIRED: api_keys ak + apps ap both have fiduciary_id/status
             // -> a bare column is ambiguous -> 500 "column reference fiduciary_id is
             // ambiguous" (browser-confirmed on the API Keys page). (vAIb)
-            sqlBuilder.append(" AND ak.fiduciary_id = ?");
+            // ::uuid cast: api_keys.fiduciary_id is uuid; the bound param is a String,
+            // so a bare "= ?" raises "operator does not exist: uuid = character varying".
+            sqlBuilder.append(" AND ak.fiduciary_id = ?::uuid");
             params.add(fiduciaryId);
         }
         if (statusFilter != null && !statusFilter.isEmpty()) {
