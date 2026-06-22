@@ -6,6 +6,10 @@
     "_func": {
       "type": "string"
     },
+    "verifier_otp": {
+      "type": "string",
+      "description": "Fabric->CMS shared-secret proof that the guardian's real OTP/email-link was verified by the gateway (DPDP S9). Constant-time checked server-side; never the guardian's raw code."
+    },
     "child_principal_id": {
       "type": "string"
     },
@@ -27,6 +31,7 @@
   },
   "required": [
     "_func",
+    "verifier_otp",
     "child_principal_id",
     "guardian_principal_id",
     "verification_mechanism",

@@ -11,6 +11,8 @@ import org.json.simple.parser.JSONParser;
 import org.json.simple.parser.ParseException;
 
 import java.net.UnknownHostException;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -40,6 +42,42 @@ import java.util.*;
  * - Assumes 'users' table exists for created_by_user_id etc. in audit logs.
  */
 public class Consent implements Action {
+
+    /**
+     * Shared secret that gates record_parent_consent (DPDP §9 verifiable parental consent, vAIb-4u20).
+     *
+     * MIRRORS Principal.PRINCIPAL_LOGIN_SECRET (vAIb-4y7x) — we do NOT invent new crypto.
+     * record_parent_consent records VERIFIABLE parental consent, so the CMS must not trust an
+     * arbitrary caller's claim that "the guardian was verified". The REAL guardian identity proof
+     * (the guardian's 6-digit OTP / email-link click) is performed by the fabric (gateway): it
+     * verifies the guardian's code (constant-time hash compare, single-use, TTL) and ONLY THEN
+     * calls record_parent_consent, passing THIS shared secret as `verifier_otp`. The CMS therefore
+     * trusts the verification iff the caller proves it knows the secret. A caller hitting the CMS
+     * directly with a guessed/empty value does NOT know it -> rejected, so the
+     * data_principal.verification_status can never be flipped to VERIFIED without a real check.
+     *
+     * Reuses the SAME env var as principal login (PRINCIPAL_LOGIN_SECRET) — the guardian IS a data
+     * principal and the fabric->CMS identity-proof channel is the same one. Read from the env,
+     * NEVER hardcoded, NEVER logged (same discipline as JWT_SECRET / DB_ENCRYPTION_KEY).
+     * FAIL CLOSED: if unset the secret is null and EVERY record_parent_consent is rejected (we never
+     * fall back to a default — that would re-open the bypass). Compared with MessageDigest.isEqual
+     * (constant-time) so the secret cannot be recovered via response timing.
+     */
+    private static final byte[] PARENTAL_VERIFIER_SECRET = loadParentalVerifierSecret();
+
+    private static byte[] loadParentalVerifierSecret() {
+        String secret = System.getenv("PRINCIPAL_LOGIN_SECRET");
+        if (secret == null || secret.trim().isEmpty()) {
+            // FAIL CLOSED: no secret configured -> reject all record_parent_consent. Do NOT throw
+            // at class-load (that would break every other consent func); the null is checked
+            // per-request in handleRecordParentalVerification and rejects fail-closed.
+            System.err.println("SECURITY: PRINCIPAL_LOGIN_SECRET is not set — record_parent_consent "
+                    + "is DISABLED (fail closed). Set it to the value provisioned in OpenBao "
+                    + "(vaib/cms/principal_login_secret).");
+            return null;
+        }
+        return secret.trim().getBytes(StandardCharsets.UTF_8);
+    }
 
     /**
      * Handles all Consent Record Management operations via a single POST endpoint.
@@ -180,6 +218,12 @@ public class Consent implements Action {
                                                                                     dataPointConsents,
                                                                                     Constants.ACTION_CONSENT_GIVEN);
 
+                        // DPDP §9 AGE-GATE (vAIb-4u20): an UNVERIFIED MINOR may consent to MANDATORY
+                        // purposes only. Any optional purpose they tried to grant is forced OFF until
+                        // a guardian completes record_parent_consent (which flips verification_status
+                        // to VERIFIED). Verified minors and adults pass through untouched.
+                        revisedDataPoints = enforceMinorPurposeGating(userId, fiduciaryId, policy, revisedDataPoints, verificationLogId);
+
                         output = recordConsentToDb(userId, fiduciaryId, policyId, policyVersion, timestamp, jurisdiction, languageSelected,
                                 consentStatusGeneral, consentMechanism, ipAddressStr, userAgent, revisedDataPoints, appId, verificationLogId);
                         OutputProcessor.send(res, HttpServletResponse.SC_CREATED, output);
@@ -242,6 +286,15 @@ public class Consent implements Action {
                     if (anonymousUserId.equals(authenticatedUserId)) {
                         OutputProcessor.errorResponse(res, HttpServletResponse.SC_BAD_REQUEST, "Bad Request", "Anonymous ID and Authenticated ID cannot be the same.", req.getRequestURI());
                         return;
+                    }
+
+                    // DPDP §9 GUARD (vAIb-4u20): link_user may DECLARE a principal a MINOR, but it may
+                    // NEVER self-assert VERIFIED — that would let a caller bypass the OTP-gated
+                    // record_parent_consent and unblock optional purposes for an unverified minor.
+                    // The ONLY path to VERIFIED is record_parent_consent (which proves a real guardian
+                    // check). Any client-supplied VERIFIED on link_user is downgraded to NOT_VERIFIED.
+                    if (Constants.VERIFICATION_VERIFIED.equalsIgnoreCase(vStatus)) {
+                        vStatus = Constants.VERIFICATION_NOT_VERIFIED;
                     }
 
                     linkUserConsentRecords(anonymousUserId, authenticatedUserId, fiduciaryId, appId, ageCategory, guardianId, vStatus);
@@ -314,41 +367,106 @@ public class Consent implements Action {
         }
     }
 
+    /**
+     * DPDP §9 — records VERIFIABLE parental consent for a minor (vAIb-4u20).
+     *
+     * Flow:
+     *   1. AUTH GATE: the guardian's real identity proof (OTP / email-link) was already verified by
+     *      the fabric, which proves it to the CMS via the shared PARENTAL_VERIFIER_SECRET. We reject
+     *      fail-closed if the secret is unset or the proof does not match (constant-time compare),
+     *      so verification_status can never be flipped to VERIFIED without a real guardian check.
+     *   2. Validate the required identity links (child/guardian/mechanism).
+     *   3. In ONE transaction: write a parental_verification_logs entry AND flip the child's
+     *      data_principal row to age_category=MINOR, guardian_id, verification_status=VERIFIED.
+     *      This is what UNBLOCKS optional purposes for the minor (see enforceMinorPurposeGating).
+     */
     private void handleRecordParentalVerification(JSONObject input, UUID fiduciaryId, UUID appId, HttpServletResponse res) throws SQLException {
+        // --- STEP 1: AUTH GATE (mirror Principal.handleLogin / vAIb-4y7x). FAIL CLOSED. ---
+        String verifierOtp = (String) input.get("verifier_otp");
+        if (PARENTAL_VERIFIER_SECRET == null
+                || verifierOtp == null || verifierOtp.isEmpty()
+                || !MessageDigest.isEqual(PARENTAL_VERIFIER_SECRET, verifierOtp.getBytes(StandardCharsets.UTF_8))) {
+            OutputProcessor.errorResponse(res, HttpServletResponse.SC_UNAUTHORIZED, "Unauthorized",
+                    "Guardian verification not proven. record_parent_consent requires a fabric-verified guardian OTP/email-link.", "");
+            return;
+        }
+
         String childId = (String) input.get("child_principal_id");
         String guardianId = (String) input.get("guardian_principal_id");
         String mechanism = (String) input.get("verification_mechanism");
         String provider = (String) input.get("provider_name");
         String refId = (String) input.get("verification_ref_id");
-        Object proofObj = input.get("proof_metadata");
-        String proofMetadata = (proofObj instanceof JSONObject) ? ((JSONObject) proofObj).toJSONString() : (String) proofObj;
+
+        // --- STEP 2: validate required identity links ---
+        if (childId == null || childId.isEmpty() || guardianId == null || guardianId.isEmpty()
+                || mechanism == null || mechanism.isEmpty()) {
+            OutputProcessor.errorResponse(res, HttpServletResponse.SC_BAD_REQUEST, "Bad Request",
+                    "child_principal_id, guardian_principal_id and verification_mechanism are required.", "");
+            return;
+        }
+        if (childId.equals(guardianId)) {
+            OutputProcessor.errorResponse(res, HttpServletResponse.SC_BAD_REQUEST, "Bad Request",
+                    "child_principal_id and guardian_principal_id cannot be the same.", "");
+            return;
+        }
+
+        // PII MINIMISATION: do NOT persist raw guardian PII (phone/email/OTP) in proof_metadata.
+        // Keep only non-PII verification provenance; raw identifiers stay on the fabric side, which
+        // already discarded them after the constant-time OTP check.
+        String proofMetadata = sanitizeProofMetadata(input.get("proof_metadata"));
+
         Connection conn = null;
         PreparedStatement pstmt = null;
+        PreparedStatement pstmtUpsert = null;
         ResultSet rs = null;
         UUID logId = null;
 
         String sql = "INSERT INTO parental_verification_logs (id, child_principal_id, guardian_principal_id, verification_mechanism, provider_name, verification_ref_id, proof_metadata, fiduciary_id) " +
                 "VALUES (uuid_generate_v4(), ?, ?, ?, ?, ?, ?::jsonb, ?) RETURNING id";
 
+        // --- STEP 3: flip the child principal to MINOR + VERIFIED, linked to the guardian. ---
+        String upsertSql = "INSERT INTO data_principal (user_id, fiduciary_id, age_category, guardian_id, verification_status) " +
+                "VALUES (?, ?, ?, ?, ?) " +
+                "ON CONFLICT (user_id, fiduciary_id) DO UPDATE SET " +
+                "age_category = EXCLUDED.age_category, guardian_id = EXCLUDED.guardian_id, verification_status = EXCLUDED.verification_status";
+
         PoolDB pool = new PoolDB();
         try {
             conn = pool.getConnection();
+            conn.setAutoCommit(false); // log + status flip must be atomic
+
             pstmt = conn.prepareStatement(sql);
             pstmt.setString(1, childId);
             pstmt.setString(2, guardianId);
             pstmt.setString(3, mechanism);
             pstmt.setString(4, provider);
             pstmt.setString(5, refId);
-            pstmt.setString(6, proofMetadata != null ? proofMetadata : "{}");
+            pstmt.setString(6, proofMetadata);
             pstmt.setObject(7, fiduciaryId);
             rs = pstmt.executeQuery();
             if (rs.next()) {
                 logId = (UUID) rs.getObject(1);
             }
+
+            if (logId != null) {
+                pstmtUpsert = conn.prepareStatement(upsertSql);
+                pstmtUpsert.setString(1, childId);
+                pstmtUpsert.setObject(2, fiduciaryId);
+                pstmtUpsert.setString(3, Constants.AGE_MINOR);
+                pstmtUpsert.setString(4, guardianId);
+                pstmtUpsert.setString(5, Constants.VERIFICATION_VERIFIED);
+                pstmtUpsert.executeUpdate();
+                conn.commit();
+            } else {
+                conn.rollback();
+            }
         } catch (Exception e) {
-            System.err.println("[ERROR] Consent.logEvent: " + e);
+            if (conn != null) { try { conn.rollback(); } catch (SQLException ignored) {} }
+            logId = null;
+            System.err.println("[ERROR] Consent.recordParentalVerification: " + e);
         } finally {
-            pool.cleanup(rs,pstmt,conn);
+            try { if (pstmtUpsert != null) pstmtUpsert.close(); } catch (Exception ignored) {}
+            pool.cleanup(rs, pstmt, conn);
         }
 
         if (logId != null){
@@ -356,16 +474,164 @@ public class Consent implements Action {
             auditContext.put("action", Constants.ACTION_PARENTAL_CONSENT);
             auditContext.put("principal", childId);
             auditContext.put("guardian", guardianId);
+            auditContext.put("verification_mechanism", mechanism);
             auditContext.put("proof_metadata", proofMetadata);
             new Audit().logEventAsync(childId, fiduciaryId, Constants.SERVICE_TYPE_APP, appId , Constants.ACTION_PARENTAL_CONSENT, auditContext.toJSONString());
 
             JSONObject out = new JSONObject();
             out.put("success", true);
             out.put("verification_log_id", logId.toString());
+            out.put("child_principal_id", childId);
+            out.put("verification_status", Constants.VERIFICATION_VERIFIED);
+            out.put("message", "Verifiable parental consent recorded; optional purposes are now unblocked for this minor.");
             OutputProcessor.send(res, HttpServletResponse.SC_CREATED, out);
         }else{
             OutputProcessor.errorResponse(res, HttpServletResponse.SC_BAD_REQUEST, "Bad Request", "Parental Consent Failed","");
         }
+    }
+
+    /**
+     * PII minimisation for proof_metadata. The fabric has already verified the guardian's OTP /
+     * email-link and discarded the raw PII; the CMS keeps only non-PII verification provenance so a
+     * raw phone/email/OTP is never persisted. Unknown keys are dropped (allow-list), so a caller
+     * cannot smuggle raw PII into the JSONB column.
+     */
+    @SuppressWarnings("unchecked")
+    private String sanitizeProofMetadata(Object proofObj) {
+        // Allow-list of non-PII provenance keys only.
+        final Set<String> allowed = new HashSet<>(Arrays.asList(
+                "verification_method", "verified_at", "session_ref", "provider_txn_status",
+                "channel", "ttl_seconds", "attempts", "vc_hash", "kyc_status"));
+        JSONObject clean = new JSONObject();
+        if (proofObj instanceof JSONObject) {
+            JSONObject src = (JSONObject) proofObj;
+            for (Object k : src.keySet()) {
+                String key = String.valueOf(k);
+                if (allowed.contains(key)) {
+                    Object v = src.get(k);
+                    // store scalars only; nested objects could re-introduce PII
+                    if (v == null || v instanceof String || v instanceof Number || v instanceof Boolean) {
+                        clean.put(key, v);
+                    }
+                }
+            }
+        }
+        return clean.toJSONString();
+    }
+
+    /**
+     * DPDP §9 AGE-GATE (vAIb-4u20). Enforces verifiable parental consent for minors:
+     *   - ADULT, or MINOR whose verification_status is VERIFIED -> pass through unchanged.
+     *   - MINOR not yet verified -> force consent_granted=false on every OPTIONAL purpose
+     *     (is_mandatory_for_service=false); MANDATORY purposes are left as-is so the service
+     *     can still function. The minor cannot grant optional processing until a guardian
+     *     completes record_parent_consent.
+     *
+     * A verification_log_id supplied on THIS same request also counts as verified (the guardian
+     * verified and granted in one atomic flow), so a fresh verifiable consent is honoured even
+     * before the data_principal status read sees the committed flip.
+     *
+     * FAIL CLOSED on the minor decision but FAIL OPEN on policy parsing: if the policy purposes
+     * cannot be parsed we do NOT silently grant optional purposes to an unverified minor — we drop
+     * to mandatory-only is impossible without the flags, so we strip ALL grants except where we can
+     * positively prove the purpose is mandatory.
+     */
+    @SuppressWarnings("unchecked")
+    private JSONArray enforceMinorPurposeGating(String userId, UUID fiduciaryId, JSONObject policy,
+                                                JSONArray dataPointConsents, UUID verificationLogIdOnRequest) {
+        // 1. Who is this principal? Default ADULT/NOT_VERIFIED if no row yet.
+        String[] status = getPrincipalAgeStatus(userId, fiduciaryId);
+        String ageCategory = status[0];
+        String verificationStatus = status[1];
+
+        boolean isMinor = Constants.AGE_MINOR.equalsIgnoreCase(ageCategory);
+        boolean isVerified = Constants.VERIFICATION_VERIFIED.equalsIgnoreCase(verificationStatus)
+                || verificationLogIdOnRequest != null;
+
+        // Adults, or verified minors, are unaffected.
+        if (!isMinor || isVerified) {
+            return dataPointConsents;
+        }
+
+        // 2. Build mandatory-purpose set from the policy (id -> is_mandatory_for_service).
+        Set<String> mandatoryPurposeIds = mandatoryPurposeIds(policy);
+
+        // 3. Strip optional grants: force consent_granted=false on any purpose not provably mandatory.
+        for (Object o : dataPointConsents) {
+            JSONObject consent = (JSONObject) o;
+            String purposeId = (String) consent.get("data_point_id");
+            boolean mandatory = purposeId != null && mandatoryPurposeIds.contains(purposeId);
+            Object grantedObj = consent.get("consent_granted");
+            boolean granted = grantedObj instanceof Boolean && (Boolean) grantedObj;
+            if (!mandatory && granted) {
+                consent.put("consent_granted", false);
+                consent.put("gated_reason", "MINOR_UNVERIFIED_OPTIONAL_BLOCKED");
+            }
+        }
+        return dataPointConsents;
+    }
+
+    /**
+     * Extracts the set of purpose ids whose is_mandatory_for_service is true, from the policy
+     * content (language-keyed; reads the first language block, mirroring isProcessorAuthorized).
+     * Returns an empty set on any parse error -> the gate then blocks ALL optional grants
+     * (fail-closed for the minor decision).
+     */
+    @SuppressWarnings("unchecked")
+    private Set<String> mandatoryPurposeIds(JSONObject policy) {
+        Set<String> mandatory = new HashSet<>();
+        try {
+            if (policy == null) return mandatory;
+            // Prefer 'en' (as CESUtil/recordConsent do); fall back to first language block.
+            JSONObject block = (JSONObject) policy.get("en");
+            if (block == null && !policy.isEmpty()) {
+                block = (JSONObject) policy.get(policy.keySet().iterator().next());
+            }
+            if (block == null) return mandatory;
+            JSONArray purposes = (JSONArray) block.get("data_processing_purposes");
+            if (purposes == null) return mandatory;
+            for (Object o : purposes) {
+                JSONObject p = (JSONObject) o;
+                Object m = p.get("is_mandatory_for_service");
+                if (m instanceof Boolean && (Boolean) m) {
+                    mandatory.add((String) p.get("id"));
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("[WARN] mandatoryPurposeIds parse: " + e.getMessage());
+        }
+        return mandatory;
+    }
+
+    /**
+     * Reads age_category + verification_status for a principal. Returns {ADULT, NOT_VERIFIED} when
+     * no row exists yet (a brand-new principal is treated as an adult until link_user /
+     * record_parent_consent declares otherwise).
+     */
+    private String[] getPrincipalAgeStatus(String userId, UUID fiduciaryId) {
+        String[] retval = new String[]{Constants.AGE_ADULT, Constants.VERIFICATION_NOT_VERIFIED};
+        String sql = "SELECT age_category, verification_status FROM data_principal WHERE user_id = ? AND fiduciary_id = ?";
+        PoolDB pool = null;
+        Connection conn = null; PreparedStatement pstmt = null; ResultSet rs = null;
+        try {
+            pool = new PoolDB();
+            conn = pool.getConnection();
+            pstmt = conn.prepareStatement(sql);
+            pstmt.setString(1, userId);
+            pstmt.setObject(2, fiduciaryId);
+            rs = pstmt.executeQuery();
+            if (rs.next()) {
+                String age = rs.getString("age_category");
+                String vstatus = rs.getString("verification_status");
+                retval[0] = (age != null) ? age : Constants.AGE_ADULT;
+                retval[1] = (vstatus != null) ? vstatus : Constants.VERIFICATION_NOT_VERIFIED;
+            }
+        } catch (Exception e) {
+            System.err.println("[WARN] getPrincipalAgeStatus: " + e.getMessage());
+        } finally {
+            if (pool != null) try { pool.cleanup(rs, pstmt, conn); } catch (Exception ignored) {}
+        }
+        return retval;
     }
 
     /**

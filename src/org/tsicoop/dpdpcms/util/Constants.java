@@ -49,6 +49,10 @@ public class Constants {
     public static final String AGE_ADULT = "ADULT";
     public static final String AGE_MINOR = "MINOR";
 
+    // --- Parental Verification Status (Section 9 — verifiable parental consent) ---
+    public static final String VERIFICATION_VERIFIED = "VERIFIED";
+    public static final String VERIFICATION_NOT_VERIFIED = "NOT_VERIFIED";
+
     //-- Service Type for Audit Logs
     public static final String SERVICE_TYPE_APP = "APP";
     public static final String SERVICE_TYPE_DPO_CONSOLE = "DPO_CONSOLE";
