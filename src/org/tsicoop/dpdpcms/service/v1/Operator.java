@@ -399,7 +399,12 @@ public class Operator implements Action {
 
         if (success) {
             if (autoCreated) {
-                new Audit().logEventAsync(email, fidUid, serviceType, userUid, "OPERATOR_AUTO_CREATED", "Auto-created passwordless owner ADMIN operator (Wix unified identity)");
+                // vAIb-9nb0: accurate audit string per role — DPO auto-create is a SEPARATE
+                // passwordless DPO operator (writer!=approver), not the owner's ADMIN row.
+                String autoCreateDetail = (role != null && role.equalsIgnoreCase("DPO"))
+                        ? "Auto-created passwordless DPO operator (Wix unified identity)"
+                        : "Auto-created passwordless owner ADMIN operator (Wix unified identity)";
+                new Audit().logEventAsync(email, fidUid, serviceType, userUid, "OPERATOR_AUTO_CREATED", autoCreateDetail);
             }
             new Audit().logEventAsync(email, fidUid, serviceType, userUid, "OPERATOR_SESSION_MINTED", "Wix-owner console session (no password)");
             OutputProcessor.send(res, 200, out);
@@ -554,22 +559,29 @@ public class Operator implements Action {
     }
 
     /**
-     * vAIb-aqip — SELECT the ACTIVE role=DPO operator of THIS ACTIVE fiduciary whose
-     * email matches the verified registered DPO email. Used by the identity-bound DPO
-     * mint so the minted JWT carries role=DPO bound to the proven DPO email. Matched on
-     * the email_hmac (deterministic keyed hash) so it works over the encrypted column.
-     * The JOIN enforces the fiduciary is ACTIVE. Pure read; caller owns the connection.
+     * vAIb-aqip / vAIb-9nb0 — SELECT the ACTIVE role=DPO operator of THIS ACTIVE
+     * fiduciary for the verified registered DPO. The DPO row is stored under a SYNTHETIC,
+     * role-distinct email LABEL (deriveDpoOperatorEmail) so it can coexist with the
+     * owner's ADMIN row under the GLOBAL UNIQUE operators.email_hmac index even when the
+     * owner IS the DPO (same human, same real email). We match on the synthetic label's
+     * email_hmac; we ALSO accept a row stored under the raw verified email (a DPO operator
+     * provisioned via the admin console before this fix, where DPO email != owner email)
+     * so existing tenants keep working. The JOIN enforces the fiduciary is ACTIVE. Pure
+     * read; caller owns the connection.
      */
     private OwnerOperator selectActiveDpoOperator(Connection conn, UUID fiduciaryId, String email) throws SQLException {
+        String dpoLabel = deriveDpoOperatorEmail(email, fiduciaryId);
         try (PreparedStatement ps = conn.prepareStatement(
                 "SELECT o.id, o.name, " + DbEncryption.decryptCol("o.email_enc") + " AS email, o.role, f.name AS fiduciary_name " +
                 "FROM operators o JOIN fiduciaries f ON o.fiduciary_id = f.id " +
                 "WHERE o.fiduciary_id = ? AND o.status = 'ACTIVE' AND f.status = 'ACTIVE' " +
-                "AND UPPER(o.role) = 'DPO' AND o.email_hmac = " + DbEncryption.HMAC + " " +
+                "AND UPPER(o.role) = 'DPO' " +
+                "AND (o.email_hmac = " + DbEncryption.HMAC + " OR o.email_hmac = " + DbEncryption.HMAC + ") " +
                 "ORDER BY o.created_at DESC LIMIT 1")) {
             int qi = DbEncryption.bindKey(ps, 1);             // param 1: decrypt key for email_enc
             ps.setObject(qi++, fiduciaryId);                   // fiduciary_id
-            qi = DbEncryption.bindHmac(ps, qi, email);         // email_hmac match
+            qi = DbEncryption.bindHmac(ps, qi, dpoLabel);      // email_hmac match (synthetic DPO label)
+            qi = DbEncryption.bindHmac(ps, qi, email);         // OR email_hmac match (legacy raw DPO email)
             try (ResultSet r = ps.executeQuery()) {
                 if (r.next()) {
                     return new OwnerOperator(
@@ -618,20 +630,26 @@ public class Operator implements Action {
                 }
             }
 
-            // 2) INSERT the passwordless DPO operator. name is GLOBALLY unique (the unique
-            //    index is global), so embed the fiduciary UUID. email is the VERIFIED DPO
-            //    email (an identity label here, NEVER a login credential — password_hash
-            //    is the unusable sentinel).
+            // 2) INSERT the passwordless DPO operator. BOTH name AND email are GLOBALLY
+            //    unique (the unique indexes are global, not per-fiduciary), so we store a
+            //    SYNTHETIC, role-distinct email LABEL (deriveDpoOperatorEmail, "dpo+<fid>@")
+            //    rather than the raw verified DPO email — otherwise, when the owner IS the
+            //    DPO, this collides with the owner's ADMIN row (same email_hmac) and the
+            //    mint fails (vAIb-9nb0). The label is NEVER a login credential (password_hash
+            //    is the unusable sentinel) and is never user-visible (fabric overrides the
+            //    console display name from the verified email). The minted JWT subject is
+            //    this label, so getVerifiedFiduciaryId resolves the DPO row to THIS tenant.
             String dpoName = "DPO (Wix) " + fiduciaryId;
+            String dpoLabel = deriveDpoOperatorEmail(dpoEmail, fiduciaryId);
             try {
                 String sql = "INSERT INTO operators (id, name, email_plaintext, email_enc, email_hmac, password_hash, recovery_key_hash, role, status, fiduciary_id, created_at, last_updated_at) " +
                         "VALUES (uuid_generate_v4(), ?, ?, " + DbEncryption.ENCRYPT + ", " + DbEncryption.HMAC + ", ?, NULL, 'DPO', 'ACTIVE', ?, NOW(), NOW())";
                 try (PreparedStatement ins = conn.prepareStatement(sql)) {
                     int ci = 1;
                     ins.setString(ci++, dpoName);
-                    ins.setString(ci++, dpoEmail);                   // email_plaintext
-                    ci = DbEncryption.bindEncrypt(ins, ci, dpoEmail); // email_enc
-                    ci = DbEncryption.bindHmac(ins, ci, dpoEmail);    // email_hmac
+                    ins.setString(ci++, dpoLabel);                   // email_plaintext (synthetic DPO label)
+                    ci = DbEncryption.bindEncrypt(ins, ci, dpoLabel); // email_enc
+                    ci = DbEncryption.bindHmac(ins, ci, dpoLabel);    // email_hmac
                     ins.setString(ci++, UNUSABLE_PASSWORD_HASH);      // password_hash (unusable)
                     ins.setObject(ci++, fiduciaryId);                  // fiduciary_id
                     ins.executeUpdate();
@@ -674,6 +692,37 @@ public class Operator implements Action {
                 : "tenant.invalid";
         if (host.isEmpty()) host = "tenant.invalid";
         return "owner+" + fiduciaryId + "@" + host;
+    }
+
+    /**
+     * vAIb-9nb0 — Derive the DPO operator's STORED email LABEL (never a credential).
+     *
+     * WHY a SYNTHETIC, role-distinct label (not the raw verified DPO email): when the
+     * owner IS the DPO (a small tenant, the common case), the owner's auto-created ADMIN
+     * operator ALREADY stores that exact email, and operators.email_hmac is a GLOBAL
+     * UNIQUE index — so inserting a second (DPO) row with the same email collides
+     * (SQLState 23505), the re-SELECT for role=DPO finds only the ADMIN row, the bind
+     * returns null, and the mint fails -> the DPO console renders "temporarily
+     * unavailable". Embedding the fiduciary UUID under a "dpo+" prefix yields a globally
+     * unique, deterministic label distinct from deriveOwnerEmail's "owner+"/raw-contact
+     * scheme, so the ADMIN (writer) and DPO (approver) stay SEPARATE operator identities
+     * even for the same human. The minted JWT carries THIS label as its subject, so
+     * downstream getVerifiedFiduciaryId (email_hmac lookup) resolves the DPO row to THIS
+     * tenant; the console DISPLAY name is overridden by fabric from the verified email,
+     * so the synthetic label is never user-visible. Host is taken from the verified DPO
+     * email when valid (purely cosmetic), else a sentinel — uniqueness comes from the fid.
+     */
+    private String deriveDpoOperatorEmail(String verifiedDpoEmail, UUID fiduciaryId) {
+        String host = "tenant.invalid";
+        if (verifiedDpoEmail != null) {
+            int at = verifiedDpoEmail.lastIndexOf('@');
+            if (at > -1 && at < verifiedDpoEmail.length() - 1) {
+                String h = verifiedDpoEmail.substring(at + 1).trim().toLowerCase()
+                        .replaceAll("[^a-z0-9.-]", "");
+                if (!h.isEmpty()) host = h;
+            }
+        }
+        return "dpo+" + fiduciaryId + "@" + host;
     }
 
     private void handleLogout(HttpServletRequest req, HttpServletResponse res) {
