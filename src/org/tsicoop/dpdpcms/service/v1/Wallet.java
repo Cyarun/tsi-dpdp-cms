@@ -13,8 +13,11 @@ import java.time.Instant;
 
 /**
  * Wallet handles lifecycle commands originating from the user's Portable Wallet.
- * Maintains provenance by recording new consent artifacts for every action.
- * Background purging (CES) is triggered by the state transitions in consent_records.
+ * Maintains provenance by recording a new immutable consent artifact for every action.
+ * Background purging (CES) is triggered by flagging the principal in data_principal
+ * (last_ces_run = NULL) so the CES batch job re-evaluates and creates the purge_requests.
+ * Every protected command is scoped to a single principal via the signed SYNC token —
+ * userId and fiduciaryId come from the token, never the request body.
  */
 public class Wallet implements Action {
 
@@ -66,6 +69,10 @@ public class Wallet implements Action {
                     break;
                 case "REVOKE_PURPOSE":
                     String purposeId = (String) input.get("purpose_id");
+                    if (purposeId == null || purposeId.trim().isEmpty()) {
+                        OutputProcessor.errorResponse(res, 400, "Bad Request", "Missing purpose_id.", req.getRequestURI());
+                        return;
+                    }
                     result = handleRevokePurpose(ctx, purposeId);
                     break;
                 case "GLOBAL_ERASURE":
@@ -191,6 +198,11 @@ public class Wallet implements Action {
                 iStmt.executeUpdate();
             }
 
+            // Flag this principal for CES re-evaluation so the background purge job
+            // creates the purge_requests for the now-withdrawn purpose. Mirrors the
+            // canonical withdraw path in Consent (resets last_ces_run to NULL).
+            flagCESForPurge(conn, ctx.userId, ctx.fiduciaryId, "WALLET_REVOKE");
+
             conn.commit();
             JSONObject res = new JSONObject();
             res.put("success", true);
@@ -246,6 +258,13 @@ public class Wallet implements Action {
                     iStmt.setString(5, consents.toJSONString());
                     iStmt.executeUpdate();
                 }
+
+                // Flag this principal for CES re-evaluation so the background purge job
+                // picks up the ERASURE_REQUEST and creates the purge_requests. Mirrors the
+                // canonical erasure path in Consent (resets last_ces_run to NULL). The
+                // DPO-driven purge flow itself is owned by Compliance/CES — we only
+                // create the request by flagging the principal.
+                flagCESForPurge(conn, ctx.userId, ctx.fiduciaryId, "ERASURE_REQUEST");
             }
             conn.commit();
             JSONObject res = new JSONObject();
@@ -257,6 +276,26 @@ public class Wallet implements Action {
             throw e;
         } finally {
             pool.cleanup(rs, pstmt, conn);
+        }
+    }
+
+    /**
+     * Registers/refreshes this principal in data_principal and resets last_ces_run to NULL,
+     * which is what makes the CES batch job re-evaluate the latest consent action and create
+     * the downstream purge_requests. This is the same mechanism the canonical withdraw/erasure
+     * path in Consent uses to trigger purges; runs inside the caller's transaction so the
+     * record write and the CES flag commit (or roll back) atomically.
+     */
+    private void flagCESForPurge(Connection conn, String userId, String fiduciaryId, String lastConsentMechanism) throws SQLException {
+        String sql = "INSERT INTO data_principal (user_id, fiduciary_id, last_consent_mechanism, last_ces_run) " +
+                "VALUES (?, ?, ?, NULL) " +
+                "ON CONFLICT (user_id, fiduciary_id) DO UPDATE SET " +
+                "last_consent_mechanism = EXCLUDED.last_consent_mechanism, last_ces_run = NULL";
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setString(1, userId);
+            try { stmt.setObject(2, UUID.fromString(fiduciaryId)); } catch (Exception ex) { stmt.setString(2, fiduciaryId); }
+            stmt.setString(3, lastConsentMechanism);
+            stmt.executeUpdate();
         }
     }
 
