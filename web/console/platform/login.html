@@ -153,7 +153,7 @@ async function handlePlatformLogin(event) {
     // The platform console is the cross-tenant admin dashboard (a NULL-fiduciary
     // operator drives get_admin_metrics / list_fiduciaries cross-tenant). Another
     // agent owns the console page's name/branding; we only point at it.
-    const PLATFORM_CONSOLE_URL = '/console/admin/dashboard.html';
+    const PLATFORM_CONSOLE_URL = (function(){var P=location.pathname;return P.slice(0,P.indexOf('/platform/'))+'/platform/dashboard.html';})();
 
     event.preventDefault();
     const email = document.getElementById('email').value;
