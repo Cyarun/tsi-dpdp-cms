@@ -9,25 +9,27 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="../env.js"></script>
     <style>
+        /* DPDPA.support FIXED BRAND (vAIb-xhke) — staff setup page; fixed brand. */
         :root {
-            --tsi-primary: #006A67; /* Primary Dark Teal Color */
-            --tsi-accent: #008D8A; /* Slightly lighter for accents */
-            --background: #f4fbf9; /* Light, clean background */
-            --card-bg: #FFFFFF;
-            --radius: 0.5rem;
+            --navy-900: #101d4a; --red-500: #e3263b; --red-600: #c81f31; --ink: #1d2330;
+            --tsi-primary: var(--navy-900); --tsi-accent: var(--red-500);
+            --background: #f6f7f9; --card-bg: #FFFFFF; --radius: 0.5rem;
         }
 
         body {
             background-color: var(--background);
-            font-family: ui-sans-serif, system-ui, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', system-ui, 'Inter', 'Segoe UI', Roboto, sans-serif;
+            color: var(--ink);
             margin: 0;
             padding: 0;
             min-height: 100vh;
         }
 
-        .primary-bg { background-color: var(--tsi-primary); }
-        .primary-text { color: var(--tsi-primary); }
-        .hover\:bg-primary-dark:hover { background-color: #004d4a; }
+        h1, h2, h3, h4 { color: var(--navy-900); }
+        /* Primary CTA = brand RED; .primary-bg is the red action surface here. */
+        .primary-bg { background-color: var(--red-500); }
+        .primary-text { color: var(--navy-900); }
+        .hover\:bg-primary-dark:hover { background-color: var(--red-600); }
 
         .card-login {
             background-color: var(--card-bg);
@@ -44,7 +46,11 @@
 
 <div class="card-login">
     <div class="text-center mb-8">
-        <h1 class="text-3xl font-bold primary-text">Super Admin Setup</h1>
+        <div class="flex items-center justify-center gap-2 mb-3">
+            <img src="../brand/logo.svg" alt="DPDPA" width="36" height="36" style="border-radius:9px">
+            <span class="text-lg font-bold primary-text">DPDPA.center</span>
+        </div>
+        <h1 class="text-2xl font-bold primary-text">Super Admin Setup</h1>
     </div>
 
     <p id="setup-message" class="text-sm font-medium hidden" role="alert"></p>

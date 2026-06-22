@@ -8,10 +8,14 @@
   <!-- Load Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
+    /* DPDPA.support FIXED BRAND (vAIb-xhke) — admin/staff console; fixed brand, no host theme. */
     :root {
-      --tsi-primary: #006A67; /* Primary Dark Teal Color */
-      --tsi-accent: #008D8A; /* Slightly lighter for accents */
-      --background: #f4fbf9; /* Light, clean background */
+      --navy-900: #101d4a; --navy-800: #182a63; --navy-700: #22387f;
+      --red-500: #e3263b; --red-600: #c81f31;
+      --ink: #1d2330; --gray-500: #6b7384;
+      --tsi-primary: var(--navy-900);
+      --tsi-accent: var(--red-500);
+      --background: #ffffff; --surface-2: #f6f7f9;
       --card-bg: #FFFFFF;
       --border: 20 5.9% 90%;
       --radius: 0.5rem;
@@ -19,16 +23,24 @@
 
     body {
       background-color: var(--background);
-      font-family: ui-sans-serif, system-ui, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', system-ui, 'Inter', 'Segoe UI', Roboto, sans-serif;
+      color: var(--ink);
       margin: 0;
       padding: 0;
       min-height: 100vh;
     }
 
-    .primary-bg { background-color: var(--tsi-primary); }
-    .primary-text { color: var(--tsi-primary); }
-    .accent-text { color: var(--tsi-accent); }
-    .border-primary { border-color: var(--tsi-primary); }
+    h1, h2, h3, h4 { color: var(--navy-900); }
+
+    .primary-bg { background-color: var(--navy-900); }
+    .primary-text { color: var(--navy-900); }
+    .accent-text { color: var(--red-500); }
+    .accent-bg { background-color: var(--red-500); }
+    .border-primary { border-color: var(--navy-900); }
+    .btn-brand { background-color: var(--red-500); color: #fff; transition: background-color .18s ease; }
+    .btn-brand:hover { background-color: var(--red-600); }
+    a:not(.nav-link) { color: var(--red-500); }
+    a:not(.nav-link):hover { color: var(--red-600); }
 
     /* --- Sidebar Styling --- */
     .sidebar {
@@ -59,8 +71,8 @@
     }
 
     .nav-link:hover, .nav-link.active {
-      background-color: #e5f5f4;
-      color: var(--tsi-primary);
+      background-color: #fdeaec;
+      color: var(--red-500);
       font-weight: 600;
     }
 
@@ -152,7 +164,7 @@
 <div id="sidebar" class="sidebar lg:relative flex flex-col justify-between">
   <div>
     <div class="px-5 pb-6 border-b border-gray-200 lg:block hidden">
-      <span class="text-xl font-bold primary-text">DPDPA.center</span>
+      <span class="flex items-center gap-2"><img src="../brand/logo.svg" alt="DPDPA" width="28" height="28" style="border-radius:7px"><span class="text-lg font-bold primary-text">DPDPA.center</span></span>
     </div>
     <nav class="flex flex-col space-y-1 mt-4 px-3">
       <a href="dashboard.html" class="nav-link">
