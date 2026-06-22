@@ -442,7 +442,13 @@ public class Operator implements Action {
                 "SELECT o.id, o.name, " + DbEncryption.decryptCol("o.email_enc") + " AS email, o.role, f.name AS fiduciary_name " +
                 "FROM operators o JOIN fiduciaries f ON o.fiduciary_id = f.id " +
                 "WHERE o.fiduciary_id = ? AND o.status = 'ACTIVE' AND f.status = 'ACTIVE' " +
-                "ORDER BY (CASE WHEN UPPER(o.role) = UPPER(?) THEN 0 ELSE 1 END), o.created_at DESC " +
+                // SEC/UX FIX (owner-lands-on-DPO regression after the vAIb-9nb0 DPO auto-create):
+                // when no role hint (plain owner app-url launch), an empty hint made the CASE never
+                // match → it fell to created_at DESC → picked the NEWLY auto-created DPO row → the
+                // OWNER landed on the (blank-for-owner) DPO dashboard. Default-prefer ADMIN so a
+                // hintless owner launch binds to the ADMIN operator; an explicit ?role=dpo still
+                // wins via the hint. Order: exact-hint-match, then ADMIN, then newest.
+                "ORDER BY (CASE WHEN UPPER(o.role) = UPPER(?) THEN 0 WHEN UPPER(o.role) = 'ADMIN' THEN 1 ELSE 2 END), o.created_at DESC " +
                 "LIMIT 1")) {
             int qi = DbEncryption.bindKey(ps, 1);          // param 1: decrypt key for email_enc
             ps.setObject(qi++, fiduciaryId);                 // fiduciary_id
