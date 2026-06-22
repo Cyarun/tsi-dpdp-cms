@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DPDPA.center - Compliance Management</title>
+    <title>TSI DPDP CMS - Compliance Management</title>
     <!-- Load Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -158,7 +158,7 @@
 <div id="sidebar" class="sidebar lg:relative flex flex-col justify-between">
     <div>
         <div class="px-5 pb-6 border-b border-gray-200 lg:block hidden">
-            <span class="text-xl font-bold primary-text">DPDPA.center</span>
+            <span class="text-xl font-bold primary-text">TSI DPDP CMS</span>
         </div>
         <nav class="flex flex-col space-y-1 mt-4 px-3">
             <a href="dashboard.html" class="nav-link">Dashboard</a>
@@ -187,6 +187,10 @@
     <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
         <h1 class="text-2xl font-black text-slate-800 tracking-tight">Compliance Enforcement</h1>
         <div class="flex gap-3">
+            <button onclick="openLegalHoldsModal()" class="bg-white border border-orange-300 text-orange-700 px-4 py-2 rounded-md text-sm font-medium hover:bg-orange-50 transition duration-150 flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>
+                Legal Holds
+            </button>
             <button onclick="openCesJobsModal()" class="bg-white border border-slate-300 text-slate-600 px-4 py-2 rounded-md text-sm font-medium hover:bg-slate-50 transition duration-150 flex items-center gap-2">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="M12 12v9"/><path d="m16 16-4-4-4 4"/></svg>
                 View Jobs
@@ -206,10 +210,11 @@
                 <input type="text" id="search-input" placeholder="Search by User ID..." class="p-2 border border-gray-300 rounded-md text-sm w-full max-w-xs">
                 <select id="status-filter" class="p-2 border border-gray-300 rounded-md text-sm">
                     <option value="ALL">Status: ALL</option>
-                    <option value="PURGE_INITIATED">INITIATED</option>
-                    <option value="PURGE_IN_PROGRESS">IN PROGRESS</option>
-                    <option value="PURGE_COMPLETED">COMPLETED</option>
-                    <option value="LEGAL_HOLD_APPLIED">LEGAL HOLD</option>
+                    <option value="INITIATED">INITIATED (awaiting DPO)</option>
+                    <option value="CONFIRMED">CONFIRMED</option>
+                    <option value="COMPLETED">COMPLETED</option>
+                    <option value="FAILED">FAILED</option>
+                    <option value="UNDER_LEGAL_HOLD">UNDER LEGAL HOLD</option>
                 </select>
             </div>
             <span id="request-count" class="text-sm text-gray-500">Loading...</span>
@@ -219,19 +224,20 @@
             <table class="min-w-full divide-y divide-gray-200">
                 <thead>
                 <tr class="table-header">
-                    <th class="px-4 py-3 text-sm">Request</th>
-                    <th class="px-4 py-3 text-sm">Data Principal</th>
-                    <th class="px-4 py-3 text-sm">Purpose</th>
-                    <th class="px-4 py-3 text-sm">Trigger</th>
+                    <th class="px-4 py-3 text-sm">Request ID</th>
+                    <th class="px-4 py-3 text-sm">User ID</th>
+                    <th class="px-4 py-3 text-sm">Purpose ID</th>
+                    <th class="px-4 py-3 text-sm">Trigger Event</th>
                     <th class="px-4 py-3 text-sm">Target App</th>
                     <th class="px-4 py-3 text-sm">Initiated At</th>
+                    <th class="px-4 py-3 text-sm">Records</th>
                     <th class="px-4 py-3 text-sm">Status</th>
                     <th class="px-4 py-3 text-sm">Actions</th>
                 </tr>
                 </thead>
                 <tbody id="purge-table-body" class="bg-white divide-y divide-gray-200">
                 <tr>
-                    <td colspan="6" class="p-4 text-center text-gray-500">
+                    <td colspan="9" class="p-4 text-center text-gray-500">
                         Loading Purge request data...
                     </td>
                 </tr>
@@ -260,36 +266,111 @@
             </div>
         </div>
 
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm mb-4">
+            <div class="space-y-1">
+                <p><strong>Confirmed By (DPO):</strong> <span id="detail-confirmed-by" class="font-mono text-xs"></span></p>
+                <p><strong>Confirmed At:</strong> <span id="detail-confirmed-at"></span></p>
+            </div>
+            <div class="space-y-1">
+                <p><strong>Records Affected:</strong> <span id="detail-records-affected"></span></p>
+                <p><strong>Completed At:</strong> <span id="detail-completed-at"></span></p>
+            </div>
+        </div>
+
         <h3 class="font-semibold text-lg mt-4 border-b pb-1">Context & Details:</h3>
         <p id="detail-context" class="p-2 bg-gray-50 rounded-md text-gray-700 italic mt-2 mb-4"></p>
 
-        <h3 class="font-semibold text-lg mt-4 border-b pb-1">Update Status & Documentation:</h3>
-        <form id="purge-update-form" class="mt-3 space-y-3">
-            <div>
-                <label for="new-status" class="block text-sm font-medium text-gray-700">Set Status To</label>
-                <select id="new-status" name="new_status" required class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm">
-                    <option value="PURGE_IN_PROGRESS">In Progress</option>
-                    <option value="PURGE_COMPLETED">Completed (Data Purged)</option>
-                    <option value="PURGE_FAILED">Failed (Manual Review Needed)</option>
-                    <option value="LEGAL_HOLD_APPLIED">Under Legal Hold</option>
-                </select>
+        <!-- Legal hold banner (shown when UNDER_LEGAL_HOLD) -->
+        <div id="legal-hold-banner" class="hidden bg-orange-50 border border-orange-200 text-orange-800 p-3 rounded-md mb-4 text-sm">
+            <strong>Purge blocked by an active legal hold.</strong> This request cannot be confirmed or completed until the legal retention exception is lifted. Manage holds via the <button type="button" onclick="closeModal('purge-modal-overlay');openLegalHoldsModal();" class="underline font-semibold">Legal Holds</button> panel.
+        </div>
+
+        <!-- DPO action form (hidden when terminal / under hold) -->
+        <div id="purge-action-section">
+            <h3 class="font-semibold text-lg mt-4 border-b pb-1">DPO Action:</h3>
+            <p id="purge-action-hint" class="text-xs text-gray-500 mt-1 mb-2"></p>
+            <form id="purge-update-form" class="mt-2 space-y-3">
+                <div>
+                    <label for="new-status" class="block text-sm font-medium text-gray-700">Transition To</label>
+                    <select id="new-status" name="new_status" required class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm"></select>
+                </div>
+                <div id="records-affected-wrap" class="hidden">
+                    <label for="records-affected" class="block text-sm font-medium text-gray-700">Records Affected Count <span class="text-red-500">*</span></label>
+                    <input type="number" min="0" id="records-affected" name="records_affected_count" placeholder="e.g. 12" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm">
+                    <p class="text-xs text-gray-400 mt-1">Attested number of records actually purged (required to mark COMPLETED).</p>
+                </div>
+                <div>
+                    <label for="details-notes" class="block text-sm font-medium text-gray-700">Audit Details / Observations</label>
+                    <textarea id="details-notes" name="details" rows="3" placeholder="Additional details regarding the purge execution..." class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm"></textarea>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" onclick="openHoldFromPurge()" class="bg-orange-100 text-orange-800 px-4 py-2 rounded-md text-sm font-medium hover:bg-orange-200">Apply Legal Hold</button>
+                    <button type="button" onclick="closeModal('purge-modal-overlay')" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-300">Cancel</button>
+                    <button type="submit" id="update-request-btn" class="primary-bg text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-opacity-90">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Legal Retention Exceptions (Litigation Holds) -->
+<div id="legal-holds-modal" class="modal-overlay">
+    <div class="modal-content">
+        <button class="absolute top-4 right-4 text-gray-500 hover:text-gray-800 text-2xl" onclick="closeModal('legal-holds-modal')">&times;</button>
+        <div class="flex justify-between items-center mb-4">
+            <h2 class="text-xl font-bold text-orange-700">Legal Retention Exceptions</h2>
+            <button onclick="loadLegalHolds()" class="text-xs text-orange-600 font-bold uppercase hover:underline">Refresh</button>
+        </div>
+        <p class="text-xs text-gray-500 mb-4">A legal hold (e.g. litigation hold) BLOCKS purge for a principal. Open purge requests for that principal are placed UNDER_LEGAL_HOLD until the hold is lifted. (DPDP Act 2023 Section 8/17 retention exceptions.)</p>
+
+        <!-- Apply new hold -->
+        <form id="apply-hold-form" class="bg-orange-50 border border-orange-100 p-3 rounded-md mb-5 space-y-3">
+            <h3 class="font-semibold text-sm text-orange-800">Apply New Hold</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Principal (User ID) <span class="text-red-500">*</span></label>
+                    <input type="text" id="hold-user-id" class="w-full p-2 border border-slate-300 rounded-md text-sm" placeholder="e.g. data_principal_xyz789" required>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Data Categories (comma-sep, blank = all)</label>
+                    <input type="text" id="hold-categories" class="w-full p-2 border border-slate-300 rounded-md text-sm" placeholder="e.g. financial, communications">
+                </div>
             </div>
             <div>
-                <label for="details-notes" class="block text-sm font-medium text-gray-700">Audit Details / Observations</label>
-                <textarea id="details-notes" name="details" rows="3" placeholder="Additional details regarding the purge execution..." class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm"></textarea>
+                <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Legal Basis <span class="text-red-500">*</span></label>
+                <input type="text" id="hold-basis" class="w-full p-2 border border-slate-300 rounded-md text-sm" placeholder="e.g. Litigation hold - Case #1234" required>
             </div>
-            <div class="modal-footer">
-                <button type="button" onclick="closeModal('purge-modal-overlay')" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-300">Cancel</button>
-                <button type="submit" id="update-request-btn" class="primary-bg text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-opacity-90">Save Fulfillment State</button>
+            <div class="flex justify-end">
+                <button type="submit" id="apply-hold-btn" class="bg-orange-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-orange-700">Apply Hold (Block Purge)</button>
             </div>
         </form>
+
+        <h3 class="font-semibold text-sm text-slate-700 mb-2">Existing Holds</h3>
+        <div class="overflow-x-auto">
+            <table class="w-full text-left">
+                <thead>
+                <tr class="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">
+                    <th class="pb-2 px-2">Principal</th>
+                    <th class="pb-2 px-2">Categories</th>
+                    <th class="pb-2 px-2">Legal Basis</th>
+                    <th class="pb-2 px-2">Status</th>
+                    <th class="pb-2 px-2">Applied</th>
+                    <th class="pb-2 px-2">Action</th>
+                </tr>
+                </thead>
+                <tbody id="legal-holds-body" class="text-sm divide-y divide-slate-50"></tbody>
+            </table>
+        </div>
+        <div class="modal-footer">
+            <button type="button" onclick="closeModal('legal-holds-modal')" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-300">Close</button>
+        </div>
     </div>
 </div>
 
 <!-- Modal: View CES Jobs -->
 <div id="ces-jobs-modal" class="modal-overlay">
     <div class="modal-content">
-        <button class="absolute top-4 right-4 text-gray-500 hover:text-gray-800 text-2xl" onclick="closeModal('ces-jobs-modal'); loadPurgeRequests()">&times;</button>
+        <button class="absolute top-4 right-4 text-gray-500 hover:text-gray-800 text-2xl" onclick="closeModal('ces-jobs-modal')">&times;</button>
         <div class="flex justify-between items-center mb-4">
             <h2 class="text-xl font-bold text-gray-800">Background Enforcement Jobs</h2>
             <button onclick="loadCesJobs()" class="text-xs text-teal-600 font-bold uppercase hover:underline">Refresh</button>
@@ -309,7 +390,7 @@
             </table>
         </div>
         <div class="modal-footer">
-            <button type="button" onclick="closeModal('ces-jobs-modal'); loadPurgeRequests()" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-300">Close</button>
+            <button type="button" onclick="closeModal('ces-jobs-modal')" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-300">Close</button>
         </div>
     </div>
 </div>
@@ -351,27 +432,13 @@
     </div>
 </div>
 
-<!-- vAIb-kyog: shared audience dictionary + tenant/staff gate (clean labels vs raw IDs) -->
-<script src="../audience-view.js"></script>
-<script src="../tenant-scope.js"></script>
 <script>
     // --- Configuration ---
     const API_URL_PURGE = '/api/v1/admin/compliance';
     const API_URL_JOBS = '/api/v1/admin/job';
     const AUTH_TOKEN = localStorage.getItem('authToken');
     const FIDUCIARY_ID = localStorage.getItem('fiduciary_id');
-    // vAIb-kyog: audience flag — TENANT sees short refs + labels; TSI staff see raw uuids/enums.
-    const AV = window.AudienceView;
-    const IS_STAFF = AV ? AV.isStaffView() : false;
-    function triggerLabel(t) {
-        const map = { account_deletion:'Account deletion', consent_withdrawal:'Consent withdrawn', retention_expiry:'Retention expired', erasure_request:'Erasure requested', cessation:'Service ended' };
-        return map[(t||'').toLowerCase()] || (AV ? AV.humanize(t) : (t||'—'));
-    }
-    // Show the real DPO/owner name, NEVER a "Site Owner (Wix) <uuid>" placeholder or a
-    // bare uuid (defence in depth — the DPO launch already overrides username server-side
-    // with the verified DPO name). (user 2026-06-22)
-    const _rawUser = localStorage.getItem('username') || '';
-    const USER_NAME = (/^Site Owner \(Wix\)\s+[0-9a-f-]{8,}/.test(_rawUser) || /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.test(_rawUser)) ? '' : _rawUser;
+    const USER_NAME = localStorage.getItem('username');
     document.getElementById('username').textContent = USER_NAME || 'DPO User';
 
     let tableBody, countSpan, searchInput, statusFilter, purgeModalOverlay, updateForm;
@@ -390,45 +457,53 @@
         }
     }
 
+    // HTML-escape any value that originates from stored/principal data before it
+    // touches the DOM (defense-in-depth against stored XSS via user_id/details).
+    function esc(v) {
+        if (v === null || v === undefined) return '';
+        return String(v)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
     function createStatusBadge(status) {
         let colorClass = '';
         switch (status) {
-            case 'PURGE_INITIATED': colorClass = 'bg-blue-100 text-blue-800'; break;
-            case 'PURGE_IN_PROGRESS': colorClass = 'bg-yellow-100 text-yellow-800'; break;
-            case 'PURGE_COMPLETED': colorClass = 'bg-green-100 text-green-800'; break;
-            case 'PURGE_FAILED': colorClass = 'bg-red-100 text-red-800'; break;
-            // Updated color for Legal Hold as requested
-            case 'LEGAL_HOLD_APPLIED': colorClass = 'bg-orange-100 text-orange-800'; break;
+            case 'INITIATED': colorClass = 'bg-blue-100 text-blue-800'; break;
+            case 'CONFIRMED': colorClass = 'bg-yellow-100 text-yellow-800'; break;
+            case 'COMPLETED': colorClass = 'bg-green-100 text-green-800'; break;
+            case 'FAILED': colorClass = 'bg-red-100 text-red-800'; break;
+            case 'UNDER_LEGAL_HOLD': colorClass = 'bg-orange-100 text-orange-800'; break;
             default: colorClass = 'bg-gray-100 text-gray-800';
         }
-        return `<span class="px-3 py-1 text-xs font-medium rounded-full ${colorClass}">${status.replace(/_/g, ' ')}</span>`;
+        return `<span class="px-3 py-1 text-xs font-medium rounded-full ${colorClass}">${esc((status || '').replace(/_/g, ' '))}</span>`;
     }
 
     function createRequestRow(req) {
         const row = document.createElement('tr');
-        // vAIb-kyog: tenant sees short refs (not raw uuids) + human purpose/trigger labels;
-        // staff keep the raw ids/enums for debugging.
-        const reqRef  = IS_STAFF ? ('...' + AV.esc(req.id.slice(-8)))   : AV.esc(AV.shortRef(req.id, 'REQ'));
-        const userRef = IS_STAFF ? AV.esc(req.user_id)                  : AV.esc(AV.shortRef(req.user_id, 'DP'));
-        const purpose = IS_STAFF ? AV.esc(req.purpose_id)               : AV.esc(AV.purpose(req.purpose_id));
-        const trigger = IS_STAFF ? AV.esc(req.trigger_event)            : AV.esc(triggerLabel(req.trigger_event));
+        const purpose = req.purpose_id === '*' ? 'ALL purposes' : (req.purpose_id || '—');
+        const records = (req.records_affected_count !== undefined && req.records_affected_count !== null)
+            ? esc(req.records_affected_count) : '—';
+        const actionLabel = req.status === 'INITIATED' ? 'Confirm'
+            : (req.status === 'CONFIRMED' ? 'Complete' : 'Manage');
         row.innerHTML = `
-            <td class="px-4 py-3 text-sm ${IS_STAFF ? 'font-mono ' : ''}text-gray-600">${reqRef}</td>
-            <td class="px-4 py-3 text-sm text-gray-800">${userRef}</td>
-            <td class="px-4 py-3 text-sm text-gray-800">${purpose}</td>
-            <td class="px-4 py-3 text-sm text-gray-600">${trigger}</td>
-            <td class="px-4 py-3 text-sm text-gray-600">${AV.esc(AV.appName(req.app_name) || req.app_name || '—')}</td>
+            <td class="px-4 py-3 text-sm font-mono text-gray-600">...${esc(req.id.slice(-8))}</td>
+            <td class="px-4 py-3 text-sm text-gray-800">${esc(req.user_id)}</td>
+            <td class="px-4 py-3 text-sm text-gray-800">${esc(purpose)}</td>
+            <td class="px-4 py-3 text-sm text-gray-600">${esc(req.trigger_event)}</td>
+            <td class="px-4 py-3 text-sm text-gray-600">${esc(req.app_name || '—')}</td>
             <td class="px-4 py-3 text-sm text-gray-600">${new Date(req.initiated_at).toLocaleDateString()}</td>
+            <td class="px-4 py-3 text-sm text-gray-600 text-center">${records}</td>
             <td class="px-4 py-3 whitespace-nowrap text-sm">${createStatusBadge(req.status)}</td>
             <td class="px-4 py-3 text-sm">
-                <button class="text-indigo-600 hover:text-indigo-900 font-medium" onclick="viewPurgeRequest('${req.id}')">Manage</button>
+                <button class="text-indigo-600 hover:text-indigo-900 font-medium" data-id="${esc(req.id)}" onclick="viewPurgeRequest(this.getAttribute('data-id'))">${actionLabel}</button>
             </td>
         `;
         return row;
     }
 
     async function loadPurgeRequests() {
-        tableBody.innerHTML = `<tr><td colspan="6" class="p-4 text-center text-gray-500">Loading requests...</td></tr>`;
+        tableBody.innerHTML = `<tr><td colspan="9" class="p-4 text-center text-gray-500">Loading requests...</td></tr>`;
 
         try {
             const payload = {
@@ -454,14 +529,14 @@
 
             tableBody.innerHTML = '';
             if (requests.length === 0) {
-                tableBody.innerHTML = `<tr><td colspan="6" class="p-4 text-center text-gray-500">No matching requests found.</td></tr>`;
+                tableBody.innerHTML = `<tr><td colspan="9" class="p-4 text-center text-gray-500">No matching requests found.</td></tr>`;
             } else {
                 requests.forEach(r => tableBody.appendChild(createRequestRow(r)));
             }
             countSpan.textContent = `Total: ${requests.length} Requests`;
 
         } catch (error) {
-            tableBody.innerHTML = `<tr><td colspan="6" class="p-4 text-center text-red-600">Failed to load compliance data.</td></tr>`;
+            tableBody.innerHTML = `<tr><td colspan="9" class="p-4 text-center text-red-600">Failed to load compliance data.</td></tr>`;
         }
     }
 
@@ -474,21 +549,81 @@
             });
             const req = await response.json();
 
-            // vAIb-kyog: tenant sees app/purpose/trigger labels + a short principal ref (no uuid).
-            document.getElementById('modal-app-name').textContent = IS_STAFF ? req.app_name : (AV.appName(req.app_name) || req.app_name || '—');
-            document.getElementById('detail-user-id').textContent = IS_STAFF ? req.user_id : AV.shortRef(req.user_id, 'DP');
-            document.getElementById('detail-purpose-id').textContent = IS_STAFF ? req.purpose_id : (AV.purpose(req.purpose_id) || '—');
-            document.getElementById('detail-trigger').textContent = IS_STAFF ? req.trigger_event : triggerLabel(req.trigger_event);
+            // textContent is XSS-safe (no HTML parsing).
+            document.getElementById('modal-app-name').textContent = req.app_name || '—';
+            document.getElementById('detail-user-id').textContent = req.user_id;
+            document.getElementById('detail-purpose-id').textContent = req.purpose_id === '*' ? 'ALL purposes' : req.purpose_id;
+            document.getElementById('detail-trigger').textContent = req.trigger_event;
             document.getElementById('detail-status').innerHTML = createStatusBadge(req.status);
             document.getElementById('detail-initiated').textContent = new Date(req.initiated_at).toLocaleString();
             document.getElementById('detail-context').textContent = req.details || "No additional context provided.";
-            // Prefill form
-            document.getElementById('new-status').value = req.status === 'PENDING' ? 'IN_PROGRESS' : req.status;
+
+            // Oversight fields
+            document.getElementById('detail-confirmed-by').textContent = req.confirmed_by || '—';
+            document.getElementById('detail-confirmed-at').textContent = req.confirmed_at ? new Date(req.confirmed_at).toLocaleString() : '—';
+            document.getElementById('detail-records-affected').textContent =
+                (req.records_affected_count !== undefined && req.records_affected_count !== null) ? req.records_affected_count : '—';
+            document.getElementById('detail-completed-at').textContent = req.completed_at ? new Date(req.completed_at).toLocaleString() : '—';
+
+            // --- Drive the DPO action UI from the canonical lifecycle ---
+            const status = req.status;
+            const banner = document.getElementById('legal-hold-banner');
+            const actionSection = document.getElementById('purge-action-section');
+            const select = document.getElementById('new-status');
+            const hint = document.getElementById('purge-action-hint');
+            const recordsWrap = document.getElementById('records-affected-wrap');
+
+            banner.classList.add('hidden');
+            actionSection.classList.remove('hidden');
+            recordsWrap.classList.add('hidden');
+            select.innerHTML = '';
+            document.getElementById('records-affected').value =
+                (req.records_affected_count !== undefined && req.records_affected_count !== null) ? req.records_affected_count : '';
             document.getElementById('details-notes').value = req.details || '';
 
+            // Allowed next transitions, mirroring the server-side state machine.
+            let options = [];
+            if (status === 'INITIATED') {
+                options = [['CONFIRMED', 'Confirm (DPO approves purge)'], ['FAILED', 'Reject / Failed (manual review)']];
+                hint.textContent = 'This erasure/withdrawal is awaiting DPO confirmation. Confirm to authorise the purge.';
+            } else if (status === 'CONFIRMED') {
+                options = [['COMPLETED', 'Complete (data purged)'], ['FAILED', 'Failed (manual review)']];
+                hint.textContent = 'Confirmed. Execute the purge, then mark COMPLETED with the records-affected count.';
+            } else if (status === 'UNDER_LEGAL_HOLD') {
+                banner.classList.remove('hidden');
+                actionSection.classList.add('hidden');
+            } else {
+                // COMPLETED / FAILED — terminal, no further action.
+                actionSection.classList.add('hidden');
+            }
+            options.forEach(([v, label]) => {
+                const o = document.createElement('option');
+                o.value = v; o.textContent = label;
+                select.appendChild(o);
+            });
+            toggleRecordsInput();
+
             updateForm.setAttribute('data-id', id);
+            updateForm.setAttribute('data-user-id', req.user_id || '');
             purgeModalOverlay.style.display = 'flex';
         } catch (e) { alert("Error fetching request details."); }
+    }
+
+    // Records-affected count is required only when completing the purge.
+    function toggleRecordsInput() {
+        const select = document.getElementById('new-status');
+        const recordsWrap = document.getElementById('records-affected-wrap');
+        if (select.value === 'COMPLETED') recordsWrap.classList.remove('hidden');
+        else recordsWrap.classList.add('hidden');
+    }
+
+    // Apply a legal hold for the principal of the currently-open purge request.
+    function openHoldFromPurge() {
+        const uid = updateForm.getAttribute('data-user-id') || '';
+        closeModal('purge-modal-overlay');
+        openLegalHoldsModal();
+        document.getElementById('hold-user-id').value = uid;
+        document.getElementById('hold-basis').focus();
     }
 
     // --- CES JOB LOGIC ---
@@ -520,7 +655,7 @@
             });
 
             const data = await response.json();
-            const cesJobs = data.slice(0, 10);
+            const cesJobs = data;
 
             tbody.innerHTML = '';
             if (cesJobs.length === 0) {
@@ -528,18 +663,13 @@
             } else {
                 cesJobs.forEach(job => {
                      const statusColor = job.status === 'PURGE_COMPLETED' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600';
-                     // vAIb-kyog: tenant sees a short job ref + humanized type/subtype/status; staff raw.
-                     const jobRef  = IS_STAFF ? ('...' + AV.esc(job.id.slice(-8))) : AV.esc(AV.shortRef(job.id, 'JOB'));
-                     const jType   = IS_STAFF ? AV.esc(job.job_type)               : AV.esc(AV.humanize(job.job_type === 'CES' ? 'Consent enforcement' : job.job_type));
-                     const jSub    = IS_STAFF ? AV.esc(job.subtype || 'FULL_RUN')  : AV.esc(AV.humanize(job.subtype || 'Full run'));
-                     const jStatus = IS_STAFF ? AV.esc(job.status)                 : AV.esc(AV.humanize(job.status));
                      tbody.innerHTML += `
                         <tr class="hover:bg-slate-50 border-b border-slate-50">
-                            <td class="p-3 text-[11px] ${IS_STAFF ? 'font-mono ' : ''}text-slate-500">${jobRef}</td>
-                            <td class="p-3 font-bold text-xs text-slate-700">${jType}</td>
-                            <td class="p-3 text-xs text-slate-600">${jSub}</td>
-                            <td class="p-3 text-xs text-slate-500">${AV.esc(new Date(job.created_at).toLocaleString())}</td>
-                            <td class="p-3"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${statusColor}">${jStatus}</span></td>
+                            <td class="p-3 font-mono text-[11px] text-slate-500">...${job.id.slice(-8)}</td>
+                            <td class="p-3 font-bold text-xs text-slate-700">${job.job_type}</td>
+                            <td class="p-3 text-xs text-slate-600">${job.subtype || 'FULL_RUN'}</td>
+                            <td class="p-3 text-xs text-slate-500">${new Date(job.created_at).toLocaleString()}</td>
+                            <td class="p-3"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${statusColor}">${job.status}</span></td>
                         </tr>
                      `;
                 });
@@ -607,40 +737,155 @@
     statusFilter.addEventListener('change', loadPurgeRequests);
     searchInput.addEventListener('input', () => { loadPurgeRequests(); });
 
+    document.getElementById('new-status').addEventListener('change', toggleRecordsInput);
+
     updateForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         const id = updateForm.getAttribute('data-id');
+        const targetStatus = document.getElementById('new-status').value;
         const btn = document.getElementById('update-request-btn');
+
+        const payload = {
+            "_func": "update_purge_status",
+            "fiduciary_id": localStorage.getItem('fiduciary_id'),
+            "id": id,
+            "status": targetStatus,
+            "details": document.getElementById('details-notes').value
+        };
+
+        // Completing a purge requires the DPO's attested records-affected count.
+        if (targetStatus === 'COMPLETED') {
+            const racRaw = document.getElementById('records-affected').value;
+            if (racRaw === '' || isNaN(parseInt(racRaw, 10)) || parseInt(racRaw, 10) < 0) {
+                alert("Records Affected Count is required (>= 0) to mark a purge COMPLETED.");
+                return;
+            }
+            payload.records_affected_count = parseInt(racRaw, 10);
+        }
+
         btn.disabled = true;
         btn.textContent = 'Saving...';
-
         try {
-            const payload = {
-                "_func": "update_purge_status",
-                "fiduciary_id": localStorage.getItem('fiduciary_id'),
-                "id": id,
-                "status": document.getElementById('new-status').value,
-                "details": document.getElementById('details-notes').value
-            };
-
             const response = await fetch(API_URL_PURGE, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${AUTH_TOKEN}` },
                 body: JSON.stringify(payload)
             });
+            const data = await response.json().catch(() => ({}));
 
-            if (response.ok) {
-                alert("Purge request status updated successfully.");
+            if (response.ok && data.success !== false) {
+                alert(data.message || "Purge request status updated successfully.");
                 closeModal('purge-modal-overlay');
                 loadPurgeRequests();
             } else {
-                alert("Failed to update status.");
+                alert((data && data.message) ? data.message : "Failed to update status.");
             }
         } finally {
             btn.disabled = false;
-            btn.textContent = 'Save Fulfillment State';
+            btn.textContent = 'Save';
         }
     });
+
+    // --- LEGAL RETENTION EXCEPTIONS (litigation holds) ---
+
+    function openLegalHoldsModal() {
+        document.getElementById('legal-holds-modal').style.display = 'flex';
+        loadLegalHolds();
+    }
+
+    async function loadLegalHolds() {
+        const tbody = document.getElementById('legal-holds-body');
+        tbody.innerHTML = '<tr><td colspan="6" class="p-4 text-center text-slate-400">Loading holds...</td></tr>';
+        try {
+            const response = await fetch(API_URL_PURGE, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${AUTH_TOKEN}` },
+                body: JSON.stringify({ "_func": "list_legal_exceptions", "fiduciary_id": FIDUCIARY_ID })
+            });
+            const holds = await response.json();
+            tbody.innerHTML = '';
+            if (!Array.isArray(holds) || holds.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="p-4 text-center text-slate-400">No legal holds on record.</td></tr>';
+                return;
+            }
+            holds.forEach(h => {
+                let cats = '';
+                try { const arr = JSON.parse(h.data_categories || '[]'); cats = arr.length ? arr.join(', ') : 'ALL'; }
+                catch (e) { cats = 'ALL'; }
+                const isActive = h.status === 'ACTIVE';
+                const action = isActive
+                    ? `<button class="text-teal-600 hover:underline font-semibold" data-id="${esc(h.id)}" onclick="liftHold(this.getAttribute('data-id'))">Lift</button>`
+                    : '<span class="text-slate-300">—</span>';
+                tbody.innerHTML += `
+                    <tr class="hover:bg-slate-50 border-b border-slate-50">
+                        <td class="p-2 text-xs text-slate-700">${esc(h.user_id)}</td>
+                        <td class="p-2 text-xs text-slate-600">${esc(cats)}</td>
+                        <td class="p-2 text-xs text-slate-600">${esc(h.legal_basis)}</td>
+                        <td class="p-2"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${isActive ? 'bg-orange-100 text-orange-700' : 'bg-slate-100 text-slate-500'}">${esc(h.status)}</span></td>
+                        <td class="p-2 text-[11px] text-slate-500">${h.applied_at ? new Date(h.applied_at).toLocaleDateString() : '—'}</td>
+                        <td class="p-2 text-xs">${action}</td>
+                    </tr>`;
+            });
+        } catch (e) {
+            tbody.innerHTML = '<tr><td colspan="6" class="p-4 text-center text-red-600">Failed to load legal holds.</td></tr>';
+        }
+    }
+
+    document.getElementById('apply-hold-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const userId = document.getElementById('hold-user-id').value.trim();
+        const basis = document.getElementById('hold-basis').value.trim();
+        const catsRaw = document.getElementById('hold-categories').value.trim();
+        if (!userId || !basis) { alert("Principal User ID and Legal Basis are required."); return; }
+        const dataCategories = catsRaw ? catsRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
+
+        const btn = document.getElementById('apply-hold-btn');
+        btn.disabled = true; btn.textContent = 'Applying...';
+        try {
+            const response = await fetch(API_URL_PURGE, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${AUTH_TOKEN}` },
+                body: JSON.stringify({
+                    "_func": "apply_legal_exception",
+                    "fiduciary_id": FIDUCIARY_ID,
+                    "user_id": userId,
+                    "legal_basis": basis,
+                    "data_categories": dataCategories
+                })
+            });
+            const data = await response.json().catch(() => ({}));
+            if (response.ok && data.success !== false) {
+                const blocked = (data.data && data.data.purge_requests_blocked) || 0;
+                alert(`Legal hold applied. ${blocked} open purge request(s) blocked.`);
+                document.getElementById('apply-hold-form').reset();
+                loadLegalHolds();
+                loadPurgeRequests();
+            } else {
+                alert((data && data.message) ? data.message : "Failed to apply legal hold.");
+            }
+        } finally {
+            btn.disabled = false; btn.textContent = 'Apply Hold (Block Purge)';
+        }
+    });
+
+    async function liftHold(id) {
+        if (!confirm("Lift this legal hold? Purge requests held under it will be released back to INITIATED.")) return;
+        try {
+            const response = await fetch(API_URL_PURGE, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${AUTH_TOKEN}` },
+                body: JSON.stringify({ "_func": "lift_legal_exception", "fiduciary_id": FIDUCIARY_ID, "id": id })
+            });
+            const data = await response.json().catch(() => ({}));
+            if (response.ok && data.success !== false) {
+                alert(data.message || "Legal hold lifted.");
+                loadLegalHolds();
+                loadPurgeRequests();
+            } else {
+                alert((data && data.message) ? data.message : "Failed to lift legal hold.");
+            }
+        } catch (e) { alert("Network error lifting hold."); }
+    }
 
     loadPurgeRequests();
 
@@ -650,6 +895,11 @@
     window.openNewCesJobModal = openNewCesJobModal;
     window.togglePrincipalInput = togglePrincipalInput;
     window.loadCesJobs = loadCesJobs;
+    window.openLegalHoldsModal = openLegalHoldsModal;
+    window.loadLegalHolds = loadLegalHolds;
+    window.liftHold = liftHold;
+    window.openHoldFromPurge = openHoldFromPurge;
+    window.toggleRecordsInput = toggleRecordsInput;
     window.handleLogout = () => { localStorage.clear(); window.location.href = "../index.html"; };
 </script>
 </body>
