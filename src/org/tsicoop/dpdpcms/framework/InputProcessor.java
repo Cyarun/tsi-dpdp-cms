@@ -406,7 +406,11 @@ public class InputProcessor {
             "create_user", "update_user",
             // Grievance / compliance workflow management (operational, not destructive).
             "update_grievance_status", "update_purge_status", "initiate_purge_request",
-            "mark_notification_read"
+            "mark_notification_read",
+            // vAIb-8eem — stamping the >=15d data-subject retention clock on a reset/
+            // decommission is a PROTECTIVE lifecycle op (it makes data HARDER to delete,
+            // never deletes), so the onboarding/decommission role may perform it.
+            "record_retention_hold"
     ));
 
     /**
