@@ -269,13 +269,6 @@
 <script>
   'use strict';
 
-  function esc(s) {
-    if (s == null) return '';
-    return String(s)
-      .replace(/&/g,'&amp;').replace(/</g,'&lt;')
-      .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;');
-  }
-
   // vAIb-cj54: /v1/tracking/report and /v1/tracking/enforce take the Wix signed
   // instance in the POST BODY (not via the /api/ proxy header). The console
   // bootstrap script (injected by the gateway proxy) stores the signed instance in
@@ -284,21 +277,35 @@
     return sessionStorage.getItem('vaib_instance') || '';
   }
 
+  // vAIb-cj54 SECURITY: every tracker field (name / category / config) is
+  // discovery-sourced and attacker-influenceable (a site's discovered embed
+  // apps report their own names). We render ALL of them as DOM text nodes via
+  // textContent — NEVER as innerHTML with untrusted data. The CSS class is
+  // chosen from a fixed allow-list (never from the value), so a hostile
+  // category string cannot inject attributes or markup.
+  var _CATEGORY_CLASS = {
+    advertising: 'badge-advertising',
+    analytics:   'badge-analytics',
+    functional:  'badge-functional',
+    essential:   'badge-essential'
+  };
+
   function categoryBadge(cat) {
-    var map = {
-      advertising: 'badge-advertising',
-      analytics:   'badge-analytics',
-      functional:  'badge-functional',
-      essential:   'badge-essential'
-    };
-    var cls = map[cat] || 'badge-essential';
-    return '<span class="px-2 py-0.5 rounded-full text-[10px] font-black ' + cls + '">' + esc(cat || '—') + '</span>';
+    var span = document.createElement('span');
+    // Allow-list class only — value never flows into the class string.
+    var cls = _CATEGORY_CLASS[cat] || 'badge-essential';
+    span.className = 'px-2 py-0.5 rounded-full text-[10px] font-black ' + cls;
+    // Untrusted category text -> textContent (browser escapes it).
+    span.textContent = (cat == null || cat === '') ? '—' : String(cat);
+    return span;
   }
 
   function statusBadge(needs) {
-    return needs
-      ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-black badge-needs-gate">Needs gating</span>'
-      : '<span class="px-2 py-0.5 rounded-full text-[10px] font-black badge-gated">Gated / OK</span>';
+    var span = document.createElement('span');
+    span.className = 'px-2 py-0.5 rounded-full text-[10px] font-black '
+      + (needs ? 'badge-needs-gate' : 'badge-gated');
+    span.textContent = needs ? 'Needs gating' : 'Gated / OK';
+    return span;
   }
 
   var STATES = ['tracker-loading','tracker-error','tracker-unavailable','tracker-table-wrap','tracker-empty'];
@@ -379,19 +386,52 @@
       return;
     }
 
-    // Populate table
+    // Populate table — built entirely from DOM nodes so NO untrusted
+    // discovery-sourced field (name/category/config) ever touches innerHTML.
     var tbody = document.getElementById('tracker-tbody');
-    tbody.innerHTML = trackers.map(function(t) {
-      return '<tr class="hover:bg-slate-50">'
-        + '<td class="px-3 py-3 font-medium text-slate-700">' + esc(t.name) + '</td>'
-        + '<td class="px-3 py-3">' + categoryBadge(t.default) + '</td>'
-        + '<td class="px-3 py-3">' + categoryBadge(t.current)
-            + (t.overridden ? ' <span class="text-[9px] text-slate-400 italic">overridden</span>' : '')
-            + '</td>'
-        + '<td class="px-3 py-3">' + categoryBadge(t.recommended) + '</td>'
-        + '<td class="px-3 py-3 text-center">' + statusBadge(t.needs_override) + '</td>'
-        + '</tr>';
-    }).join('');
+    tbody.replaceChildren();
+    trackers.forEach(function(t) {
+      var tr = document.createElement('tr');
+      tr.className = 'hover:bg-slate-50';
+
+      // App name (free-text, attacker-influenceable) -> textContent.
+      var tdName = document.createElement('td');
+      tdName.className = 'px-3 py-3 font-medium text-slate-700';
+      tdName.textContent = (t.name == null || t.name === '') ? '—' : String(t.name);
+      tr.appendChild(tdName);
+
+      // Default category badge.
+      var tdDefault = document.createElement('td');
+      tdDefault.className = 'px-3 py-3';
+      tdDefault.appendChild(categoryBadge(t.default));
+      tr.appendChild(tdDefault);
+
+      // Effective category badge (+ "overridden" note as static text).
+      var tdCurrent = document.createElement('td');
+      tdCurrent.className = 'px-3 py-3';
+      tdCurrent.appendChild(categoryBadge(t.current));
+      if (t.overridden) {
+        var note = document.createElement('span');
+        note.className = 'text-[9px] text-slate-400 italic';
+        note.textContent = ' overridden';
+        tdCurrent.appendChild(note);
+      }
+      tr.appendChild(tdCurrent);
+
+      // Recommended category badge.
+      var tdRec = document.createElement('td');
+      tdRec.className = 'px-3 py-3';
+      tdRec.appendChild(categoryBadge(t.recommended));
+      tr.appendChild(tdRec);
+
+      // Status badge.
+      var tdStatus = document.createElement('td');
+      tdStatus.className = 'px-3 py-3 text-center';
+      tdStatus.appendChild(statusBadge(t.needs_override));
+      tr.appendChild(tdStatus);
+
+      tbody.appendChild(tr);
+    });
     showOnly('tracker-table-wrap');
 
     if (needs > 0) {
