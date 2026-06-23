@@ -286,6 +286,31 @@ public class Fiduciary implements Action {
                         OutputProcessor.send(res, HttpServletResponse.SC_OK, output);
                         break;
                     }
+                case "record_retention_hold":
+                    // vAIb-8eem — stamp the DATA-SUBJECT retention clock for a reset/
+                    // decommissioned controller. The archived consents/RoPA/policy MUST be
+                    // retained for >=15 days for the principals' rights (DPDP), independent
+                    // of re-onboarding. SERVER-DERIVED fiduciary only: a tenant operator may
+                    // only stamp their OWN fiduciary (the cross-tenant guard above already
+                    // 403s a mismatched body fiduciary_id); a platform op acts on the body
+                    // fiduciary_id it is authorized for. retain_until is computed HERE as
+                    // max(now + floor_days, the policy's OWN retention) — never shorter than
+                    // the floor; the client cannot supply or shorten the date.
+                    UUID holdFid = isPlatformAdmin ? fiduciaryId : callerScope;
+                    if (holdFid == null) {
+                        OutputProcessor.errorResponse(res, HttpServletResponse.SC_BAD_REQUEST, "Bad Request", "'fiduciary_id' is required for 'record_retention_hold'.", req.getRequestURI());
+                        return;
+                    }
+                    int floorDays = (input.get("floor_days") instanceof Long)
+                            ? ((Long) input.get("floor_days")).intValue() : 15;
+                    if (floorDays < 15) floorDays = 15;   // the 15-day floor can never be lowered
+                    String trigger = htmlEscape((String) input.get("trigger"), 64);
+                    if (trigger == null || trigger.isEmpty()) trigger = "reset_onboarding";
+                    String reason = htmlEscape((String) input.get("reason"), 500);
+                    output = recordRetentionHoldInDb(holdFid, floorDays, trigger, reason);
+                    OutputProcessor.send(res, HttpServletResponse.SC_OK, output);
+                    break;
+
                 default:
                     OutputProcessor.errorResponse(res, HttpServletResponse.SC_BAD_REQUEST, "Bad Request", "Unknown or unsupported '_func' value: " + func, req.getRequestURI());
                     break;
@@ -412,6 +437,82 @@ public class Fiduciary implements Action {
             pstmt.setObject(1, userId);
             rs = pstmt.executeQuery();
             return rs.next() && rs.getInt(1) > 0;
+        } finally {
+            pool.cleanup(rs, pstmt, conn);
+        }
+    }
+
+    /**
+     * vAIb-8eem — HTML-escape free text at the storage boundary so no raw markup is
+     * ever persisted (defence vs stored XSS when a hold reason/trigger is later shown
+     * in a console). Mirrors RopaDeriver.escape. Null-safe; caps length.
+     */
+    private static String htmlEscape(String s, int maxLen) {
+        if (s == null) return null;
+        String t = s.length() > maxLen ? s.substring(0, maxLen) : s;
+        return t.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                .replace("\"", "&quot;").replace("'", "&#39;");
+    }
+
+    /**
+     * vAIb-8eem — INSERT a tenant retention hold stamping the >=15-day DATA-SUBJECT
+     * retention clock for a reset/decommissioned controller.
+     *
+     * retain_until is computed SERVER-SIDE as max(now + floorDays, now + the fiduciary's
+     * LONGEST policy/RoPA retention) so it is NEVER shorter than the 15-day floor AND
+     * never shorter than the controller's own declared retention. The client cannot
+     * supply or shorten the date. fiduciary_id is the caller's server-derived/authorized
+     * scope (never a free body value on the tenant path). Returns the stamped contract
+     * {fiduciary_id, retain_until, floor_days, trigger_event, status}.
+     */
+    private JSONObject recordRetentionHoldInDb(UUID fiduciaryId, int floorDays, String trigger, String reason) throws SQLException {
+        Connection conn = null;
+        PreparedStatement pstmt = null;
+        ResultSet rs = null;
+        PoolDB pool = new PoolDB();
+        // GREATEST() guarantees the floor AND the policy's own (possibly longer) retention.
+        // The RoPA retention is per-activity in days; we take the longest ACTIVE-or-not
+        // entry for the fiduciary as the controller's declared retention. COALESCE -> 0 when
+        // the controller declared none, so the floor wins.
+        String sql =
+            "INSERT INTO tenant_retention_holds (fiduciary_id, retain_until, floor_days, trigger_event, reason) " +
+            "VALUES (?, " +
+            "  GREATEST(" +
+            "    now() + make_interval(days => ?), " +
+            "    now() + make_interval(days => COALESCE((SELECT MAX(retention_period_days) FROM ropa_entries WHERE fiduciary_id = ?), 0))" +
+            "  ), " +
+            "?, ?, ?) " +
+            "RETURNING retain_until";
+        try {
+            conn = pool.getConnection();
+            pstmt = conn.prepareStatement(sql);
+            pstmt.setObject(1, fiduciaryId);
+            pstmt.setInt(2, floorDays);
+            pstmt.setObject(3, fiduciaryId);
+            pstmt.setInt(4, floorDays);
+            pstmt.setString(5, trigger);
+            pstmt.setString(6, reason);
+            rs = pstmt.executeQuery();
+            String retainUntil = "";
+            if (rs.next()) {
+                java.sql.Timestamp ts = rs.getTimestamp(1);
+                if (ts != null) {
+                    retainUntil = ts.toInstant().toString();   // ISO-8601 UTC
+                }
+            }
+            // Non-PII audit: the decommission retention contract (categories/counts only).
+            new Audit().logEventAsync("ADMIN", fiduciaryId, Constants.SERVICE_TYPE_ADMIN_CONSOLE, fiduciaryId,
+                    "TENANT_RETENTION_HOLD_STAMPED", "trigger:" + trigger + ";floor_days:" + floorDays);
+
+            JSONObject out = new JSONObject();
+            out.put("success", true);
+            out.put("fiduciary_id", fiduciaryId.toString());
+            out.put("retain_until", retainUntil);
+            out.put("floor_days", (long) floorDays);
+            out.put("trigger_event", trigger);
+            out.put("status", "ACTIVE");
+            out.put("basis", "data-subject rights (DPDP) — not a re-onboarding cache");
+            return out;
         } finally {
             pool.cleanup(rs, pstmt, conn);
         }
