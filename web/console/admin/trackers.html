@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TSI DPDP CMS - Trackers &amp; Pixels</title>
+  <!-- Load Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+        /* vAIb-cj54: matches the teal brand of this CMS commit (--tsi-primary teal). */
+        :root {
+            --tsi-primary: #006A67;
+            --tsi-accent: #008D8A;
+            --background: #f4fbf9;
+            --card-bg: #FFFFFF;
+            --border: 20 5.9% 90%;
+            --radius: 0.5rem;
+        }
+
+        body {
+            background-color: var(--background);
+            font-family: ui-sans-serif, system-ui, sans-serif;
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+        }
+
+        .primary-bg { background-color: var(--tsi-primary); }
+        .primary-text { color: var(--tsi-primary); }
+        .accent-text { color: var(--tsi-accent); }
+        .border-primary { border-color: var(--tsi-primary); }
+
+        /* --- Sidebar Styling --- */
+        .sidebar {
+            width: 250px;
+            background-color: #f8fafc;
+            box-shadow: 2px 0 5px rgba(0, 0, 0, 0.05);
+            padding-top: 20px;
+            position: fixed;
+            height: 100vh;
+            overflow-y: auto;
+            z-index: 50;
+            transition: transform 0.3s ease-in-out;
+            transform: translateX(-250px);
+        }
+
+        .sidebar.open {
+            transform: translateX(0);
+        }
+
+        .nav-link {
+            display: flex;
+            align-items: center;
+            padding: 10px 20px;
+            margin: 5px 0;
+            border-radius: 6px;
+            color: #4a5568;
+            transition: background-color 0.2s ease, color 0.2s ease;
+        }
+
+        .nav-link:hover, .nav-link.active {
+            background-color: #e5f5f4;
+            color: var(--tsi-primary);
+            font-weight: 600;
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            border-radius: var(--radius);
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+            padding: 20px;
+            border: 1px solid #e2e8f0;
+        }
+
+        .mobile-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 20px;
+            background-color: #ffffff;
+            border-bottom: 1px solid #e2e8f0;
+            position: sticky;
+            top: 0;
+            z-index: 40;
+        }
+
+        @media (min-width: 1024px) {
+            .sidebar { transform: translateX(0); }
+            .mobile-header { display: none; }
+            body { padding-left: 250px; }
+        }
+
+        /* Tracker category badges */
+        .badge-advertising { background: #fff0f0; color: #b91c1c; }
+        .badge-analytics   { background: #eff6ff; color: #2563eb; }
+        .badge-functional  { background: #f0fdf4; color: #16a34a; }
+        .badge-essential   { background: #f8fafc; color: #64748b; }
+        .badge-gated       { background: #f0fdf4; color: #16a34a; }
+        .badge-needs-gate  { background: #fff7ed; color: #c2410c; }
+
+        /* Gate button */
+        .btn-primary {
+            background-color: var(--tsi-primary);
+            color: #fff;
+            transition: background-color .18s ease;
+        }
+        .btn-primary:hover { background-color: #005552; }
+        .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+    </style>
+</head>
+
+<body class="flex lg:p-0">
+
+<!-- Mobile Header/Toggle -->
+<div class="mobile-header lg:hidden">
+  <button id="menu-toggle" class="p-2 rounded-md hover:bg-gray-100 primary-text">
+    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <line x1="4" y1="12" x2="20" y2="12"/>
+      <line x1="4" y1="6" x2="20" y2="6"/>
+      <line x1="4" y1="18" x2="20" y2="18"/>
+    </svg>
+  </button>
+  <span class="text-xl font-bold primary-text">Admin</span>
+  <div class="text-sm text-gray-500">CMS Admin</div>
+</div>
+
+<!-- Sidebar Navigation -->
+<div id="sidebar" class="sidebar lg:relative flex flex-col justify-between">
+  <div>
+    <div class="px-5 pb-6 border-b border-gray-200 lg:block hidden">
+      <span class="text-xl font-bold primary-text">TSI DPDP CMS</span>
+    </div>
+    <nav class="flex flex-col space-y-1 mt-4 px-3">
+      <a href="dashboard.html" class="nav-link">Dashboard</a>
+      <a href="fiduciaries.html" class="nav-link">Fiduciaries</a>
+      <a href="apps.html" class="nav-link">Apps</a>
+      <a href="users.html" class="nav-link">CMS Users</a>
+      <a href="apikeys.html" class="nav-link">API Keys</a>
+      <a href="trackers.html" class="nav-link active">Trackers &amp; Pixels</a>
+    </nav>
+  </div>
+  <div class="p-3 border-t border-gray-200">
+    <div class="mt-2 text-sm text-gray-500 p-2 rounded-md hover:bg-gray-100 cursor-pointer
+                flex justify-between items-center">
+      <span id="username" class="font-bold text-slate-700">Admin User</span>
+      <a href="#" onclick="handleLogout()">
+        <span class="text-xs font-semibold" style="color:var(--tsi-primary)">Logout</span>
+      </a>
+    </div>
+  </div>
+</div>
+
+<!-- Backdrop for mobile -->
+<div id="sidebar-backdrop" class="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden hidden"></div>
+
+<!-- Main Content Area -->
+<main class="flex-1 p-4 lg:p-8 overflow-y-auto">
+
+  <!-- Page header -->
+  <div class="flex justify-between items-center mb-2">
+    <h1 class="text-2xl font-black text-slate-800 tracking-tight">Trackers &amp; Pixels</h1>
+    <button id="btn-gate" onclick="enforceGating()" disabled
+            class="btn-primary px-5 py-2 rounded-lg text-sm font-bold shadow flex items-center gap-2">
+      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+      </svg>
+      Gate All Under-Gated
+    </button>
+  </div>
+  <p class="text-sm text-slate-500 mb-6">
+    Marketing pixels and embed apps installed on your Wix site. Under §6 DPDPA, trackers that
+    collect visitor PII must be blocked behind explicit consent before they fire. Click
+    "Gate All Under-Gated" to apply TAG_OVERRIDE consent-configs via the Wix consent banner.
+  </p>
+
+  <!-- Summary cards (hidden until report loads) -->
+  <div id="summary-cards" class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6 hidden">
+    <div class="card p-4 border-l-4 border-slate-300">
+      <p class="text-xs text-slate-500 font-medium uppercase tracking-wide">Total Found</p>
+      <p id="card-total" class="text-3xl font-black text-slate-800 mt-1">--</p>
+    </div>
+    <div class="card p-4 border-l-4 border-orange-400">
+      <p class="text-xs text-slate-500 font-medium uppercase tracking-wide">Need Gating</p>
+      <p id="card-needs" class="text-3xl font-black text-orange-600 mt-1">--</p>
+    </div>
+    <div class="card p-4 border-l-4 border-green-500">
+      <p class="text-xs text-slate-500 font-medium uppercase tracking-wide">Already Gated</p>
+      <p id="card-gated" class="text-3xl font-black text-green-700 mt-1">--</p>
+    </div>
+    <div class="card p-4 border-l-4 border-blue-500">
+      <p class="text-xs text-slate-500 font-medium uppercase tracking-wide">Advertising</p>
+      <p id="card-adv" class="text-3xl font-black text-blue-700 mt-1">--</p>
+    </div>
+  </div>
+
+  <!-- Enforce result banner -->
+  <div id="enforce-banner" class="hidden mb-4 p-4 rounded-lg border text-sm font-medium"></div>
+
+  <!-- Trackers table card -->
+  <div class="card">
+    <div class="flex justify-between items-center mb-4">
+      <h2 class="text-base font-bold text-slate-700 tracking-tight">Installed Embed Apps</h2>
+      <button onclick="loadReport()"
+              class="text-xs font-black uppercase tracking-widest primary-text hover:underline flex items-center gap-1">
+        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="23 4 23 10 17 10"/>
+          <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+        </svg>
+        Refresh
+      </button>
+    </div>
+
+    <!-- Loading -->
+    <div id="tracker-loading" class="py-12 text-center text-slate-400 text-sm">
+      <svg class="mx-auto mb-3 animate-spin" xmlns="http://www.w3.org/2000/svg" width="24" height="24"
+           viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+      </svg>
+      Loading tracker posture…
+    </div>
+
+    <!-- Error -->
+    <div id="tracker-error" class="hidden py-8 text-center text-red-500 text-sm font-medium"></div>
+
+    <!-- Unavailable -->
+    <div id="tracker-unavailable" class="hidden py-8 text-center text-slate-400 text-sm">
+      <p class="font-bold text-slate-600 mb-1">Tracker data unavailable</p>
+      <p id="tracker-unavailable-reason" class="text-xs"></p>
+    </div>
+
+    <!-- Table -->
+    <div id="tracker-table-wrap" class="hidden overflow-x-auto">
+      <table class="min-w-full divide-y divide-gray-200 text-left text-sm">
+        <thead>
+          <tr class="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+            <th class="px-3 py-3">App Name</th>
+            <th class="px-3 py-3">Default</th>
+            <th class="px-3 py-3">Effective</th>
+            <th class="px-3 py-3">Recommended</th>
+            <th class="px-3 py-3 text-center">Status</th>
+          </tr>
+        </thead>
+        <tbody id="tracker-tbody" class="divide-y divide-gray-100 bg-white"></tbody>
+      </table>
+    </div>
+
+    <!-- Empty -->
+    <div id="tracker-empty" class="hidden py-8 text-center text-slate-400 text-sm">
+      No embed apps found on this site.
+    </div>
+  </div>
+
+  <!-- §6 note -->
+  <p class="mt-4 text-xs text-slate-400">
+    <strong class="text-slate-500">§6 DPDPA:</strong>
+    "Gate All Under-Gated" writes a <code>TAG_OVERRIDE</code> consent-config in Wix for each
+    under-gated tracker — Wix's consent banner will block the pixel until the visitor consents.
+    Only ever upgrades gating; never weakens an existing stricter config. Idempotent: running
+    again on an already-gated site writes nothing.
+  </p>
+
+</main>
+
+<script>
+  'use strict';
+
+  function esc(s) {
+    if (s == null) return '';
+    return String(s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;');
+  }
+
+  // vAIb-cj54: /v1/tracking/report and /v1/tracking/enforce take the Wix signed
+  // instance in the POST BODY (not via the /api/ proxy header). The console
+  // bootstrap script (injected by the gateway proxy) stores the signed instance in
+  // sessionStorage('vaib_instance') from the ?instance= URL param. We read it here.
+  function getInstance() {
+    return sessionStorage.getItem('vaib_instance') || '';
+  }
+
+  function categoryBadge(cat) {
+    var map = {
+      advertising: 'badge-advertising',
+      analytics:   'badge-analytics',
+      functional:  'badge-functional',
+      essential:   'badge-essential'
+    };
+    var cls = map[cat] || 'badge-essential';
+    return '<span class="px-2 py-0.5 rounded-full text-[10px] font-black ' + cls + '">' + esc(cat || '—') + '</span>';
+  }
+
+  function statusBadge(needs) {
+    return needs
+      ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-black badge-needs-gate">Needs gating</span>'
+      : '<span class="px-2 py-0.5 rounded-full text-[10px] font-black badge-gated">Gated / OK</span>';
+  }
+
+  var STATES = ['tracker-loading','tracker-error','tracker-unavailable','tracker-table-wrap','tracker-empty'];
+  function showOnly(id) {
+    STATES.forEach(function(s) {
+      document.getElementById(s).classList.toggle('hidden', s !== id);
+    });
+  }
+
+  function disableGateBtn() {
+    var btn = document.getElementById('btn-gate');
+    btn.disabled = true;
+  }
+
+  function enableGateBtn() {
+    var btn = document.getElementById('btn-gate');
+    btn.disabled = false;
+  }
+
+  async function loadReport() {
+    showOnly('tracker-loading');
+    document.getElementById('summary-cards').classList.add('hidden');
+    document.getElementById('enforce-banner').classList.add('hidden');
+    disableGateBtn();
+
+    var inst = getInstance();
+    if (!inst) {
+      document.getElementById('tracker-error').textContent =
+        'No signed instance found. Open this page from the DPDPA.center Wix dashboard.';
+      showOnly('tracker-error');
+      return;
+    }
+
+    var data;
+    try {
+      // POST directly to the gateway tracking route — NOT through the /api/ CMS proxy.
+      // The route expects {"instance":"<signed>"} in the body (owner-gated read-only).
+      var res = await fetch('/v1/tracking/report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ instance: inst })
+      });
+      data = await res.json();
+      if (!res.ok || !data.ok) {
+        document.getElementById('tracker-error').textContent =
+          'Failed to load trackers: ' + (data.error || ('HTTP ' + res.status));
+        showOnly('tracker-error');
+        return;
+      }
+    } catch (e) {
+      document.getElementById('tracker-error').textContent = 'Network error: ' + e.message;
+      showOnly('tracker-error');
+      return;
+    }
+
+    if (data.unavailable) {
+      document.getElementById('tracker-unavailable-reason').textContent =
+        data.reason || 'Wix embed-app inventory unavailable.';
+      showOnly('tracker-unavailable');
+      return;
+    }
+
+    var trackers = data.trackers || [];
+    var summary  = data.summary  || {};
+
+    // Populate summary cards
+    var adv   = (summary.by_recommended || {})['advertising'] || 0;
+    var needs  = summary.needs_override || 0;
+    var total  = summary.total != null ? summary.total : trackers.length;
+    document.getElementById('card-total').textContent = total;
+    document.getElementById('card-needs').textContent = needs;
+    document.getElementById('card-gated').textContent = total - needs;
+    document.getElementById('card-adv').textContent   = adv;
+    document.getElementById('summary-cards').classList.remove('hidden');
+
+    if (trackers.length === 0) {
+      showOnly('tracker-empty');
+      return;
+    }
+
+    // Populate table
+    var tbody = document.getElementById('tracker-tbody');
+    tbody.innerHTML = trackers.map(function(t) {
+      return '<tr class="hover:bg-slate-50">'
+        + '<td class="px-3 py-3 font-medium text-slate-700">' + esc(t.name) + '</td>'
+        + '<td class="px-3 py-3">' + categoryBadge(t.default) + '</td>'
+        + '<td class="px-3 py-3">' + categoryBadge(t.current)
+            + (t.overridden ? ' <span class="text-[9px] text-slate-400 italic">overridden</span>' : '')
+            + '</td>'
+        + '<td class="px-3 py-3">' + categoryBadge(t.recommended) + '</td>'
+        + '<td class="px-3 py-3 text-center">' + statusBadge(t.needs_override) + '</td>'
+        + '</tr>';
+    }).join('');
+    showOnly('tracker-table-wrap');
+
+    if (needs > 0) {
+      enableGateBtn();
+    }
+  }
+
+  async function enforceGating() {
+    var btn = document.getElementById('btn-gate');
+    btn.disabled = true;
+    var origText = btn.textContent.trim();
+    btn.textContent = 'Applying…';
+
+    var inst   = getInstance();
+    var banner = document.getElementById('enforce-banner');
+    banner.classList.add('hidden');
+
+    var data;
+    try {
+      var res = await fetch('/v1/tracking/enforce', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ instance: inst })
+      });
+      data = await res.json();
+      if (!res.ok || !data.ok) {
+        banner.className = 'mb-4 p-4 rounded-lg border text-sm font-medium bg-red-50 border-red-200 text-red-700';
+        banner.textContent = 'Enforce failed: ' + (data.error || ('HTTP ' + res.status));
+        banner.classList.remove('hidden');
+        btn.textContent = origText;
+        btn.disabled = false;
+        return;
+      }
+    } catch (e) {
+      banner.className = 'mb-4 p-4 rounded-lg border text-sm font-medium bg-red-50 border-red-200 text-red-700';
+      banner.textContent = 'Network error: ' + e.message;
+      banner.classList.remove('hidden');
+      btn.textContent = origText;
+      btn.disabled = false;
+      return;
+    }
+
+    btn.textContent = origText;
+
+    if (data.unavailable) {
+      banner.className = 'mb-4 p-4 rounded-lg border text-sm font-medium bg-yellow-50 border-yellow-200 text-yellow-700';
+      banner.textContent = 'Tracker inventory unavailable — nothing written.';
+      banner.classList.remove('hidden');
+      return;
+    }
+
+    var applied = data.applied != null ? data.applied : 0;
+    if (applied === 0) {
+      banner.className = 'mb-4 p-4 rounded-lg border text-sm font-medium bg-green-50 border-green-200 text-green-700';
+      banner.textContent = 'All trackers already gated — no changes needed (idempotent).';
+    } else {
+      banner.className = 'mb-4 p-4 rounded-lg border text-sm font-medium bg-green-50 border-green-200 text-green-700';
+      banner.textContent = applied + ' tracker' + (applied === 1 ? '' : 's')
+        + ' consent-gated via TAG_OVERRIDE. Refreshing…';
+    }
+    banner.classList.remove('hidden');
+
+    // Reload report to show updated state
+    await loadReport();
+  }
+
+  function handleLogout() {
+    localStorage.clear();
+    window.location.href = '../index.html';
+  }
+
+  document.addEventListener('DOMContentLoaded', function() {
+    var rawUser = localStorage.getItem('username') || '';
+    document.getElementById('username').textContent = rawUser || 'Admin User';
+
+    document.getElementById('menu-toggle').addEventListener('click', function() {
+      document.getElementById('sidebar').classList.toggle('open');
+      document.getElementById('sidebar-backdrop').classList.toggle('hidden');
+    });
+    document.getElementById('sidebar-backdrop').addEventListener('click', function() {
+      document.getElementById('sidebar').classList.toggle('open');
+      document.getElementById('sidebar-backdrop').classList.toggle('hidden');
+    });
+
+    loadReport();
+  });
+</script>
+
+</body>
+</html>
