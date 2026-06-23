@@ -8,335 +8,249 @@
   <!-- Tailwind CDN (same as all DPO console pages) -->
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    /* DPDPA navy fixed brand (vAIb-iz4c §6-B2) — DPO console staff tool;
-       fixed brand, NOT the host Wix tenant theme.
-       Palette: navy-900 #101d4a primary · red-500 #e3263b orphan-danger accent */
+    /* DPDPA.center DPO console — fixed navy brand (NOT host Wix theme).
+       Only structural rules that Tailwind utilities can't express inline.
+       ponytail: minimal <style> block — all visual design is Tailwind utilities on elements */
     :root {
-      --navy-900: #101d4a; --navy-800: #182a63; --navy-700: #22387f;
+      --navy-900: #101d4a; --navy-800: #182a63;
       --red-500:  #e3263b; --red-600:  #c81f31;
-      --ink:      #1d2330; --gray-500: #6b7384;
-      --tsi-primary: var(--navy-900);
-      --tsi-accent:  var(--red-500);
-      --background:  #f6f7f9; --card-bg: #FFFFFF;
-      --radius: 0.5rem;
     }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif; }
 
-    body {
-      background-color: var(--background);
-      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text',
-                   system-ui, 'Inter', 'Segoe UI', Roboto, sans-serif;
-      color: var(--ink);
-      margin: 0; padding: 0; min-height: 100vh;
-    }
-
-    /* ── Sidebar ─────────────────────────────────────────────────────────── */
-    .sidebar {
-      width: 250px; background-color: #f8fafc;
-      box-shadow: 2px 0 5px rgba(0,0,0,.05);
-      padding-top: 20px; position: fixed; top: 0; left: 0;
-      height: 100vh; z-index: 50;
-      border-right: 1px solid #e2e8f0;
-      transition: transform .3s ease-in-out;
-    }
+    /* Sidebar slide-in (mobile) */
     @media (max-width: 1023px) {
-      .sidebar { transform: translateX(-100%); }
-      .sidebar.open { transform: translateX(0); }
+      #sidebar { transform: translateX(-100%); }
+      #sidebar.open { transform: translateX(0); }
     }
     @media (min-width: 1024px) { body { padding-left: 250px; } }
 
-    .nav-link {
-      display: flex; align-items: center;
-      padding: 10px 20px; margin: 5px 0;
-      border-radius: 6px; color: #4a5568;
-      transition: all .2s ease; text-decoration: none;
-    }
-    .nav-link:hover, .nav-link.active {
+    /* Active nav indicator */
+    .nav-link.active {
       background-color: #e8ecf5;
-      color: var(--navy-900); font-weight: 600;
-    }
-    .nav-link.active { border-left: 3px solid var(--navy-900); }
-
-    /* ── Cards ────────────────────────────────────────────────────────────── */
-    .card {
-      background-color: var(--card-bg); border-radius: var(--radius);
-      box-shadow: 0 1px 3px rgba(0,0,0,.1); padding: 20px;
-      border: 1px solid #e2e8f0;
+      color: var(--navy-900);
+      font-weight: 600;
+      border-left: 3px solid var(--navy-900);
     }
 
-    /* ── Headline stat cards ──────────────────────────────────────────────── */
-    .stat-card {
-      background: var(--card-bg); border-radius: var(--radius);
-      box-shadow: 0 1px 4px rgba(0,0,0,.08);
-      padding: 20px; border-top: 4px solid #e2e8f0;
-    }
-    .stat-card.covered  { border-top-color: #22c55e; }   /* green  */
-    .stat-card.derived  { border-top-color: #3b82f6; }   /* blue   */
-    .stat-card.orphan   {                                  /* RED — §6 liability */
-      border-top-color: var(--red-500);
-      background: #fff5f5;
-    }
-    .stat-label {
-      font-size: .65rem; font-weight: 800; color: var(--gray-500);
-      text-transform: uppercase; letter-spacing: .08em;
-    }
-    .stat-value {
-      font-size: 2.5rem; font-weight: 900; color: var(--ink);
-      margin-top: .25rem; line-height: 1;
-    }
-    .stat-card.orphan .stat-value { color: var(--red-600); }
-    .stat-desc {
-      font-size: .7rem; color: var(--gray-500); margin-top: .4rem;
-    }
-
-    /* ── Orphan alert banner ──────────────────────────────────────────────── */
-    .orphan-banner {
-      background: #fff1f2; border: 1.5px solid var(--red-500);
-      border-radius: var(--radius); padding: 14px 18px;
-      display: flex; align-items: flex-start; gap: 12px; margin-bottom: 24px;
-    }
-    .orphan-banner-icon { font-size: 1.4rem; flex-shrink: 0; }
-    .orphan-banner-text { font-size: .8rem; line-height: 1.5; color: #7f1d1d; }
-    .orphan-banner-text strong { color: var(--red-600); }
-
-    /* ── Per-source table ────────────────────────────────────────────────── */
-    .tbl th {
-      font-size: .65rem; font-weight: 800; color: var(--gray-500);
-      text-transform: uppercase; letter-spacing: .06em;
-      padding: 10px 14px; border-bottom: 2px solid #e2e8f0;
-      background: #f8fafc; white-space: nowrap;
-    }
-    .tbl td {
-      padding: 10px 14px; font-size: .82rem; border-bottom: 1px solid #f1f5f9;
-      vertical-align: middle;
-    }
-    .tbl tr:last-child td { border-bottom: none; }
-    .tbl tr:hover td { background: #fafbfd; }
-
-    .pill {
-      display: inline-block; font-size: .6rem; font-weight: 800;
-      padding: 2px 8px; border-radius: 9999px; text-transform: uppercase;
-    }
-    .pill-green  { background: #dcfce7; color: #166534; }
-    .pill-blue   { background: #dbeafe; color: #1e40af; }
-    .pill-red    { background: #fee2e2; color: #991b1b; }
-    .pill-gray   { background: #f1f5f9; color: var(--gray-500); }
-    .pill-amber  { background: #fef3c7; color: #92400e; }
-
-    /* ── Run button ──────────────────────────────────────────────────────── */
-    .run-btn {
-      background: var(--navy-900); color: #fff;
-      border: none; border-radius: var(--radius);
-      padding: 10px 22px; font-size: .85rem; font-weight: 700;
-      cursor: pointer; transition: background .15s;
-      display: inline-flex; align-items: center; gap: 8px;
-    }
-    .run-btn:hover:not(:disabled) { background: var(--navy-800); }
-    .run-btn:disabled { opacity: .55; cursor: not-allowed; }
-
-    /* ── Decommission placeholder ────────────────────────────────────────── */
-    .decomm-btn {
-      background: transparent; color: var(--red-600);
-      border: 1.5px solid var(--red-500); border-radius: var(--radius);
-      padding: 6px 14px; font-size: .75rem; font-weight: 700;
-      cursor: not-allowed; opacity: .55;
-      white-space: nowrap;
-    }
-
-    /* ── State: loading / error ──────────────────────────────────────────── */
+    /* Spinner for run-button loading state */
     .spinner {
-      display: inline-block; width: 16px; height: 16px;
-      border: 2.5px solid rgba(255,255,255,.4);
+      display: inline-block; width: 14px; height: 14px;
+      border: 2px solid rgba(255,255,255,.3);
       border-top-color: #fff; border-radius: 50%;
-      animation: spin .6s linear infinite;
+      animation: spin .65s linear infinite; vertical-align: middle;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
-
-    #audit-error {
-      background: #fff1f2; border: 1px solid #fecaca;
-      border-radius: var(--radius); padding: 14px 18px;
-      color: #7f1d1d; font-size: .82rem;
-    }
-
-    /* Sidebar backdrop */
-    .sidebar-backdrop {
-      position: fixed; inset: 0; background: rgba(0,0,0,.5);
-      z-index: 40; display: none;
-    }
-    .sidebar-backdrop.active { display: block; }
   </style>
 </head>
 
-<body>
+<body class="bg-slate-50 text-slate-800 min-h-screen">
 
 <!-- Mobile header -->
-<div class="lg:hidden flex items-center justify-between p-4 bg-white border-b border-gray-200 sticky top-0 z-30">
-  <button onclick="toggleSidebar()" class="p-2 text-gray-600 focus:outline-none">
+<div class="lg:hidden flex items-center justify-between p-4 bg-white border-b border-slate-200 sticky top-0 z-30">
+  <button onclick="toggleSidebar()" class="p-2 text-slate-500 focus:outline-none">
     <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
     </svg>
   </button>
-  <span class="font-bold" style="color:var(--navy-900)">DPDPA.center</span>
+  <span class="font-bold text-sm" style="color:var(--navy-900)">DPDPA.center</span>
   <div class="w-6"></div>
 </div>
 
-<div id="backdrop" class="sidebar-backdrop" onclick="toggleSidebar()"></div>
+<!-- Sidebar backdrop -->
+<div id="backdrop" class="fixed inset-0 bg-black/50 z-40 hidden" onclick="toggleSidebar()"></div>
 
-<!-- Sidebar -->
-<div id="sidebar" class="sidebar flex flex-col justify-between">
+<!-- Sidebar — shadcn sidebar pattern -->
+<div id="sidebar" class="fixed top-0 left-0 h-full w-[250px] bg-white border-r border-slate-200 flex flex-col justify-between z-50 transition-transform duration-300 ease-in-out shadow-sm">
   <div>
-    <div class="px-5 pb-6 border-b border-gray-200 hidden lg:block">
-      <span class="text-xl font-bold" style="color:var(--navy-900)">DPDPA.center</span>
+    <div class="px-5 py-5 border-b border-slate-200 hidden lg:block">
+      <span class="text-base font-bold tracking-tight" style="color:var(--navy-900)">DPDPA.center</span>
     </div>
-    <nav class="flex flex-col space-y-1 mt-4 px-3">
-      <a href="dashboard.html"  class="nav-link">Dashboard</a>
-      <a href="policies.html"   class="nav-link">Policies</a>
-      <a href="principals.html" class="nav-link">Principals</a>
-      <a href="compliance.html" class="nav-link">Compliance</a>
-      <a href="grievances.html" class="nav-link">Grievances</a>
-      <a href="audit.html"      class="nav-link">Audit</a>
-      <a href="legal.html"      class="nav-link">Legal</a>
-      <a href="ropa.html"       class="nav-link">ROPA</a>
-      <a href="reports.html"    class="nav-link">Reports</a>
-      <a href="coverage.html"   class="nav-link active">Coverage Audit</a>
+    <nav class="flex flex-col gap-0.5 mt-3 px-3">
+      <a href="dashboard.html"  class="nav-link flex items-center gap-2 px-3 py-2 rounded-md text-sm text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors">Dashboard</a>
+      <a href="policies.html"   class="nav-link flex items-center gap-2 px-3 py-2 rounded-md text-sm text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors">Policies</a>
+      <a href="principals.html" class="nav-link flex items-center gap-2 px-3 py-2 rounded-md text-sm text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors">Principals</a>
+      <a href="compliance.html" class="nav-link flex items-center gap-2 px-3 py-2 rounded-md text-sm text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors">Compliance</a>
+      <a href="grievances.html" class="nav-link flex items-center gap-2 px-3 py-2 rounded-md text-sm text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors">Grievances</a>
+      <a href="audit.html"      class="nav-link flex items-center gap-2 px-3 py-2 rounded-md text-sm text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors">Audit</a>
+      <a href="legal.html"      class="nav-link flex items-center gap-2 px-3 py-2 rounded-md text-sm text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors">Legal</a>
+      <a href="ropa.html"       class="nav-link flex items-center gap-2 px-3 py-2 rounded-md text-sm text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors">ROPA</a>
+      <a href="reports.html"    class="nav-link flex items-center gap-2 px-3 py-2 rounded-md text-sm text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors">Reports</a>
+      <a href="coverage.html"   class="nav-link active flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors">Coverage Audit</a>
     </nav>
   </div>
-  <div class="p-3 border-t border-gray-200">
-    <div class="mt-2 text-sm text-gray-500 p-2 rounded-md flex justify-between items-center">
-      <span id="username" class="font-bold text-slate-700">DPO User</span>
-      <button onclick="handleLogout()" class="text-xs font-semibold text-red-500 hover:underline">Logout</button>
+  <div class="p-4 border-t border-slate-200">
+    <div class="flex items-center justify-between">
+      <span id="username" class="text-sm font-semibold text-slate-700">DPO User</span>
+      <button onclick="handleLogout()" class="text-xs font-semibold text-red-500 hover:text-red-700 transition-colors">Logout</button>
     </div>
   </div>
 </div>
 
 <!-- Main content -->
-<main class="p-4 lg:p-8 overflow-y-auto">
+<main class="p-5 lg:p-8 max-w-7xl">
 
-  <!-- Header row -->
-  <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+  <!-- Page header -->
+  <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
     <div>
-      <h1 class="text-2xl font-black tracking-tight" style="color:var(--navy-900)">Consent Coverage Audit</h1>
-      <p class="text-sm mt-1" style="color:var(--gray-500)">
-        Scans all data subjects across Wix sources and classifies their consent status.<br>
-        <strong>PII-free</strong> — only counts are returned and displayed.
+      <h1 class="text-2xl font-bold tracking-tight" style="color:var(--navy-900)">Consent Coverage Audit</h1>
+      <p class="text-sm text-slate-500 mt-1 leading-relaxed">
+        Scans all data subjects across Wix sources and classifies their consent status.
+        <strong class="text-slate-600 font-semibold">PII-free</strong> — only counts are returned and displayed.
       </p>
     </div>
-    <button id="run-btn" class="run-btn" onclick="runAudit()">
-      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+    <!-- shadcn Button — primary/navy -->
+    <button id="run-btn" onclick="runAudit()"
+      class="inline-flex items-center gap-2 rounded-md px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+      style="background:var(--navy-900);"
+      onmouseover="if(!this.disabled) this.style.background='var(--navy-800)'"
+      onmouseout="this.style.background='var(--navy-900)'">
+      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none"
            stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="12" cy="12" r="10"/>
-        <polyline points="12 8 16 12 12 16"/>
+        <circle cx="12" cy="12" r="10"/><polyline points="12 8 16 12 12 16"/>
         <line x1="8" y1="12" x2="16" y2="12"/>
       </svg>
       Run Audit
     </button>
   </div>
 
-  <!-- Error state (hidden by default) -->
-  <div id="audit-error" class="mb-6 hidden"></div>
+  <!-- shadcn Alert — destructive / error state (hidden by default) -->
+  <div id="audit-error" class="hidden mb-6 flex gap-3 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+    <svg class="mt-0.5 h-4 w-4 shrink-0 text-red-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+         fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+    </svg>
+    <span></span>
+  </div>
 
-  <!-- Orphan alert banner (shown when orphans > 0) -->
-  <div id="orphan-banner" class="orphan-banner hidden">
-    <span class="orphan-banner-icon">⚠️</span>
-    <div class="orphan-banner-text">
-      <strong>Action required: <span id="banner-orphan-count">0</span> orphan subject(s) detected.</strong><br>
-      Orphans are data subjects your installation holds data on with <em>no consent record of any kind</em>.
-      This is a §6 DPDPA liability — the data principal's data is being processed with no legal basis on file.
-      Use "Prepare decommissioning" (§6-B3, coming soon) or manually collect consent before the next compliance review.
+  <!-- shadcn Alert — destructive variant / orphan §6 liability banner -->
+  <div id="orphan-banner" class="hidden mb-6 flex gap-3 rounded-lg border border-red-300 bg-red-50 p-4">
+    <svg class="mt-0.5 h-5 w-5 shrink-0" style="color:var(--red-500)" xmlns="http://www.w3.org/2000/svg"
+         viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+         stroke-linecap="round" stroke-linejoin="round">
+      <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+      <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+    </svg>
+    <div>
+      <p class="text-sm font-semibold text-red-800">
+        Action required: <span id="banner-orphan-count" class="font-bold">0</span> orphan subject(s) detected.
+      </p>
+      <p class="text-xs text-red-700 mt-1 leading-relaxed">
+        Orphans are data subjects your installation holds data on with <em>no consent record of any kind</em>.
+        This is a §6 DPDPA liability — the data principal's data is being processed with no legal basis on file.
+        Use "Prepare decommissioning" (§6-B3, coming soon) or manually collect consent before the next compliance review.
+      </p>
     </div>
   </div>
 
-  <!-- 3-way summary cards -->
-  <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8" id="summary-cards">
+  <!-- shadcn Card grid — 3 summary stat cards -->
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6" id="summary-cards">
 
     <!-- Covered -->
-    <div class="stat-card covered">
-      <div class="stat-label">Covered</div>
-      <div class="stat-value" id="stat-covered">--</div>
-      <div class="stat-desc">
+    <div class="rounded-lg border border-slate-200 bg-white shadow-sm p-6">
+      <div class="flex items-center justify-between mb-3">
+        <p class="text-xs font-semibold uppercase tracking-wider text-slate-400">Covered</p>
+        <span class="inline-flex items-center rounded-full border border-green-200 bg-green-50 px-2.5 py-0.5 text-xs font-semibold text-green-700">§6 ✓</span>
+      </div>
+      <p class="text-4xl font-bold tracking-tight text-slate-900" id="stat-covered">--</p>
+      <p class="mt-2 text-xs text-slate-500 leading-relaxed">
         Interactive / explicit consent on file. The data subject actively gave permission
         (e.g. consent form, opt-in portal). Fully covered under §6.
-      </div>
+      </p>
+      <div class="mt-4 h-1 w-full rounded-full bg-green-500 opacity-70"></div>
     </div>
 
     <!-- Derived-only -->
-    <div class="stat-card derived">
-      <div class="stat-label">Derived-only</div>
-      <div class="stat-value" id="stat-derived">--</div>
-      <div class="stat-desc">
-        Processing basis exists (appointment, order, intake form) but no interactive opt-in.
-        Data is operationally covered by a §6/§7 basis but the principal never gave an
-        explicit consent signal — may need follow-up.
+    <div class="rounded-lg border border-slate-200 bg-white shadow-sm p-6">
+      <div class="flex items-center justify-between mb-3">
+        <p class="text-xs font-semibold uppercase tracking-wider text-slate-400">Derived-only</p>
+        <span class="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-xs font-semibold text-blue-700">§6/§7</span>
       </div>
+      <p class="text-4xl font-bold tracking-tight text-slate-900" id="stat-derived">--</p>
+      <p class="mt-2 text-xs text-slate-500 leading-relaxed">
+        Processing basis exists (appointment, order, intake form) but no interactive opt-in.
+        Operationally covered by a §6/§7 basis — may need explicit follow-up.
+      </p>
+      <div class="mt-4 h-1 w-full rounded-full bg-blue-500 opacity-70"></div>
     </div>
 
-    <!-- Orphan — RED, prominent -->
-    <div class="stat-card orphan">
-      <div class="stat-label" style="color:var(--red-600)">⚠ Orphan — Action needed</div>
-      <div class="stat-value" id="stat-orphan">--</div>
-      <div class="stat-desc" style="color:#9f1d1d">
-        Data held with <strong>no consent record at all</strong>. No interactive consent,
-        no derived processing basis. This is the §6 gap — principal's data exists in your
-        Wix install with zero legal basis on file.
+    <!-- Orphan — RED, prominent, shadcn destructive emphasis -->
+    <div class="rounded-lg border-2 border-red-300 bg-red-50/60 shadow-sm p-6">
+      <div class="flex items-center justify-between mb-3">
+        <p class="text-xs font-semibold uppercase tracking-wider" style="color:var(--red-600)">Orphan — Action needed</p>
+        <span class="inline-flex items-center rounded-full border border-red-300 bg-red-100 px-2.5 py-0.5 text-xs font-semibold" style="color:var(--red-600)">&#9888; §6 Gap</span>
       </div>
+      <p class="text-4xl font-bold tracking-tight" style="color:var(--red-600)" id="stat-orphan">--</p>
+      <p class="mt-2 text-xs leading-relaxed" style="color:#9f1d1d">
+        Data held with <strong>no consent record at all</strong>. No interactive consent,
+        no derived processing basis. This is the §6 gap — data exists in your Wix install
+        with zero legal basis on file.
+      </p>
+      <div class="mt-4 h-1 w-full rounded-full opacity-80" style="background:var(--red-500)"></div>
     </div>
 
   </div>
 
-  <!-- Per-source table -->
-  <div class="card">
-    <div class="flex justify-between items-center mb-4">
-      <h2 class="text-base font-bold" style="color:var(--navy-900)">Per-Source Breakdown</h2>
-      <span id="audit-meta" class="text-xs" style="color:var(--gray-500)"></span>
+  <!-- shadcn Card — per-source data table -->
+  <div class="rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+      <h2 class="text-sm font-semibold" style="color:var(--navy-900)">Per-Source Breakdown</h2>
+      <span id="audit-meta" class="text-xs text-slate-400"></span>
     </div>
 
-    <div id="empty-state" class="py-12 text-center" style="color:var(--gray-500)">
+    <!-- Empty state -->
+    <div id="empty-state" class="py-16 text-center text-slate-400">
+      <svg class="mx-auto h-8 w-8 mb-3 opacity-40" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+           fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/>
+      </svg>
       <p class="text-sm italic">Run the audit to see per-source counts.</p>
     </div>
 
-    <div id="table-wrap" class="overflow-x-auto hidden">
-      <table class="w-full tbl">
+    <!-- shadcn Table markup -->
+    <div id="table-wrap" class="hidden overflow-x-auto">
+      <table class="w-full text-sm">
         <thead>
-          <tr>
-            <th class="text-left">Source</th>
-            <th class="text-right">Seen</th>
-            <th class="text-right">Subjects</th>
-            <th class="text-right text-green-700">Covered</th>
-            <th class="text-right text-blue-700">Derived-only</th>
-            <th class="text-right" style="color:var(--red-600)">Orphan</th>
-            <th class="text-center">Reachable</th>
-            <th class="text-center">Truncated</th>
-            <th class="text-left">Action</th>
+          <tr class="border-b border-slate-200 bg-slate-50/80">
+            <th class="text-left px-6 py-3 text-xs font-semibold uppercase tracking-wider text-slate-400 whitespace-nowrap">Source</th>
+            <th class="text-right px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-400">Seen</th>
+            <th class="text-right px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-400">Subjects</th>
+            <th class="text-right px-4 py-3 text-xs font-semibold uppercase tracking-wider text-green-600">Covered</th>
+            <th class="text-right px-4 py-3 text-xs font-semibold uppercase tracking-wider text-blue-600">Derived</th>
+            <th class="text-right px-4 py-3 text-xs font-semibold uppercase tracking-wider whitespace-nowrap" style="color:var(--red-600)">Orphan</th>
+            <th class="text-center px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-400">Reachable</th>
+            <th class="text-center px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-400">Truncated</th>
+            <th class="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-400">Action</th>
           </tr>
         </thead>
-        <tbody id="source-tbody"></tbody>
+        <tbody id="source-tbody" class="divide-y divide-slate-100"></tbody>
       </table>
     </div>
   </div>
 
-  <!-- Bucket legend -->
-  <div class="card mt-4">
-    <h3 class="text-xs font-black uppercase tracking-widest mb-3" style="color:var(--gray-500)">Bucket Definitions</h3>
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+  <!-- shadcn Card — bucket legend -->
+  <div class="rounded-lg border border-slate-200 bg-white shadow-sm p-6 mt-4">
+    <h3 class="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-4">Bucket Definitions</h3>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
       <div>
-        <span class="pill pill-green">Covered</span>
-        <p class="mt-1 text-xs" style="color:var(--gray-500)">
+        <span class="inline-flex items-center rounded-full bg-green-50 border border-green-200 px-2.5 py-0.5 text-xs font-semibold text-green-700">Covered</span>
+        <p class="mt-2 text-xs text-slate-500 leading-relaxed">
           At least one <em>interactive</em> consent record in the CMS ledger —
           any record whose verification mechanism is NOT a derived processing tag
           (e.g. WIX_MARKETING_CONSENT, an explicit form, a portal grant).
         </p>
       </div>
       <div>
-        <span class="pill pill-blue">Derived-only</span>
-        <p class="mt-1 text-xs" style="color:var(--gray-500)">
+        <span class="inline-flex items-center rounded-full bg-blue-50 border border-blue-200 px-2.5 py-0.5 text-xs font-semibold text-blue-700">Derived-only</span>
+        <p class="mt-2 text-xs text-slate-500 leading-relaxed">
           Consent ledger has entries but <em>all</em> are WIX_DERIVED processing records
           (a §6/§7 basis stamped by the derive-consents engine — appointment, order, form
           intake). No principal-given interactive opt-in exists.
         </p>
       </div>
       <div>
-        <span class="pill pill-red">Orphan</span>
-        <p class="mt-1 text-xs" style="color:var(--gray-500)">
-          <strong>No consent record of any kind</strong> in the CMS for this data subject.
+        <span class="inline-flex items-center rounded-full bg-red-50 border border-red-200 px-2.5 py-0.5 text-xs font-semibold text-red-700">Orphan</span>
+        <p class="mt-2 text-xs text-slate-500 leading-relaxed">
+          <strong class="text-slate-600">No consent record of any kind</strong> in the CMS for this data subject.
           The installation holds their data with zero legal basis on file.
           §6 DPDPA liability — requires immediate action.
         </p>
@@ -387,7 +301,7 @@ function esc(s) {
 
 function toggleSidebar() {
   document.getElementById('sidebar').classList.toggle('open');
-  document.getElementById('backdrop').classList.toggle('active');
+  document.getElementById('backdrop').classList.toggle('hidden');
 }
 
 function handleLogout() {
@@ -424,40 +338,37 @@ function sourceLabel(src) {
 }
 
 function renderSourceRow(src, data) {
+  /* shadcn Badge variants as inline Tailwind — no custom .pill class needed */
   var reachPill = data.reachable
-    ? '<span class="pill pill-green">Yes</span>'
-    : '<span class="pill pill-red">No</span>';
+    ? '<span class="inline-flex items-center rounded-full bg-green-50 border border-green-200 px-2 py-0.5 text-xs font-semibold text-green-700">Yes</span>'
+    : '<span class="inline-flex items-center rounded-full bg-red-50 border border-red-200 px-2 py-0.5 text-xs font-semibold text-red-700">No</span>';
   var truncPill = data.truncated
-    ? '<span class="pill pill-amber">Yes</span>'
-    : '<span class="pill pill-gray">No</span>';
+    ? '<span class="inline-flex items-center rounded-full bg-amber-50 border border-amber-200 px-2 py-0.5 text-xs font-semibold text-amber-700">Yes</span>'
+    : '<span class="inline-flex items-center rounded-full bg-slate-100 border border-slate-200 px-2 py-0.5 text-xs font-semibold text-slate-500">No</span>';
 
   /* Orphan count cell — red when > 0 */
   var orphanCell = data.orphan > 0
-    ? `<td class="text-right font-bold" style="color:var(--red-600)">${esc(String(data.orphan))}</td>`
-    : `<td class="text-right text-slate-400">${esc(String(data.orphan ?? 0))}</td>`;
+    ? '<td class="text-right px-4 py-3.5 font-bold" style="color:var(--red-600)">' + esc(String(data.orphan)) + '</td>'
+    : '<td class="text-right px-4 py-3.5 text-slate-400">' + esc(String(data.orphan ?? 0)) + '</td>';
 
-  /* B3 placeholder: show decommission button when orphan count > 0 */
+  /* B3 placeholder: decommission button when orphan count > 0 */
   var actionCell = data.orphan > 0
-    ? `<td class="text-left">
-         <button class="decomm-btn" disabled title="Coming in §6-B3 — Orphan decommissioning workflow">
-           Prepare decommissioning
-         </button>
-       </td>`
-    : `<td class="text-left text-xs" style="color:var(--gray-500)">—</td>`;
+    ? '<td class="px-4 py-3.5"><button disabled title="Coming in §6-B3 — Orphan decommissioning workflow" class="inline-flex items-center rounded-md border px-3 py-1.5 text-xs font-semibold cursor-not-allowed opacity-50 whitespace-nowrap" style="border-color:var(--red-500);color:var(--red-600)">Prepare decommissioning</button></td>'
+    : '<td class="px-4 py-3.5 text-slate-400">—</td>';
 
-  return `<tr>
-    <td class="font-semibold">${esc(sourceLabel(src))}
-      ${data.note ? `<div class="text-xs mt-0.5" style="color:var(--gray-500)">${esc(data.note)}</div>` : ''}
-    </td>
-    <td class="text-right text-slate-500">${esc(String(data.seen ?? 0))}</td>
-    <td class="text-right font-semibold">${esc(String(data.subjects ?? 0))}</td>
-    <td class="text-right text-green-700 font-semibold">${esc(String(data.covered ?? 0))}</td>
-    <td class="text-right text-blue-700 font-semibold">${esc(String(data.derived_only ?? 0))}</td>
-    ${orphanCell}
-    <td class="text-center">${reachPill}</td>
-    <td class="text-center">${truncPill}</td>
-    ${actionCell}
-  </tr>`;
+  return '<tr class="hover:bg-slate-50/70 transition-colors">'
+    + '<td class="px-6 py-3.5 font-semibold text-slate-800">' + esc(sourceLabel(src))
+    + (data.note ? '<div class="text-xs font-normal text-slate-400 mt-0.5">' + esc(data.note) + '</div>' : '')
+    + '</td>'
+    + '<td class="text-right px-4 py-3.5 text-slate-400">' + esc(String(data.seen ?? 0)) + '</td>'
+    + '<td class="text-right px-4 py-3.5 font-semibold text-slate-700">' + esc(String(data.subjects ?? 0)) + '</td>'
+    + '<td class="text-right px-4 py-3.5 font-semibold text-green-700">' + esc(String(data.covered ?? 0)) + '</td>'
+    + '<td class="text-right px-4 py-3.5 font-semibold text-blue-700">' + esc(String(data.derived_only ?? 0)) + '</td>'
+    + orphanCell
+    + '<td class="text-center px-4 py-3.5">' + reachPill + '</td>'
+    + '<td class="text-center px-4 py-3.5">' + truncPill + '</td>'
+    + actionCell
+    + '</tr>';
 }
 
 function renderSources(sources) {
@@ -465,7 +376,7 @@ function renderSources(sources) {
   var rows = Object.entries(sources || {})
     .map(function(e) { return renderSourceRow(e[0], e[1]); })
     .join('');
-  tbody.innerHTML = rows || '<tr><td colspan="9" class="py-6 text-center text-slate-400 italic">No sources returned.</td></tr>';
+  tbody.innerHTML = rows || '<tr><td colspan="9" class="py-10 text-center text-slate-400 italic text-sm">No sources returned.</td></tr>';
   document.getElementById('empty-state').classList.add('hidden');
   document.getElementById('table-wrap').classList.remove('hidden');
 }
@@ -479,7 +390,7 @@ async function runAudit() {
 
   /* reset UI */
   errBox.classList.add('hidden');
-  errBox.textContent = '';
+  errBox.querySelector('span').textContent = '';
   document.getElementById('orphan-banner').classList.add('hidden');
   document.getElementById('empty-state').classList.remove('hidden');
   document.getElementById('table-wrap').classList.add('hidden');
@@ -499,7 +410,7 @@ async function runAudit() {
      * at /v1/console/cms/dpo/coverage.html?instance=<signed>), the instance
      * IS present and this branch is never reached.
      */
-    errBox.textContent = 'Missing signed instance — this page must be opened through the Wix owner dashboard. If you see this in production, the console proxy is not forwarding the ?instance= param correctly.';
+    errBox.querySelector('span').textContent = 'Missing signed instance — this page must be opened through the Wix owner dashboard. If you see this in production, the console proxy is not forwarding the ?instance= param correctly.';
     errBox.classList.remove('hidden');
     return;
   }
@@ -519,18 +430,18 @@ async function runAudit() {
     try { data = await resp.json(); } catch (_) { data = null; }
 
     if (resp.status === 401) {
-      errBox.textContent = 'Authentication failed (401) — signed instance invalid or expired. Reload the Wix owner dashboard to get a fresh session.';
+      errBox.querySelector('span').textContent = 'Authentication failed (401) — signed instance invalid or expired. Reload the Wix owner dashboard to get a fresh session.';
       errBox.classList.remove('hidden');
       return;
     }
     if (resp.status === 403) {
-      errBox.textContent = 'Access denied (403) — Coverage Audit is restricted to the site owner. Collaborators cannot run this report.';
+      errBox.querySelector('span').textContent = 'Access denied (403) — Coverage Audit is restricted to the site owner. Collaborators cannot run this report.';
       errBox.classList.remove('hidden');
       return;
     }
     if (!resp.ok || !data || !data.ok) {
       var msg = (data && data.error) ? data.error : ('HTTP ' + resp.status);
-      errBox.textContent = 'Audit failed: ' + msg + '. Check the gateway logs or try again.';
+      errBox.querySelector('span').textContent = 'Audit failed: ' + msg + '. Check the gateway logs or try again.';
       errBox.classList.remove('hidden');
       return;
     }
@@ -547,19 +458,17 @@ async function runAudit() {
     if (summary.tenant_suffix) parts.push('tenant …' + esc(summary.tenant_suffix));
     if (summary.generated_at)  parts.push('generated ' + esc(summary.generated_at));
     if (summary.dry)           parts.push('read-only scan');
-    meta.textContent = parts.join(' · ');
+    meta.textContent = parts.join(' \xb7 ');
 
   } catch (err) {
-    errBox.textContent = 'Network error — could not reach the audit endpoint: ' + (err.message || err);
+    errBox.querySelector('span').textContent = 'Network error — could not reach the audit endpoint: ' + (err.message || err);
     errBox.classList.remove('hidden');
   } finally {
     btn.disabled = false;
-    btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
-         stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-      <circle cx="12" cy="12" r="10"/>
-      <polyline points="12 8 16 12 12 16"/>
-      <line x1="8" y1="12" x2="16" y2="12"/>
-    </svg> Run Audit`;
+    btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none"'
+      + ' stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">'
+      + '<circle cx="12" cy="12" r="10"/><polyline points="12 8 16 12 12 16"/>'
+      + '<line x1="8" y1="12" x2="16" y2="12"/></svg> Run Audit';
   }
 }
 
