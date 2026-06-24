@@ -8,44 +8,36 @@
   <!-- Load Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    /* DPDPA.support FIXED BRAND (vAIb-xhke) — admin/staff console; fixed brand, no host theme. */
-    :root {
-      --navy-900: #101d4a; --navy-800: #182a63; --navy-700: #22387f;
-      --red-500: #e3263b; --red-600: #c81f31;
-      --ink: #1d2330; --gray-500: #6b7384;
-      --tsi-primary: var(--navy-900);
-      --tsi-accent: var(--red-500);
-      --background: #ffffff; --surface-2: #f6f7f9;
-      --card-bg: #FFFFFF;
-      --border: 20 5.9% 90%;
-      --radius: 0.5rem;
-    }
+    /* W2 LANE A — tweakcn brand adoption (bead vAIb-4ypo.1).
+       Hardcoded :root literals removed; injected canonical tokens win.
+       Navy = chrome/structure (--tsi-primary→--secondary),
+       Red = action/accent (--tsi-accent→--primary). */
 
     body {
       background-color: var(--background);
-      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', system-ui, 'Inter', 'Segoe UI', Roboto, sans-serif;
+      font-family: var(--font-sans);
       color: var(--ink);
       margin: 0;
       padding: 0;
       min-height: 100vh;
     }
 
-    h1, h2, h3, h4 { color: var(--navy-900); }
+    h1, h2, h3, h4 { color: var(--tsi-primary); }
 
-    .primary-bg { background-color: var(--navy-900); }
-    .primary-text { color: var(--navy-900); }
-    .accent-text { color: var(--red-500); }
-    .accent-bg { background-color: var(--red-500); }
-    .border-primary { border-color: var(--navy-900); }
-    .btn-brand { background-color: var(--red-500); color: #fff; transition: background-color .18s ease; }
+    .primary-bg { background-color: var(--tsi-primary); }
+    .primary-text { color: var(--tsi-primary); }
+    .accent-text { color: var(--tsi-accent); }
+    .accent-bg { background-color: var(--tsi-accent); }
+    .border-primary { border-color: var(--tsi-primary); }
+    .btn-brand { background-color: var(--tsi-accent); color: var(--primary-foreground); transition: background-color .18s ease; }
     .btn-brand:hover { background-color: var(--red-600); }
-    a:not(.nav-link) { color: var(--red-500); }
+    a:not(.nav-link) { color: var(--tsi-accent); }
     a:not(.nav-link):hover { color: var(--red-600); }
 
     /* --- Sidebar Styling --- */
     .sidebar {
       width: 250px;
-      background-color: #f8fafc;
+      background-color: var(--muted);
       box-shadow: 2px 0 5px rgba(0, 0, 0, 0.05);
       padding-top: 20px;
       position: fixed;
@@ -66,13 +58,13 @@
       padding: 10px 20px;
       margin: 5px 0;
       border-radius: 6px;
-      color: #4a5568;
+      color: var(--muted-foreground);
       transition: background-color 0.2s ease, color 0.2s ease;
     }
 
     .nav-link:hover, .nav-link.active {
-      background-color: #fdeaec;
-      color: var(--red-500);
+      background-color: color-mix(in oklch, var(--tsi-accent) 10%, transparent);
+      color: var(--tsi-accent);
       font-weight: 600;
     }
 
@@ -81,13 +73,13 @@
       border-radius: var(--radius);
       box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
       padding: 20px;
-      border: 1px solid #e2e8f0;
+      border: 1px solid var(--border);
     }
 
     .table-header {
-      background-color: #f1f5f9;
+      background-color: var(--muted);
       font-weight: 600;
-      color: #4a5568;
+      color: var(--muted-foreground);
       text-align: left;
     }
 
@@ -97,8 +89,8 @@
       justify-content: space-between;
       align-items: center;
       padding: 10px 20px;
-      background-color: #ffffff;
-      border-bottom: 1px solid #e2e8f0;
+      background-color: var(--card);
+      border-bottom: 1px solid var(--border);
       position: sticky;
       top: 0;
       z-index: 40;
@@ -131,7 +123,7 @@
     }
 
     .modal-content {
-      background: white;
+      background: var(--card);
       padding: 30px;
       border-radius: var(--radius);
       max-width: 700px;
@@ -192,7 +184,7 @@
       System Config
     </a>-->
     <div class="mt-2 text-sm text-gray-500 p-2 rounded-md hover:bg-gray-100 cursor-pointer flex justify-between items-center">
-      <span id="username" class="font-bold text-slate-700">Admin User</span>
+      <span id="username" class="font-bold text-[var(--foreground)]">Admin User</span>
       <a href="#" onclick="handleLogout()"><span class="text-xs font-semibold text-red-500">Logout</span></a>
     </div>
   </div>
@@ -204,7 +196,7 @@
 <!-- Main Content Area -->
 <main class="flex-1 p-4 lg:p-8 overflow-y-auto">
   <div class="flex justify-between items-center mb-6">
-    <h1 class="text-2xl font-black text-slate-800 tracking-tight">API Keys Management</h1>
+    <h1 class="text-2xl font-black text-[var(--foreground)] tracking-tight">API Keys Management</h1>
     <button id="add-key-btn" class="primary-bg text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-opacity-90 transition duration-150">
       + Generate New Key
     </button>
@@ -230,7 +222,7 @@
           <th class="px-4 py-3 text-sm">Actions</th>
         </tr>
         </thead>
-        <tbody id="key-table-body" class="bg-white divide-y divide-gray-200">
+        <tbody id="key-table-body" class="bg-[var(--card)] divide-y divide-[var(--border)]">
         <!-- Data will be dynamically inserted here -->
         <tr>
           <td colspan="7" class="p-4 text-center text-gray-500">
@@ -250,7 +242,7 @@
 <!-- Modal for Generating API Key -->
 <div id="key-modal-overlay" class="modal-overlay">
   <div class="modal-content">
-    <h2 id="modal-title" class="text-lg font-bold text-slate-700 mb-4 tracking-tight">Generate New API Key</h2>
+    <h2 id="modal-title" class="text-lg font-bold text-[var(--foreground)] mb-4 tracking-tight">Generate New API Key</h2>
     <form id="key-form" class="space-y-4">
 
       <!-- Hidden Field for Key ID during display (not input) -->
@@ -266,7 +258,7 @@
         </div>
         <div>
           <label for="app-select" class="block text-sm font-medium text-gray-700">Select App</label>
-          <select id="app-select" name="app_id" disabled required class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 bg-gray-50">
+          <select id="app-select" name="app_id" disabled required class="mt-1 block w-full p-2 border border-[var(--border)] rounded-md shadow-sm focus:ring-[var(--tsi-accent)] focus:border-[var(--tsi-accent)] bg-[var(--muted)]">
             <option value="">-- Select Fiduciary First --</option>
           </select>
           <p class="text-xs text-red-500 mt-1 hidden" id="app-required-msg">An App must be selected to generate a key.</p>
@@ -289,7 +281,7 @@
       </div>
 
       <!-- Section 3: Key Output Display (Hidden unless a key is generated) -->
-      <div id="key-output-section" class="bg-gray-100 p-3 rounded-md hidden">
+      <div id="key-output-section" class="bg-[var(--muted)] p-3 rounded-md hidden">
         <div class="mb-4">
           <label class="block text-sm font-medium text-gray-700 mb-1">API Key</label>
           <code id="generated-key-id" class="block bg-gray-200 p-2 break-all font-mono text-sm font-bold"></code>
