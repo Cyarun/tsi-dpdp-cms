@@ -9,30 +9,30 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="../env.js"></script>
     <style>
-        /* DPDPA.support FIXED BRAND (vAIb-xhke) — staff setup page; fixed brand. */
-        :root {
-            --navy-900: #101d4a; --red-500: #e3263b; --red-600: #c81f31; --ink: #1d2330;
-            --tsi-primary: var(--navy-900); --tsi-accent: var(--red-500);
-            --background: #f6f7f9; --card-bg: #FFFFFF; --radius: 0.5rem;
-        }
+        /* DPDPA.support FIXED BRAND (vAIb-xhke) — staff setup page; fixed brand.
+           W2 re-skin (w2-lane-c): page-local hex literals removed — canonical tokens
+           injected by console.py (tweakcn-theme.css alias layer). Per ADOPTION.md §5.
+           Dark-mode reconcile: no .dark selector or prefers-color-scheme existed here;
+           the "incidental dark" (ADOPTION.md §3) was the blue focus rings + palette
+           utilities fighting the token layer. Neutralised below — fixed-LIGHT output. */
 
         body {
             background-color: var(--background);
-            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', system-ui, 'Inter', 'Segoe UI', Roboto, sans-serif;
-            color: var(--ink);
+            font-family: var(--font-sans);
+            color: var(--foreground);
             margin: 0;
             padding: 0;
             min-height: 100vh;
         }
 
-        h1, h2, h3, h4 { color: var(--navy-900); }
+        h1, h2, h3, h4 { color: var(--secondary); }
         /* Primary CTA = brand RED; .primary-bg is the red action surface here. */
-        .primary-bg { background-color: var(--red-500); }
-        .primary-text { color: var(--navy-900); }
+        .primary-bg { background-color: var(--primary); }
+        .primary-text { color: var(--secondary); }
         .hover\:bg-primary-dark:hover { background-color: var(--red-600); }
 
         .card-login {
-            background-color: var(--card-bg);
+            background-color: var(--card);
             border-radius: var(--radius);
             box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
             padding: 40px;
@@ -59,33 +59,33 @@
 
         <!-- Email -->
         <div>
-            <label for="email" class="block text-sm font-medium text-gray-700">Email Address</label>
+            <label for="email" class="block text-sm font-medium text-[var(--foreground)]">Email Address</label>
             <input type="email" id="email" name="email" required placeholder="admin@example.com"
-                   class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                   class="mt-1 block w-full p-2 border border-[var(--border)] rounded-[var(--radius)] shadow-sm focus:ring-[var(--ring)] focus:border-[var(--ring)] outline-none">
         </div>
 
         <!-- Full Name -->
         <div>
-            <label for="name" class="block text-sm font-medium text-gray-700">Full Name</label>
+            <label for="name" class="block text-sm font-medium text-[var(--foreground)]">Full Name</label>
             <input type="text" id="name" name="name" required placeholder="System Administrator"
-                   class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                   class="mt-1 block w-full p-2 border border-[var(--border)] rounded-[var(--radius)] shadow-sm focus:ring-[var(--ring)] focus:border-[var(--ring)] outline-none">
         </div>
 
         <!-- Password -->
         <div>
-            <label for="password" class="block text-sm font-medium text-gray-700">Password</label>
+            <label for="password" class="block text-sm font-medium text-[var(--foreground)]">Password</label>
             <input type="password" id="password" name="password" required minlength="12" placeholder="Minimum 12 Characters"
-                   class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
-            <p class="mt-1 text-xs text-gray-500">
+                   class="mt-1 block w-full p-2 border border-[var(--border)] rounded-[var(--radius)] shadow-sm focus:ring-[var(--ring)] focus:border-[var(--ring)] outline-none">
+            <p class="mt-1 text-xs text-[var(--muted-foreground)]">
                 Use a unique, strong password (min 12 characters).
             </p>
         </div>
 
         <!-- Password Confirmation -->
         <div>
-            <label for="password-confirm" class="block text-sm font-medium text-gray-700">Confirm Password</label>
+            <label for="password-confirm" class="block text-sm font-medium text-[var(--foreground)]">Confirm Password</label>
             <input type="password" id="password-confirm" name="password_confirm" required minlength="12" placeholder="Repeat Password"
-                   class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                   class="mt-1 block w-full p-2 border border-[var(--border)] rounded-[var(--radius)] shadow-sm focus:ring-[var(--ring)] focus:border-[var(--ring)] outline-none">
         </div>
 
         <!-- Submit Button -->

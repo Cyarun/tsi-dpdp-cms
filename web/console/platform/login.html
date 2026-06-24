@@ -28,22 +28,14 @@
     <style>
         /* DPDPA.support FIXED BRAND (vAIb-xhke) — TSI platform staff console; a staff
            tool, NOT a tenant site, so it keeps the fixed DPDPA brand (navy/red), never
-           the host Wix theme. Tokens: https://dpdpa.support/css/site.css. */
-        :root {
-            --navy-900: #101d4a; --navy-800: #182a63; --navy-700: #22387f;
-            --red-500: #e3263b; --red-600: #c81f31;
-            --ink: #1d2330; --gray-500: #6b7384;
-            --tsi-primary: var(--navy-900);
-            --tsi-platform: var(--navy-900); /* platform surface = brand navy */
-            --background: #f6f7f9;
-            --border: 20 5.9% 90%;
-            --radius: 0.5rem;
-        }
+           the host Wix theme. Tokens: https://dpdpa.support/css/site.css.
+           W2 re-skin (w2-lane-c): page-local hex literals removed — canonical tokens
+           injected by console.py (tweakcn-theme.css alias layer). Per ADOPTION.md §5. */
 
         body {
             background-color: var(--background);
-            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', system-ui, 'Inter', 'Segoe UI', Roboto, sans-serif;
-            color: var(--ink);
+            font-family: var(--font-sans);
+            color: var(--foreground);
             display: flex;
             justify-content: center;
             align-items: center;
@@ -56,8 +48,8 @@
             position: relative;
             overflow: hidden;
             z-index: 0;
-            background-color: var(--red-500);
-            color: #FFFFFF;
+            background-color: var(--primary);
+            color: var(--primary-foreground);
             transition: background-color 0.3s ease;
         }
         .animated-button:hover { background-color: var(--red-600); }
@@ -88,7 +80,7 @@
 
         .input-style {
             height: 40px;
-            border-color: hsl(var(--border));
+            border-color: var(--border);
         }
 
         .login-card {
@@ -96,13 +88,13 @@
         }
 
         .platform-text {
-            color: var(--tsi-platform);
+            color: var(--secondary);
         }
     </style>
 </head>
 
 <body>
-<div class="w-full max-w-lg p-8 bg-white rounded-lg border border-gray-200 login-card">
+<div class="w-full max-w-lg p-8 bg-[var(--card)] rounded-[var(--radius)] border border-[var(--border)] login-card">
 
     <!-- Header / Logo Area — DPDPA.support brand lockup (vAIb-xhke). -->
     <div class="text-center mb-8">
@@ -110,30 +102,30 @@
             <img src="../brand/logo.svg" alt="DPDPA" width="44" height="44" style="border-radius:11px">
             <div class="text-left leading-tight">
                 <span class="block text-xl font-black platform-text tracking-tight">DPDPA.center</span>
-                <span class="block text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em]">TSI Platform Console</span>
+                <span class="block text-[10px] text-[var(--muted-foreground)] font-bold uppercase tracking-[0.2em]">TSI Platform Console</span>
             </div>
         </div>
-        <p class="text-[10px] text-slate-400 mt-1 font-bold uppercase tracking-[0.2em]">Operator Console &middot; Cross-Tenant</p>
-        <h1 class="text-lg font-bold mt-4 text-gray-700">Platform Operator Login</h1>
-        <p class="text-[11px] text-slate-400 mt-2">For TSI platform staff only. Tenant owners &amp; DPOs use their Wix dashboard.</p>
+        <p class="text-[10px] text-[var(--muted-foreground)] mt-1 font-bold uppercase tracking-[0.2em]">Operator Console &middot; Cross-Tenant</p>
+        <h1 class="text-lg font-bold mt-4 text-[var(--foreground)]">Platform Operator Login</h1>
+        <p class="text-[11px] text-[var(--muted-foreground)] mt-2">For TSI platform staff only. Tenant owners &amp; DPOs use their Wix dashboard.</p>
     </div>
 
     <!-- Login Form -->
     <form onsubmit="handlePlatformLogin(event)">
         <div class="space-y-5">
             <div>
-                <label for="email" class="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Email (Login ID)</label>
+                <label for="email" class="block text-[10px] font-black text-[var(--muted-foreground)] uppercase tracking-widest mb-1">Email (Login ID)</label>
                 <input type="email" id="email" name="email" required
-                       class="input-style w-full px-3 py-2 border border-slate-200 rounded-md focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none transition-all text-sm"
+                       class="input-style w-full px-3 py-2 border border-[var(--border)] rounded-[var(--radius)] focus:ring-2 focus:ring-[var(--ring)] focus:border-[var(--ring)] outline-none transition-all text-sm"
                        placeholder="operator@thesilentintelligence.com">
             </div>
 
             <div>
                 <div class="flex justify-between items-center mb-1">
-                    <label for="password" class="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Password</label>
+                    <label for="password" class="block text-[10px] font-black text-[var(--muted-foreground)] uppercase tracking-widest">Password</label>
                 </div>
                 <input type="password" id="password" name="password" required
-                       class="input-style w-full px-3 py-2 border border-slate-200 rounded-md focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none transition-all text-sm"
+                       class="input-style w-full px-3 py-2 border border-[var(--border)] rounded-[var(--radius)] focus:ring-2 focus:ring-[var(--ring)] focus:border-[var(--ring)] outline-none transition-all text-sm"
                        placeholder="••••••••••••">
             </div>
 
