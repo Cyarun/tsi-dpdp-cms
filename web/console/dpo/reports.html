@@ -44,25 +44,36 @@
     
 
 
-/* vAIb-mr3u — LAYERED glass (legible over BUSY host photos):
-   1) heavy blur(24px) DISSOLVES the host's nail/flower photo into an abstract wash
-      (high-frequency photo detail is destroyed, so nothing recognizable fights the text);
-   2) a stronger white frost (0.78) gives the glass body without going opaque;
-   3) content CARDS sit on a near-solid surface (0.92) so the actual text is always crisp.
-   The glass is the CHROME; the content rides near-solid cards. AA-safe on any host. */
-:root{ --lg: rgba(255,255,255,0.78); --lg-solid: rgba(248,249,252,0.98); --lg-card: rgba(255,255,255,0.92); }
+
+/* vAIb-mr3u — BRANDED tweakcn glass (gaussian blur + brand tint, blended into host):
+   gaussian blur softens the host photo; a translucent NAVY (tweakcn --secondary) tint + a
+   faint red (--primary) top sheen give OUR brand + real glass character; host shows through
+   softly (blended, not an opaque panel). Cards are tinted translucent glass, text legible. */
+:root{
+  --gl-tint:   oklch(0.3303 0.0753 267.1046 / 0.28);  /* tweakcn navy, low alpha = brand glass */
+  --gl-sheen:  oklch(0.5882 0.2309 28.2936 / 0.10);   /* tweakcn red, faint top sheen */
+  --gl-solid:  oklch(0.3303 0.0753 267.1046 / 0.90);  /* @supports-off fallback */
+  --gl-card:   oklch(1 0 0 / 0.55);                    /* translucent glass card (not flat white) */
+  --gl-card-strong: oklch(1 0 0 / 0.72);
+}
 body::before{
   content:""; position:fixed; inset:0; z-index:-1;
-  background:var(--lg);
-  -webkit-backdrop-filter:blur(24px) saturate(140%) brightness(1.04);
-  backdrop-filter:blur(24px) saturate(140%) brightness(1.04);
+  background:
+    radial-gradient(120% 80% at 50% -10%, var(--gl-sheen), transparent 60%),
+    var(--gl-tint);
+  -webkit-backdrop-filter:blur(22px) saturate(150%);
+  backdrop-filter:blur(22px) saturate(150%);
 }
 @supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
-  body::before{ background:var(--lg-solid); }
+  body::before{ background:var(--gl-solid); }
 }
-body{ background-color:#f5f6fa; }
-/* content cards: near-solid so text is crisp over the heavy-blur glass */
-[class*="bg-[var(--card)]"], .card, [class*="bg-white"]{ background-color:var(--lg-card) !important; }
+body{ background-color:transparent; }
+/* tinted glass cards (translucent, brand-blended) with their OWN blur so text stays crisp */
+[class*="bg-[var(--card)]"], .card, [class*="bg-white"]{
+  background-color:var(--gl-card-strong) !important;
+  -webkit-backdrop-filter:blur(8px); backdrop-filter:blur(8px);
+  border:1px solid oklch(1 0 0 / 0.35) !important;
+}
 </style>
 </head>
 
