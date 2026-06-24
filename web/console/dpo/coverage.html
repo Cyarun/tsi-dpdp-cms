@@ -298,6 +298,31 @@ function signedInstance() {
   return new URLSearchParams(window.location.search).get('instance') || '';
 }
 
+/* vAIb-lzgj — DPO console auth context. The SAME coverage.html serves two surfaces:
+ *   • the OWNER dashboard (/console/cms/dpo/coverage.html?instance=<SIGNED>) — the route
+ *     owner-gates on that signed instance; and
+ *   • the DPO console (/console/cms-dpo/coverage.html?instance=<RAW>&email=&member_sig=
+ *     &member_ts=) — the DPO is a Wix MEMBER, not the owner, so there is NO owner signed
+ *     instance; the route authorizes via the member countersign + registered-DPO gate.
+ * When the countersign fields are present (DPO surface), we forward them as the base64-
+ * JSON X-Fabric-Dpo header — byte-identical to the header the cms-dpo/api proxy reads
+ * (console.py _read_dpo_ctx) — so the route runs the SAME audited DPO gate. The fields
+ * carry no secret beyond the countersign the widget already minted; the gate verifies it
+ * server-side and derives the tenant — the page asserts no identity. */
+function dpoContextHeader() {
+  var q = new URLSearchParams(window.location.search);
+  var ctx = {
+    instance:   q.get('instance')   || '',
+    email:      q.get('email')      || '',
+    member_sig: q.get('member_sig') || '',
+    member_ts:  q.get('member_ts')  || ''
+  };
+  /* Only a real DPO countersign (member proof present) yields a header; the owner
+   * surface has no email/member_sig and falls back to the signed-instance body path. */
+  if (!ctx.email || !ctx.member_sig || !ctx.member_ts) return '';
+  try { return btoa(JSON.stringify(ctx)); } catch (e) { return ''; }
+}
+
 function esc(s) {
   if (s == null) return '';
   return String(s)
@@ -425,9 +450,15 @@ async function runAudit() {
   btn.innerHTML = '<span class="spinner"></span> Scanning…';
 
   try {
+    /* vAIb-lzgj — attach the DPO countersign context (when this is the DPO console
+     * surface). Absent on the owner surface, where the signed instance in the body is
+     * the proof. The route tries the owner signed-instance first, then this DPO gate. */
+    var hdrs = { 'Content-Type': 'application/json', 'Accept': 'application/json' };
+    var dpoHdr = dpoContextHeader();
+    if (dpoHdr) hdrs['X-Fabric-Dpo'] = dpoHdr;
     var resp = await fetch(fabricBase() + '/coverage/audit', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      headers: hdrs,
       credentials: 'same-origin',
       body: JSON.stringify({ instance: inst })
     });
@@ -436,12 +467,12 @@ async function runAudit() {
     try { data = await resp.json(); } catch (_) { data = null; }
 
     if (resp.status === 401) {
-      errBox.querySelector('span').textContent = 'Authentication failed (401) — signed instance invalid or expired. Reload the Wix owner dashboard to get a fresh session.';
+      errBox.querySelector('span').textContent = 'Authentication failed (401) — your session is invalid or expired. Reload the console (Wix owner dashboard, or the DPO console) to get a fresh session.';
       errBox.classList.remove('hidden');
       return;
     }
     if (resp.status === 403) {
-      errBox.querySelector('span').textContent = 'Access denied (403) — Coverage Audit is restricted to the site owner. Collaborators cannot run this report.';
+      errBox.querySelector('span').textContent = 'Access denied (403) — Coverage Audit is restricted to the site owner or the tenant’s registered DPO. Collaborators cannot run this report.';
       errBox.classList.remove('hidden');
       return;
     }

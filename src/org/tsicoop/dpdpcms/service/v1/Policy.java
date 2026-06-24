@@ -134,6 +134,19 @@ public class Policy implements Action {
                             OutputProcessor.errorResponse(res, HttpServletResponse.SC_NOT_FOUND, "Not Found", "Policy with ID '" + policyIdStr + "' and version '" + versionStr + "' not found.", req.getRequestURI());
                             return;
                         }
+                        // vAIb-jlk6 DEFENCE-IN-DEPTH: a data PRINCIPAL (My-Data consent UI) may
+                        // read ONLY a PUBLISHED (ACTIVE) policy's content — the public-facing
+                        // consent surface (purposes/categories). A DRAFT/ARCHIVED/EXPIRED version
+                        // is internal owner/DPO wording and must NOT leak to a principal, even
+                        // for their own tenant. Operators (DPO/admin) keep full version access.
+                        // Status is LOWERCASE-normalised in the DB row; compare case-insensitively.
+                        if (Boolean.TRUE.equals(req.getAttribute("auth_via_principal_jwt"))) {
+                            Object st = policyOptional.get().get("status");
+                            if (st == null || !"active".equalsIgnoreCase(st.toString())) {
+                                OutputProcessor.errorResponse(res, HttpServletResponse.SC_NOT_FOUND, "Not Found", "Policy with ID '" + policyIdStr + "' and version '" + versionStr + "' not found.", req.getRequestURI());
+                                return;
+                            }
+                        }
                         output = policyOptional.get();
                         OutputProcessor.send(res, HttpServletResponse.SC_OK, output);
                     } else {
@@ -453,6 +466,28 @@ public class Policy implements Action {
     }
 
     private UUID resolveFiduciaryId(HttpServletRequest req) throws SQLException {
+        // 0. PRINCIPAL JWT path (vAIb-jlk6): the data-principal My-Data consent UI reads
+        // the active policy's purposes via get_policy on the CLIENT path with a PRINCIPAL
+        // Bearer (no X-API-Key). The InterceptingFilter has ALREADY verified that token and
+        // STAMPED the server-derived fiduciary (from the signed JWT 'fid' claim) onto the
+        // request attributes — the SAME contract Consent.java:130-135 relies on. We MUST
+        // read that attribute FIRST: a data principal is NOT in the `operators` table, and
+        // the fabric client-api proxy STRIPS the body `fiduciary_id`, so steps 1+2 below
+        // both yield null for a principal -> policyBelongsToCaller(policy, null) -> 404, and
+        // the §6 consent surface (purposes/categories) is unreachable. The fid is signed +
+        // server-derived (never a client field), and policyBelongsToCaller still enforces
+        // tenant ownership, so a principal can only ever read THEIR OWN tenant's policy.
+        Boolean viaPrincipalJwt = (Boolean) req.getAttribute("auth_via_principal_jwt");
+        if (Boolean.TRUE.equals(viaPrincipalJwt)) {
+            Object fidAttr = req.getAttribute("fiduciary_id");
+            if (fidAttr != null) {
+                try { return UUID.fromString(fidAttr.toString()); }
+                catch (IllegalArgumentException e) { /* malformed stamp -> fall through, fail closed */ }
+            }
+            // A principal JWT with no usable fiduciary stamp cannot prove tenant ownership;
+            // fall through to the (null) tail so the by-id ownership gate fails closed.
+        }
+
         // 1. Derive from the authenticated operator's DB record (covers DPOs implicitly)
         String authHeader = req.getHeader("Authorization");
         if (authHeader != null && authHeader.startsWith("Bearer ")) {

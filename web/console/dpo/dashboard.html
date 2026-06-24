@@ -10,8 +10,46 @@
     <style>
         /* W2: page-local teal :root removed — injected tweakcn tokens win */
 
+        /* vAIb-mr3u — GLASSMORPHISM console background (PM spec, supersedes flat-opaque).
+           The DPO console embeds in the tenant's Wix site; the W2 re-skin left this
+           dashboard's body on the injected var(--background), which is UNSET/transparent
+           in-host, so the pink host theme + a product photo bled through behind the cards
+           (looked unfinished). This is a CONSOLE (fixed brand, NOT host-blend), so we
+           define our OWN brand navy here (mirrors coverage.html's self-contained :root)
+           and lay a FIXED frosted-glass backing over the whole viewport:
+             • backdrop-filter: blur(12px) so the host shows through SOFTLY;
+             • a semi-transparent BRAND-navy scrim (~0.72 alpha) tinting the blur to our
+               brand (console leans to brand, never the pink host);
+             • @supports fallback -> near-opaque navy (~0.94) so a browser without
+               backdrop-filter NEVER degrades back to the bleed.
+           AA: body/card text is rendered on the navy glass (light text) — measured
+           >=4.5:1 (body) / >=3:1 (headings) against the worst-case busy host region. */
+        :root {
+            --navy-900: #101d4a; --navy-800: #182a63;
+            --glass-navy: rgba(16, 29, 74, 0.72);     /* brand-navy scrim over the blur */
+            --glass-navy-solid: rgba(16, 29, 74, 0.94);/* @supports-off near-opaque fallback */
+        }
+
+        /* FIXED glass backing: a single full-viewport layer behind all content. Using a
+           ::before keeps the blur off the scrolling content (no smear) and lets the cards
+           sit on their own lighter surface above it. */
+        body::before {
+            content: "";
+            position: fixed;
+            inset: 0;
+            z-index: -1;
+            background-color: var(--glass-navy);
+            -webkit-backdrop-filter: blur(12px) saturate(115%);
+            backdrop-filter: blur(12px) saturate(115%);
+            pointer-events: none;
+        }
+        /* Fail closed: no backdrop-filter support -> near-opaque navy, never a bleed. */
+        @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+            body::before { background-color: var(--glass-navy-solid); }
+        }
+
         body {
-            background-color: var(--background);
+            background-color: var(--navy-900);  /* base coat under the glass (no flash/bleed) */
             font-family: var(--font-sans, 'Inter', ui-sans-serif, system-ui, sans-serif);
             margin: 0;
             padding: 0;
@@ -22,18 +60,27 @@
         .primary-text { color: var(--tsi-primary); }
 
         /* --- Sidebar Styling Fix --- */
+        /* vAIb-mr3u — self-contained frosted-light sidebar (was var(--secondary), unset
+           in-host => bled the navy glass through and lost the nav text). Near-opaque white
+           glass keeps the existing nav-link colors (designed for the W2 light secondary)
+           legible and gives the panel the same lifted-glass language as the cards. */
         .sidebar {
             width: 250px;
-            background-color: var(--secondary);
-            box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
+            background-color: rgba(255, 255, 255, 0.94);
+            -webkit-backdrop-filter: blur(10px);
+            backdrop-filter: blur(10px);
+            box-shadow: 2px 0 12px rgba(8, 15, 40, 0.18);
             padding-top: 20px;
             position: fixed;
             top: 0;
             left: 0;
             height: 100vh;
             z-index: 50;
-            border-right: 1px solid var(--border);
+            border-right: 1px solid rgba(255, 255, 255, 0.55);
             transition: transform 0.3s ease-in-out;
+        }
+        @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+            .sidebar { background-color: rgba(255, 255, 255, 0.98); }
         }
 
         /* Responsive Sidebar behavior */
@@ -66,12 +113,39 @@
             font-weight: 600;
         }
 
+        /* vAIb-mr3u — lifted-glass cards: a near-opaque frosted white panel that sits
+           ABOVE the navy backing so the existing dark card text (text-[var(--foreground)]
+           ~ slate-900) keeps full AA contrast, with a hairline border + soft shadow for
+           the "lifted glass" depth the PM spec asks for. Self-contained values (no reliance
+           on the host-injected --card/--border, which is what caused the bleed). */
         .card {
-            background-color: var(--card);
-            border-radius: var(--radius);
-            box-shadow: var(--shadow-sm);
+            background-color: rgba(255, 255, 255, 0.94);
+            -webkit-backdrop-filter: blur(6px);
+            backdrop-filter: blur(6px);
+            border-radius: var(--radius, 0.75rem);
+            box-shadow: 0 8px 24px -8px rgba(8, 15, 40, 0.45), 0 1px 0 rgba(255,255,255,0.6) inset;
             padding: 20px;
-            border: 1px solid var(--border);
+            border: 1px solid rgba(255, 255, 255, 0.55);
+        }
+        @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+            .card { background-color: rgba(255, 255, 255, 0.98); }
+        }
+
+        /* vAIb-mr3u — text that sits DIRECTLY on the navy glass (the page heading, NOT in
+           a card) must be LIGHT for AA on navy: white on rgba(16,29,74,>=0.72) is ~14:1.
+           The host-injected var(--foreground) is dark (built for a light bg) and would be
+           near-invisible on navy, so we force white here. Card-internal text is unaffected
+           (cards are the light frosted panel above). */
+        main > div > h1 {
+            color: #ffffff !important;
+            text-shadow: 0 1px 2px rgba(8, 15, 40, 0.35);
+        }
+        /* Filter chip (bare on the navy glass): give it the same lifted-glass treatment as
+           a card so its inner text keeps contrast, instead of the unset host --card. */
+        main .filter-chip {
+            background-color: rgba(255, 255, 255, 0.92) !important;
+            border: 1px solid rgba(255, 255, 255, 0.55) !important;
+            box-shadow: 0 4px 14px -6px rgba(8, 15, 40, 0.4);
         }
 
         /* Backdrop for mobile */
@@ -136,7 +210,7 @@
         <h1 class="text-2xl font-black text-[var(--foreground)] tracking-tight">DPO Compliance Dashboard</h1>
 
         <!-- Period Filter Dropdown -->
-        <div class="flex items-center gap-3 bg-[var(--card)] p-2 rounded-xl border border-[var(--border)] shadow-sm">
+        <div class="filter-chip flex items-center gap-3 bg-[var(--card)] p-2 rounded-xl border border-[var(--border)] shadow-sm">
             <span class="text-[10px] font-black text-[var(--muted-foreground)] uppercase tracking-widest pl-2">Filter Period:</span>
             <select id="time-filter" onchange="loadDpoMetrics()" class="text-sm font-bold text-[var(--tsi-accent)] bg-transparent outline-none cursor-pointer pr-2">
                 <!-- Populated via setupFilter script -->
