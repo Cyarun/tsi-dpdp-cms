@@ -8,18 +8,11 @@
     <!-- Load Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        :root {
-            --tsi-primary: #006A67; /* Primary Dark Teal Color */
-            --tsi-accent: #008D8A; /* Slightly lighter for accents */
-            --background: #f4fbf9; /* Light, clean background */
-            --card-bg: #FFFFFF;
-            --border: 20 5.9% 90%;
-            --radius: 0.5rem;
-        }
+        /* W2: page-local teal :root removed — injected tweakcn tokens win */
 
         body {
             background-color: var(--background);
-            font-family: ui-sans-serif, system-ui, sans-serif;
+            font-family: var(--font-sans, 'Inter', ui-sans-serif, system-ui, sans-serif);
             margin: 0;
             padding: 0;
             min-height: 100vh;
@@ -33,8 +26,8 @@
         /* --- Sidebar Styling --- */
         .sidebar {
             width: 250px;
-            background-color: #f8fafc;
-            box-shadow: 2px 0 5px rgba(0, 0, 0, 0.05);
+            background-color: var(--secondary);
+            box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
             padding-top: 20px;
             position: fixed;
             height: 100vh;
@@ -53,29 +46,29 @@
             align-items: center;
             padding: 10px 20px;
             margin: 5px 0;
-            border-radius: 6px;
-            color: #4a5568;
+            border-radius: var(--radius);
+            color: var(--secondary-foreground);
             transition: background-color 0.2s ease, color 0.2s ease;
         }
 
         .nav-link:hover, .nav-link.active {
-            background-color: #e5f5f4;
-            color: var(--tsi-primary);
+            background-color: var(--tsi-accent);
+            color: var(--primary-foreground);
             font-weight: 600;
         }
 
         .card {
-            background-color: var(--card-bg);
+            background-color: var(--card);
             border-radius: var(--radius);
-            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+            box-shadow: var(--shadow-sm);
             padding: 20px;
-            border: 1px solid #e2e8f0;
+            border: 1px solid var(--border);
         }
 
         .table-header {
-            background-color: #f1f5f9;
+            background-color: var(--muted);
             font-weight: 600;
-            color: #4a5568;
+            color: var(--muted-foreground);
             text-align: left;
         }
 
@@ -85,8 +78,8 @@
             justify-content: space-between;
             align-items: center;
             padding: 10px 20px;
-            background-color: #ffffff;
-            border-bottom: 1px solid #e2e8f0;
+            background-color: var(--card);
+            border-bottom: 1px solid var(--border);
             position: sticky;
             top: 0;
             z-index: 40;
@@ -119,7 +112,7 @@
         }
 
         .modal-content {
-            background: white;
+            background-color: var(--card);
             padding: 30px;
             border-radius: var(--radius);
             max-width: 800px;
@@ -147,17 +140,17 @@
 
 <!-- Mobile Header/Toggle -->
 <div class="mobile-header lg:hidden">
-    <button id="menu-toggle" class="p-2 rounded-md hover:bg-gray-100 primary-text">
+    <button id="menu-toggle" class="p-2 rounded-md hover:bg-[var(--muted)] primary-text">
         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-6 w-6"><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="18" x2="20" y2="18"/></svg>
     </button>
     <span class="text-xl font-bold primary-text">Compliance</span>
-    <div class="text-sm text-gray-500">DPO User</div>
+    <div class="text-sm text-[var(--muted-foreground)]">DPO User</div>
 </div>
 
 <!-- Sidebar Navigation -->
 <div id="sidebar" class="sidebar lg:relative flex flex-col justify-between">
     <div>
-        <div class="px-5 pb-6 border-b border-gray-200 lg:block hidden">
+        <div class="px-5 pb-6 border-b border-[var(--border)] lg:block hidden">
             <span class="text-xl font-bold primary-text">TSI DPDP CMS</span>
         </div>
         <nav class="flex flex-col space-y-1 mt-4 px-3">
@@ -173,9 +166,9 @@
             <a href="coverage.html" class="nav-link">Coverage Audit</a>
         </nav>
     </div>
-    <div class="p-3 border-t border-gray-200">
-        <div class="mt-2 text-sm text-gray-500 p-2 rounded-md hover:bg-gray-100 cursor-pointer flex justify-between items-center">
-            <span id="username" class="font-bold text-slate-700">DPO User</span>
+    <div class="p-3 border-t border-[var(--border)]">
+        <div class="mt-2 text-sm text-[var(--muted-foreground)] p-2 rounded-md hover:bg-[var(--muted)] cursor-pointer flex justify-between items-center">
+            <span id="username" class="font-bold text-[var(--foreground)]">DPO User</span>
             <a href="#" onclick="handleLogout()"><span class="text-xs font-semibold text-red-500">Logout</span></a>
         </div>
     </div>
@@ -186,13 +179,13 @@
 <!-- Main Content Area -->
 <main class="flex-1 p-4 lg:p-8 overflow-y-auto">
     <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
-        <h1 class="text-2xl font-black text-slate-800 tracking-tight">Compliance Enforcement</h1>
+        <h1 class="text-2xl font-black text-[var(--foreground)] tracking-tight">Compliance Enforcement</h1>
         <div class="flex gap-3">
-            <button onclick="openLegalHoldsModal()" class="bg-white border border-orange-300 text-orange-700 px-4 py-2 rounded-md text-sm font-medium hover:bg-orange-50 transition duration-150 flex items-center gap-2">
+            <button onclick="openLegalHoldsModal()" class="bg-[var(--card)] border border-orange-300 text-orange-700 px-4 py-2 rounded-md text-sm font-medium hover:bg-orange-50 transition duration-150 flex items-center gap-2">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>
                 Legal Holds
             </button>
-            <button onclick="openCesJobsModal()" class="bg-white border border-slate-300 text-slate-600 px-4 py-2 rounded-md text-sm font-medium hover:bg-slate-50 transition duration-150 flex items-center gap-2">
+            <button onclick="openCesJobsModal()" class="bg-[var(--card)] border border-[var(--border)] text-[var(--muted-foreground)] px-4 py-2 rounded-md text-sm font-medium hover:bg-[var(--muted)] transition duration-150 flex items-center gap-2">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="M12 12v9"/><path d="m16 16-4-4-4 4"/></svg>
                 View Jobs
             </button>
@@ -205,11 +198,11 @@
 
     <!-- Purge Request List Card -->
     <div class="card">
-        <h2 class="text-lg font-bold text-slate-700 mb-4 tracking-tight">Search & Filter</h2>
+        <h2 class="text-lg font-bold text-[var(--foreground)] mb-4 tracking-tight">Search & Filter</h2>
         <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-3">
             <div class="flex gap-3">
-                <input type="text" id="search-input" placeholder="Search by User ID..." class="p-2 border border-gray-300 rounded-md text-sm w-full max-w-xs">
-                <select id="status-filter" class="p-2 border border-gray-300 rounded-md text-sm">
+                <input type="text" id="search-input" placeholder="Search by User ID..." class="p-2 border border-[var(--border)] rounded-md text-sm w-full max-w-xs">
+                <select id="status-filter" class="p-2 border border-[var(--border)] rounded-md text-sm">
                     <option value="ALL">Status: ALL</option>
                     <option value="INITIATED">INITIATED (awaiting DPO)</option>
                     <option value="CONFIRMED">CONFIRMED</option>
@@ -218,11 +211,11 @@
                     <option value="UNDER_LEGAL_HOLD">UNDER LEGAL HOLD</option>
                 </select>
             </div>
-            <span id="request-count" class="text-sm text-gray-500">Loading...</span>
+            <span id="request-count" class="text-sm text-[var(--muted-foreground)]">Loading...</span>
         </div>
 
         <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-gray-200">
+            <table class="min-w-full divide-y divide-[var(--border)]">
                 <thead>
                 <tr class="table-header">
                     <th class="px-4 py-3 text-sm">Request ID</th>
@@ -236,9 +229,9 @@
                     <th class="px-4 py-3 text-sm">Actions</th>
                 </tr>
                 </thead>
-                <tbody id="purge-table-body" class="bg-white divide-y divide-gray-200">
+                <tbody id="purge-table-body" class="bg-[var(--card)] divide-y divide-[var(--border)]">
                 <tr>
-                    <td colspan="9" class="p-4 text-center text-gray-500">
+                    <td colspan="9" class="p-4 text-center text-[var(--muted-foreground)]">
                         Loading Purge request data...
                     </td>
                 </tr>
@@ -251,8 +244,8 @@
 <!-- Modal for Purge Request Detail and Fulfillment -->
 <div id="purge-modal-overlay" class="modal-overlay">
     <div class="modal-content">
-        <button class="absolute top-4 right-4 text-gray-500 hover:text-gray-800 text-2xl" onclick="closeModal('purge-modal-overlay')">&times;</button>
-        <h2 class="text-lg font-bold text-slate-700 mb-4 tracking-tight">Manage Purge Request</h2>
+        <button class="absolute top-4 right-4 text-[var(--muted-foreground)] hover:text-[var(--foreground)] text-2xl" onclick="closeModal('purge-modal-overlay')">&times;</button>
+        <h2 class="text-lg font-bold text-[var(--foreground)] mb-4 tracking-tight">Manage Purge Request</h2>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm mb-4">
             <div class="space-y-1">
@@ -279,7 +272,7 @@
         </div>
 
         <h3 class="font-semibold text-lg mt-4 border-b pb-1">Context & Details:</h3>
-        <p id="detail-context" class="p-2 bg-gray-50 rounded-md text-gray-700 italic mt-2 mb-4"></p>
+        <p id="detail-context" class="p-2 bg-[var(--muted)] rounded-md text-[var(--foreground)] italic mt-2 mb-4"></p>
 
         <!-- Legal hold banner (shown when UNDER_LEGAL_HOLD) -->
         <div id="legal-hold-banner" class="hidden bg-orange-50 border border-orange-200 text-orange-800 p-3 rounded-md mb-4 text-sm">
@@ -289,24 +282,24 @@
         <!-- DPO action form (hidden when terminal / under hold) -->
         <div id="purge-action-section">
             <h3 class="font-semibold text-lg mt-4 border-b pb-1">DPO Action:</h3>
-            <p id="purge-action-hint" class="text-xs text-gray-500 mt-1 mb-2"></p>
+            <p id="purge-action-hint" class="text-xs text-[var(--muted-foreground)] mt-1 mb-2"></p>
             <form id="purge-update-form" class="mt-2 space-y-3">
                 <div>
-                    <label for="new-status" class="block text-sm font-medium text-gray-700">Transition To</label>
-                    <select id="new-status" name="new_status" required class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm"></select>
+                    <label for="new-status" class="block text-sm font-medium text-[var(--foreground)]">Transition To</label>
+                    <select id="new-status" name="new_status" required class="mt-1 block w-full p-2 border border-[var(--border)] rounded-md shadow-sm"></select>
                 </div>
                 <div id="records-affected-wrap" class="hidden">
-                    <label for="records-affected" class="block text-sm font-medium text-gray-700">Records Affected Count <span class="text-red-500">*</span></label>
-                    <input type="number" min="0" id="records-affected" name="records_affected_count" placeholder="e.g. 12" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm">
-                    <p class="text-xs text-gray-400 mt-1">Attested number of records actually purged (required to mark COMPLETED).</p>
+                    <label for="records-affected" class="block text-sm font-medium text-[var(--foreground)]">Records Affected Count <span class="text-red-500">*</span></label>
+                    <input type="number" min="0" id="records-affected" name="records_affected_count" placeholder="e.g. 12" class="mt-1 block w-full p-2 border border-[var(--border)] rounded-md shadow-sm">
+                    <p class="text-xs text-[var(--muted-foreground)] mt-1">Attested number of records actually purged (required to mark COMPLETED).</p>
                 </div>
                 <div>
-                    <label for="details-notes" class="block text-sm font-medium text-gray-700">Audit Details / Observations</label>
-                    <textarea id="details-notes" name="details" rows="3" placeholder="Additional details regarding the purge execution..." class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm"></textarea>
+                    <label for="details-notes" class="block text-sm font-medium text-[var(--foreground)]">Audit Details / Observations</label>
+                    <textarea id="details-notes" name="details" rows="3" placeholder="Additional details regarding the purge execution..." class="mt-1 block w-full p-2 border border-[var(--border)] rounded-md shadow-sm"></textarea>
                 </div>
                 <div class="modal-footer">
                     <button type="button" onclick="openHoldFromPurge()" class="bg-orange-100 text-orange-800 px-4 py-2 rounded-md text-sm font-medium hover:bg-orange-200">Apply Legal Hold</button>
-                    <button type="button" onclick="closeModal('purge-modal-overlay')" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-300">Cancel</button>
+                    <button type="button" onclick="closeModal('purge-modal-overlay')" class="bg-[var(--muted)] text-[var(--foreground)] px-4 py-2 rounded-md text-sm font-medium hover:bg-[var(--muted)]">Cancel</button>
                     <button type="submit" id="update-request-btn" class="primary-bg text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-opacity-90">Save</button>
                 </div>
             </form>
@@ -317,40 +310,40 @@
 <!-- Modal: Legal Retention Exceptions (Litigation Holds) -->
 <div id="legal-holds-modal" class="modal-overlay">
     <div class="modal-content">
-        <button class="absolute top-4 right-4 text-gray-500 hover:text-gray-800 text-2xl" onclick="closeModal('legal-holds-modal')">&times;</button>
+        <button class="absolute top-4 right-4 text-[var(--muted-foreground)] hover:text-[var(--foreground)] text-2xl" onclick="closeModal('legal-holds-modal')">&times;</button>
         <div class="flex justify-between items-center mb-4">
             <h2 class="text-xl font-bold text-orange-700">Legal Retention Exceptions</h2>
             <button onclick="loadLegalHolds()" class="text-xs text-orange-600 font-bold uppercase hover:underline">Refresh</button>
         </div>
-        <p class="text-xs text-gray-500 mb-4">A legal hold (e.g. litigation hold) BLOCKS purge for a principal. Open purge requests for that principal are placed UNDER_LEGAL_HOLD until the hold is lifted. (DPDP Act 2023 Section 8/17 retention exceptions.)</p>
+        <p class="text-xs text-[var(--muted-foreground)] mb-4">A legal hold (e.g. litigation hold) BLOCKS purge for a principal. Open purge requests for that principal are placed UNDER_LEGAL_HOLD until the hold is lifted. (DPDP Act 2023 Section 8/17 retention exceptions.)</p>
 
         <!-- Apply new hold -->
         <form id="apply-hold-form" class="bg-orange-50 border border-orange-100 p-3 rounded-md mb-5 space-y-3">
             <h3 class="font-semibold text-sm text-orange-800">Apply New Hold</h3>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
-                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Principal (User ID) <span class="text-red-500">*</span></label>
-                    <input type="text" id="hold-user-id" class="w-full p-2 border border-slate-300 rounded-md text-sm" placeholder="e.g. data_principal_xyz789" required>
+                    <label class="block text-xs font-bold text-[var(--muted-foreground)] uppercase mb-1">Principal (User ID) <span class="text-red-500">*</span></label>
+                    <input type="text" id="hold-user-id" class="w-full p-2 border border-[var(--border)] rounded-md text-sm" placeholder="e.g. data_principal_xyz789" required>
                 </div>
                 <div>
-                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Data Categories (comma-sep, blank = all)</label>
-                    <input type="text" id="hold-categories" class="w-full p-2 border border-slate-300 rounded-md text-sm" placeholder="e.g. financial, communications">
+                    <label class="block text-xs font-bold text-[var(--muted-foreground)] uppercase mb-1">Data Categories (comma-sep, blank = all)</label>
+                    <input type="text" id="hold-categories" class="w-full p-2 border border-[var(--border)] rounded-md text-sm" placeholder="e.g. financial, communications">
                 </div>
             </div>
             <div>
-                <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Legal Basis <span class="text-red-500">*</span></label>
-                <input type="text" id="hold-basis" class="w-full p-2 border border-slate-300 rounded-md text-sm" placeholder="e.g. Litigation hold - Case #1234" required>
+                <label class="block text-xs font-bold text-[var(--muted-foreground)] uppercase mb-1">Legal Basis <span class="text-red-500">*</span></label>
+                <input type="text" id="hold-basis" class="w-full p-2 border border-[var(--border)] rounded-md text-sm" placeholder="e.g. Litigation hold - Case #1234" required>
             </div>
             <div class="flex justify-end">
                 <button type="submit" id="apply-hold-btn" class="bg-orange-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-orange-700">Apply Hold (Block Purge)</button>
             </div>
         </form>
 
-        <h3 class="font-semibold text-sm text-slate-700 mb-2">Existing Holds</h3>
+        <h3 class="font-semibold text-sm text-[var(--foreground)] mb-2">Existing Holds</h3>
         <div class="overflow-x-auto">
             <table class="w-full text-left">
                 <thead>
-                <tr class="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">
+                <tr class="text-[10px] font-black text-[var(--muted-foreground)] uppercase tracking-widest border-b border-[var(--border)]">
                     <th class="pb-2 px-2">Principal</th>
                     <th class="pb-2 px-2">Categories</th>
                     <th class="pb-2 px-2">Legal Basis</th>
@@ -359,11 +352,11 @@
                     <th class="pb-2 px-2">Action</th>
                 </tr>
                 </thead>
-                <tbody id="legal-holds-body" class="text-sm divide-y divide-slate-50"></tbody>
+                <tbody id="legal-holds-body" class="text-sm divide-y divide-[var(--border)]"></tbody>
             </table>
         </div>
         <div class="modal-footer">
-            <button type="button" onclick="closeModal('legal-holds-modal')" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-300">Close</button>
+            <button type="button" onclick="closeModal('legal-holds-modal')" class="bg-[var(--muted)] text-[var(--foreground)] px-4 py-2 rounded-md text-sm font-medium hover:bg-[var(--muted)]">Close</button>
         </div>
     </div>
 </div>
@@ -371,15 +364,15 @@
 <!-- Modal: View CES Jobs -->
 <div id="ces-jobs-modal" class="modal-overlay">
     <div class="modal-content">
-        <button class="absolute top-4 right-4 text-gray-500 hover:text-gray-800 text-2xl" onclick="closeModal('ces-jobs-modal')">&times;</button>
+        <button class="absolute top-4 right-4 text-[var(--muted-foreground)] hover:text-[var(--foreground)] text-2xl" onclick="closeModal('ces-jobs-modal')">&times;</button>
         <div class="flex justify-between items-center mb-4">
-            <h2 class="text-xl font-bold text-gray-800">Background Enforcement Jobs</h2>
-            <button onclick="loadCesJobs()" class="text-xs text-teal-600 font-bold uppercase hover:underline">Refresh</button>
+            <h2 class="text-xl font-bold text-[var(--foreground)]">Background Enforcement Jobs</h2>
+            <button onclick="loadCesJobs()" class="text-xs text-[var(--tsi-accent)] font-bold uppercase hover:underline">Refresh</button>
         </div>
         <div class="overflow-x-auto">
             <table class="w-full text-left">
                 <thead>
-                <tr class="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">
+                <tr class="text-[10px] font-black text-[var(--muted-foreground)] uppercase tracking-widest border-b border-[var(--border)]">
                     <th class="pb-2 px-2">Job ID</th>
                     <th class="pb-2 px-2">Type</th>
                     <th class="pb-2 px-2">Target</th>
@@ -387,11 +380,11 @@
                     <th class="pb-2 px-2">Status</th>
                 </tr>
                 </thead>
-                <tbody id="ces-jobs-body" class="text-sm divide-y divide-slate-50"></tbody>
+                <tbody id="ces-jobs-body" class="text-sm divide-y divide-[var(--border)]"></tbody>
             </table>
         </div>
         <div class="modal-footer">
-            <button type="button" onclick="closeModal('ces-jobs-modal')" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-300">Close</button>
+            <button type="button" onclick="closeModal('ces-jobs-modal')" class="bg-[var(--muted)] text-[var(--foreground)] px-4 py-2 rounded-md text-sm font-medium hover:bg-[var(--muted)]">Close</button>
         </div>
     </div>
 </div>
@@ -399,26 +392,26 @@
 <!-- Modal: New CES Job -->
 <div id="new-ces-job-modal" class="modal-overlay">
     <div class="modal-content" style="max-width: 500px;">
-        <button class="absolute top-4 right-4 text-gray-500 hover:text-gray-800 text-2xl" onclick="closeModal('new-ces-job-modal')">&times;</button>
+        <button class="absolute top-4 right-4 text-[var(--muted-foreground)] hover:text-[var(--foreground)] text-2xl" onclick="closeModal('new-ces-job-modal')">&times;</button>
         <h2 class="text-xl font-bold primary-text mb-4">Initiate Compliance Check</h2>
         <form id="new-ces-job-form">
             <div class="mb-4">
-                <span class="block text-sm font-bold text-gray-700 mb-2">Scope of Enforcement</span>
+                <span class="block text-sm font-bold text-[var(--foreground)] mb-2">Scope of Enforcement</span>
                 <div class="flex items-center gap-4">
                     <label class="flex items-center gap-2 cursor-pointer">
-                        <input type="radio" name="ces_scope" value="FULL" checked onchange="togglePrincipalInput(false)" class="text-teal-600 focus:ring-teal-500">
-                        <span class="text-sm text-gray-600">Full System Scan</span>
+                        <input type="radio" name="ces_scope" value="FULL" checked onchange="togglePrincipalInput(false)" class="text-[var(--tsi-accent)] focus:ring-[var(--ring)]">
+                        <span class="text-sm text-[var(--muted-foreground)]">Full System Scan</span>
                     </label>
                     <label class="flex items-center gap-2 cursor-pointer">
-                        <input type="radio" name="ces_scope" value="PRINCIPAL" onchange="togglePrincipalInput(true)" class="text-teal-600 focus:ring-teal-500">
-                        <span class="text-sm text-gray-600">Single Data Principal</span>
+                        <input type="radio" name="ces_scope" value="PRINCIPAL" onchange="togglePrincipalInput(true)" class="text-[var(--tsi-accent)] focus:ring-[var(--ring)]">
+                        <span class="text-sm text-[var(--muted-foreground)]">Single Data Principal</span>
                     </label>
                 </div>
             </div>
 
             <div id="principal-input-container" class="mb-6 hidden">
-                <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Target User ID</label>
-                <input type="text" id="target-principal-id" class="w-full p-2 border border-slate-300 rounded-md text-sm" placeholder="e.g. data_principal_xyz789">
+                <label class="block text-xs font-bold text-[var(--muted-foreground)] uppercase mb-1">Target User ID</label>
+                <input type="text" id="target-principal-id" class="w-full p-2 border border-[var(--border)] rounded-md text-sm" placeholder="e.g. data_principal_xyz789">
             </div>
 
             <div class="bg-blue-50 p-3 rounded-md mb-6 border border-blue-100">
@@ -426,7 +419,7 @@
             </div>
 
             <div class="modal-footer">
-                <button type="button" onclick="closeModal('new-ces-job-modal')" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-300">Cancel</button>
+                <button type="button" onclick="closeModal('new-ces-job-modal')" class="bg-[var(--muted)] text-[var(--foreground)] px-4 py-2 rounded-md text-sm font-medium hover:bg-[var(--muted)]">Cancel</button>
                 <button type="submit" id="start-ces-btn" class="primary-bg text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-opacity-90">Start Engine</button>
             </div>
         </form>
@@ -475,7 +468,7 @@
             case 'COMPLETED': colorClass = 'bg-green-100 text-green-800'; break;
             case 'FAILED': colorClass = 'bg-red-100 text-red-800'; break;
             case 'UNDER_LEGAL_HOLD': colorClass = 'bg-orange-100 text-orange-800'; break;
-            default: colorClass = 'bg-gray-100 text-gray-800';
+            default: colorClass = 'bg-[var(--muted)] text-[var(--foreground)]';
         }
         return `<span class="px-3 py-1 text-xs font-medium rounded-full ${colorClass}">${esc((status || '').replace(/_/g, ' '))}</span>`;
     }
@@ -488,13 +481,13 @@
         const actionLabel = req.status === 'INITIATED' ? 'Confirm'
             : (req.status === 'CONFIRMED' ? 'Complete' : 'Manage');
         row.innerHTML = `
-            <td class="px-4 py-3 text-sm font-mono text-gray-600">...${esc(req.id.slice(-8))}</td>
-            <td class="px-4 py-3 text-sm text-gray-800">${esc(req.user_id)}</td>
-            <td class="px-4 py-3 text-sm text-gray-800">${esc(purpose)}</td>
-            <td class="px-4 py-3 text-sm text-gray-600">${esc(req.trigger_event)}</td>
-            <td class="px-4 py-3 text-sm text-gray-600">${esc(req.app_name || '—')}</td>
-            <td class="px-4 py-3 text-sm text-gray-600">${new Date(req.initiated_at).toLocaleDateString()}</td>
-            <td class="px-4 py-3 text-sm text-gray-600 text-center">${records}</td>
+            <td class="px-4 py-3 text-sm font-mono text-[var(--muted-foreground)]">...${esc(req.id.slice(-8))}</td>
+            <td class="px-4 py-3 text-sm text-[var(--foreground)]">${esc(req.user_id)}</td>
+            <td class="px-4 py-3 text-sm text-[var(--foreground)]">${esc(purpose)}</td>
+            <td class="px-4 py-3 text-sm text-[var(--muted-foreground)]">${esc(req.trigger_event)}</td>
+            <td class="px-4 py-3 text-sm text-[var(--muted-foreground)]">${esc(req.app_name || '—')}</td>
+            <td class="px-4 py-3 text-sm text-[var(--muted-foreground)]">${new Date(req.initiated_at).toLocaleDateString()}</td>
+            <td class="px-4 py-3 text-sm text-[var(--muted-foreground)] text-center">${records}</td>
             <td class="px-4 py-3 whitespace-nowrap text-sm">${createStatusBadge(req.status)}</td>
             <td class="px-4 py-3 text-sm">
                 <button class="text-indigo-600 hover:text-indigo-900 font-medium" data-id="${esc(req.id)}" onclick="viewPurgeRequest(this.getAttribute('data-id'))">${actionLabel}</button>
@@ -504,7 +497,7 @@
     }
 
     async function loadPurgeRequests() {
-        tableBody.innerHTML = `<tr><td colspan="9" class="p-4 text-center text-gray-500">Loading requests...</td></tr>`;
+        tableBody.innerHTML = `<tr><td colspan="9" class="p-4 text-center text-[var(--muted-foreground)]">Loading requests...</td></tr>`;
 
         try {
             const payload = {
@@ -530,7 +523,7 @@
 
             tableBody.innerHTML = '';
             if (requests.length === 0) {
-                tableBody.innerHTML = `<tr><td colspan="9" class="p-4 text-center text-gray-500">No matching requests found.</td></tr>`;
+                tableBody.innerHTML = `<tr><td colspan="9" class="p-4 text-center text-[var(--muted-foreground)]">No matching requests found.</td></tr>`;
             } else {
                 requests.forEach(r => tableBody.appendChild(createRequestRow(r)));
             }
@@ -646,7 +639,7 @@
 
     async function loadCesJobs() {
         const tbody = document.getElementById('ces-jobs-body');
-        tbody.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-slate-400">Loading jobs...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-[var(--muted-foreground)]">Loading jobs...</td></tr>';
 
         try {
             const response = await fetch(API_URL_JOBS, {
@@ -660,16 +653,16 @@
 
             tbody.innerHTML = '';
             if (cesJobs.length === 0) {
-                 tbody.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-slate-400">No background enforcement jobs found.</td></tr>';
+                 tbody.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-[var(--muted-foreground)]">No background enforcement jobs found.</td></tr>';
             } else {
                 cesJobs.forEach(job => {
-                     const statusColor = job.status === 'PURGE_COMPLETED' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600';
+                     const statusColor = job.status === 'PURGE_COMPLETED' ? 'bg-green-100 text-green-700' : 'bg-[var(--muted)] text-[var(--muted-foreground)]';
                      tbody.innerHTML += `
-                        <tr class="hover:bg-slate-50 border-b border-slate-50">
-                            <td class="p-3 font-mono text-[11px] text-slate-500">...${job.id.slice(-8)}</td>
-                            <td class="p-3 font-bold text-xs text-slate-700">${job.job_type}</td>
-                            <td class="p-3 text-xs text-slate-600">${job.subtype || 'FULL_RUN'}</td>
-                            <td class="p-3 text-xs text-slate-500">${new Date(job.created_at).toLocaleString()}</td>
+                        <tr class="hover:bg-[var(--muted)] border-b border-[var(--border)]">
+                            <td class="p-3 font-mono text-[11px] text-[var(--muted-foreground)]">...${job.id.slice(-8)}</td>
+                            <td class="p-3 font-bold text-xs text-[var(--foreground)]">${job.job_type}</td>
+                            <td class="p-3 text-xs text-[var(--muted-foreground)]">${job.subtype || 'FULL_RUN'}</td>
+                            <td class="p-3 text-xs text-[var(--muted-foreground)]">${new Date(job.created_at).toLocaleString()}</td>
                             <td class="p-3"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${statusColor}">${job.status}</span></td>
                         </tr>
                      `;
@@ -796,7 +789,7 @@
 
     async function loadLegalHolds() {
         const tbody = document.getElementById('legal-holds-body');
-        tbody.innerHTML = '<tr><td colspan="6" class="p-4 text-center text-slate-400">Loading holds...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" class="p-4 text-center text-[var(--muted-foreground)]">Loading holds...</td></tr>';
         try {
             const response = await fetch(API_URL_PURGE, {
                 method: 'POST',
@@ -806,7 +799,7 @@
             const holds = await response.json();
             tbody.innerHTML = '';
             if (!Array.isArray(holds) || holds.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" class="p-4 text-center text-slate-400">No legal holds on record.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="6" class="p-4 text-center text-[var(--muted-foreground)]">No legal holds on record.</td></tr>';
                 return;
             }
             holds.forEach(h => {
@@ -815,15 +808,15 @@
                 catch (e) { cats = 'ALL'; }
                 const isActive = h.status === 'ACTIVE';
                 const action = isActive
-                    ? `<button class="text-teal-600 hover:underline font-semibold" data-id="${esc(h.id)}" onclick="liftHold(this.getAttribute('data-id'))">Lift</button>`
-                    : '<span class="text-slate-300">—</span>';
+                    ? `<button class="text-[var(--tsi-accent)] hover:underline font-semibold" data-id="${esc(h.id)}" onclick="liftHold(this.getAttribute('data-id'))">Lift</button>`
+                    : '<span class="text-[var(--border)]">—</span>';
                 tbody.innerHTML += `
-                    <tr class="hover:bg-slate-50 border-b border-slate-50">
-                        <td class="p-2 text-xs text-slate-700">${esc(h.user_id)}</td>
-                        <td class="p-2 text-xs text-slate-600">${esc(cats)}</td>
-                        <td class="p-2 text-xs text-slate-600">${esc(h.legal_basis)}</td>
-                        <td class="p-2"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${isActive ? 'bg-orange-100 text-orange-700' : 'bg-slate-100 text-slate-500'}">${esc(h.status)}</span></td>
-                        <td class="p-2 text-[11px] text-slate-500">${h.applied_at ? new Date(h.applied_at).toLocaleDateString() : '—'}</td>
+                    <tr class="hover:bg-[var(--muted)] border-b border-[var(--border)]">
+                        <td class="p-2 text-xs text-[var(--foreground)]">${esc(h.user_id)}</td>
+                        <td class="p-2 text-xs text-[var(--muted-foreground)]">${esc(cats)}</td>
+                        <td class="p-2 text-xs text-[var(--muted-foreground)]">${esc(h.legal_basis)}</td>
+                        <td class="p-2"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${isActive ? 'bg-orange-100 text-orange-700' : 'bg-[var(--muted)] text-[var(--muted-foreground)]'}">${esc(h.status)}</span></td>
+                        <td class="p-2 text-[11px] text-[var(--muted-foreground)]">${h.applied_at ? new Date(h.applied_at).toLocaleDateString() : '—'}</td>
                         <td class="p-2 text-xs">${action}</td>
                     </tr>`;
             });
