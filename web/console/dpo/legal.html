@@ -82,26 +82,19 @@
             .cert-watermark { color: rgba(0, 0, 0, 0.02) !important; }
         }
     
-/* vAIb-mr3u glass backing (propagated from dashboard.html — all DPO pages) */
-:root {
-            --navy-900: #101d4a; --navy-800: #182a63;
-            --glass-navy: rgba(16, 29, 74, 0.72);     /* brand-navy scrim over the blur */
-            --glass-navy-solid: rgba(16, 29, 74, 0.94);/* @supports-off near-opaque fallback */
-        }
-body::before {
-            content: "";
-            position: fixed;
-            inset: 0;
-            z-index: -1;
-            background-color: var(--glass-navy);
-            -webkit-backdrop-filter: blur(12px) saturate(115%);
-            backdrop-filter: blur(12px) saturate(115%);
-            pointer-events: none;
-        }
-@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-            body::before { background-color: var(--glass-navy-solid); }
-        }
-body{background-color:#101d4a;}
+
+/* vAIb-mr3u — Apple liquid-glass: light frost, host softly visible, DARK text legible. */
+:root{ --lg: rgba(255,255,255,0.62); --lg-solid: rgba(247,248,251,0.97); }
+body::before{
+  content:""; position:fixed; inset:0; z-index:-1;
+  background:var(--lg);
+  -webkit-backdrop-filter:blur(20px) saturate(180%);
+  backdrop-filter:blur(20px) saturate(180%);
+}
+@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
+  body::before{ background:var(--lg-solid); }
+}
+body{ background-color:#f7f8fb; }
 </style>
 </head>
 

@@ -24,38 +24,10 @@
                backdrop-filter NEVER degrades back to the bleed.
            AA: body/card text is rendered on the navy glass (light text) — measured
            >=4.5:1 (body) / >=3:1 (headings) against the worst-case busy host region. */
-        :root {
-            --navy-900: #101d4a; --navy-800: #182a63;
-            --glass-navy: rgba(16, 29, 74, 0.72);     /* brand-navy scrim over the blur */
-            --glass-navy-solid: rgba(16, 29, 74, 0.94);/* @supports-off near-opaque fallback */
-        }
-
         /* FIXED glass backing: a single full-viewport layer behind all content. Using a
            ::before keeps the blur off the scrolling content (no smear) and lets the cards
            sit on their own lighter surface above it. */
-        body::before {
-            content: "";
-            position: fixed;
-            inset: 0;
-            z-index: -1;
-            background-color: var(--glass-navy);
-            -webkit-backdrop-filter: blur(12px) saturate(115%);
-            backdrop-filter: blur(12px) saturate(115%);
-            pointer-events: none;
-        }
         /* Fail closed: no backdrop-filter support -> near-opaque navy, never a bleed. */
-        @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-            body::before { background-color: var(--glass-navy-solid); }
-        }
-
-        body {
-            background-color: var(--navy-900);  /* base coat under the glass (no flash/bleed) */
-            font-family: var(--font-sans, 'Inter', ui-sans-serif, system-ui, sans-serif);
-            margin: 0;
-            padding: 0;
-            min-height: 100vh;
-        }
-
         .primary-bg { background-color: var(--tsi-primary); }
         .primary-text { color: var(--tsi-primary); }
 
@@ -159,7 +131,20 @@
         .sidebar-backdrop.active {
             display: block;
         }
-    </style>
+    
+/* vAIb-mr3u — Apple liquid-glass: light frost, host softly visible, DARK text legible. */
+:root{ --lg: rgba(255,255,255,0.62); --lg-solid: rgba(247,248,251,0.97); }
+body::before{
+  content:""; position:fixed; inset:0; z-index:-1;
+  background:var(--lg);
+  -webkit-backdrop-filter:blur(20px) saturate(180%);
+  backdrop-filter:blur(20px) saturate(180%);
+}
+@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
+  body::before{ background:var(--lg-solid); }
+}
+body{ background-color:#f7f8fb; }
+</style>
 </head>
 
 <body>
