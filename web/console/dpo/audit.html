@@ -151,6 +151,10 @@ body{ background-color: var(--background, #f6f7fb); }
 /* vAIb-arf8 — the sidebar is now WHITE; its nav text used --secondary-foreground /
    --muted-foreground which were LIGHT (designed for the old navy sidebar) -> invisible.
    Force DARK host text on the resting links; the active/hover link keeps its own accent. */
+/* vAIb-arf8 — uniform SOLID white sidebar (matches the opaque-panel look). The page CSS sets
+   .sidebar background to var(--secondary) = NAVY on the host theme; dark nav text on navy is
+   invisible. Force the sidebar opaque white so dark resting links + the pink active pill read right. */
+.sidebar{ background-color:#ffffff !important; border-right:1px solid var(--border, rgba(15,23,42,0.10)) !important; box-shadow:none !important; }
 .sidebar .nav-link{ color: var(--tsi-text, var(--foreground, #334155)) !important; }
 .sidebar .nav-link.active, .sidebar .nav-link:hover{ color: var(--primary-foreground, #ffffff) !important; }
 
