@@ -70,7 +70,11 @@ function saveSession(data) {
     sessionStorage.setItem(SESSION_KEYS.fiduciaryName, data.fiduciary_name || '');
     sessionStorage.setItem(SESSION_KEYS.policies,      JSON.stringify(data.policies || []));
     // Countersign material injected by the widget alongside the principal session.
-    sessionStorage.setItem(SESSION_KEYS.instance,      data.instance       || '');
+    // vAIb-jlk6: /whoami returns the tenant id as `instanceId` (NOT `instance`). Reading
+    // data.instance stored '' -> the member countersign recomputed against an EMPTY inst
+    // -> ALL client-api calls 403'd ("countersign not verified"). Read instanceId (the real
+    // field) with data.instance as a fallback.
+    sessionStorage.setItem(SESSION_KEYS.instance,      data.instanceId || data.instance || '');
     sessionStorage.setItem(SESSION_KEYS.memberSig,     data.member_sig     || '');
     sessionStorage.setItem(SESSION_KEYS.memberTs,      data.member_ts      || '');
     // Display-only member name (cosmetic header greeting); absent -> '' (header falls
