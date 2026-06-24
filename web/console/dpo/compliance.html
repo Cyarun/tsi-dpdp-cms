@@ -425,14 +425,21 @@ body{ background-color:transparent; }
     </div>
 </div>
 
-<!-- Modal: New CES Job -->
+<!-- Modal: Fused Compliance Check (vAIb-i9ja) — CES retention/erasure + coverage orphans -->
 <div id="new-ces-job-modal" class="modal-overlay">
-    <div class="modal-content" style="max-width: 500px;">
+    <div class="modal-content" style="max-width: 560px;">
         <button class="absolute top-4 right-4 text-[var(--muted-foreground)] hover:text-[var(--foreground)] text-2xl" onclick="closeModal('new-ces-job-modal')">&times;</button>
-        <h2 class="text-xl font-bold primary-text mb-4">Initiate Compliance Check</h2>
+        <h2 class="text-xl font-bold primary-text mb-1">Run Compliance Check</h2>
+        <p class="text-xs text-[var(--muted-foreground)] mb-4">Runs CES (retention &amp; erasure) + consent coverage (orphan detection) in one pass.</p>
+
+        <!-- Coverage orphan summary — populated after scan runs -->
+        <div id="coverage-result" class="hidden mb-4 rounded-lg border p-4 text-sm">
+            <!-- populated by runFusedCheck() -->
+        </div>
+
         <form id="new-ces-job-form">
             <div class="mb-4">
-                <span class="block text-sm font-bold text-[var(--foreground)] mb-2">Scope of Enforcement</span>
+                <span class="block text-sm font-bold text-[var(--foreground)] mb-2">CES Scope</span>
                 <div class="flex items-center gap-4">
                     <label class="flex items-center gap-2 cursor-pointer">
                         <input type="radio" name="ces_scope" value="FULL" checked onchange="togglePrincipalInput(false)" class="text-[var(--tsi-accent)] focus:ring-[var(--ring)]">
@@ -450,13 +457,14 @@ body{ background-color:transparent; }
                 <input type="text" id="target-principal-id" class="w-full p-2 border border-[var(--border)] rounded-md text-sm" placeholder="e.g. data_principal_xyz789">
             </div>
 
-            <div class="bg-blue-50 p-3 rounded-md mb-6 border border-blue-100">
-                <p class="text-xs text-blue-700"><strong>Note:</strong> This will trigger the Compliance Enforcement Service (CES) to check for expired retention periods and pending erasure requests.</p>
+            <div class="bg-blue-50 p-3 rounded-md mb-4 border border-blue-100">
+                <p class="text-xs text-blue-700"><strong>CES:</strong> checks expired retention periods and pending erasure requests.</p>
+                <p class="text-xs text-blue-700 mt-1"><strong>Coverage:</strong> scans Wix sources for data subjects with no consent record (orphans — §6 gap).</p>
             </div>
 
             <div class="modal-footer">
                 <button type="button" onclick="closeModal('new-ces-job-modal')" class="bg-[var(--muted)] text-[var(--foreground)] px-4 py-2 rounded-md text-sm font-medium hover:bg-[var(--muted)]">Cancel</button>
-                <button type="submit" id="start-ces-btn" class="primary-bg text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-opacity-90">Start Engine</button>
+                <button type="submit" id="start-ces-btn" class="primary-bg text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-opacity-90">Run Check</button>
             </div>
         </form>
     </div>
@@ -472,6 +480,89 @@ body{ background-color:transparent; }
     document.getElementById('username').textContent = USER_NAME || 'DPO User';
 
     let tableBody, countSpan, searchInput, statusFilter, purgeModalOverlay, updateForm;
+
+    // --- vAIb-i9ja: Fabric base + DPO countersign (mirrors admin/coverage.html) ---
+    // The DPO surface carries instance+email+member_sig+member_ts in the URL (same as
+    // the portal countersign flow). The fabric coverage route accepts the DPO context
+    // header (X-Fabric-Dpo) in addition to the owner signed-instance path.
+
+    function fabricBase() {
+        var p = window.location.pathname || '';
+        var i = p.indexOf('/console/cms');
+        if (i <= 0) return '/vaib/fabric';
+        return p.slice(0, i);
+    }
+
+    function dpoContextHeader() {
+        var q = new URLSearchParams(window.location.search);
+        var ctx = {
+            instance:   q.get('instance')   || '',
+            email:      q.get('email')      || '',
+            member_sig: q.get('member_sig') || '',
+            member_ts:  q.get('member_ts')  || ''
+        };
+        if (!ctx.email || !ctx.member_sig || !ctx.member_ts) return '';
+        try { return btoa(JSON.stringify(ctx)); } catch (e) { return ''; }
+    }
+
+    function signedInstance() {
+        return new URLSearchParams(window.location.search).get('instance') || '';
+    }
+
+    // Run coverage audit against fabric (same as admin/coverage.html; DPO surface uses
+    // X-Fabric-Dpo header instead of the owner signed-instance body path).
+    async function runCoverageAudit() {
+        var hdrs = { 'Content-Type': 'application/json', 'Accept': 'application/json' };
+        var dpoHdr = dpoContextHeader();
+        if (dpoHdr) hdrs['X-Fabric-Dpo'] = dpoHdr;
+        var inst = signedInstance();
+        var resp = await fetch(fabricBase() + '/coverage/audit', {
+            method: 'POST',
+            headers: hdrs,
+            credentials: 'same-origin',
+            body: JSON.stringify({ instance: inst })
+        });
+        if (!resp.ok) return null;
+        var data = await resp.json().catch(() => null);
+        return (data && data.ok) ? data.summary : null;
+    }
+
+    // Render the orphan/coverage section in the fused modal.
+    function renderCoverageResult(summary) {
+        var el = document.getElementById('coverage-result');
+        if (!summary) {
+            el.className = 'mb-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm';
+            el.innerHTML = '<p class="text-amber-700 text-xs"><strong>Coverage scan unavailable</strong> — could not reach the fabric audit endpoint. CES job will still run. Check the gateway or ensure the page is opened via the Wix console.</p>';
+            el.classList.remove('hidden');
+            return;
+        }
+        var t = summary.totals || {};
+        var orphan = t.orphan || 0;
+        var covered = t.covered || 0;
+        var derived = t.derived_only || 0;
+        var subjects = t.subjects || 0;
+        var borderCls = orphan > 0 ? 'border-red-300 bg-red-50' : 'border-green-200 bg-green-50';
+        var html = '<div class="flex items-start gap-3">';
+        if (orphan > 0) {
+            html += '<svg class="mt-0.5 h-4 w-4 shrink-0 text-red-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
+        } else {
+            html += '<svg class="mt-0.5 h-4 w-4 shrink-0 text-green-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>';
+        }
+        html += '<div class="flex-1">';
+        html += '<p class="font-semibold text-xs ' + (orphan > 0 ? 'text-red-800' : 'text-green-800') + '">Coverage scan — ' + subjects + ' subject(s) scanned</p>';
+        html += '<div class="flex gap-4 mt-1">';
+        html += '<span class="text-xs text-green-700">&#9679; Covered: <strong>' + covered + '</strong></span>';
+        html += '<span class="text-xs text-blue-700">&#9679; Derived: <strong>' + derived + '</strong></span>';
+        html += '<span class="text-xs ' + (orphan > 0 ? 'text-red-700 font-bold' : 'text-slate-500') + '">&#9679; Orphan: <strong>' + orphan + '</strong></span>';
+        html += '</div>';
+        if (orphan > 0) {
+            html += '<p class="text-xs text-red-700 mt-1">' + orphan + ' subject(s) held with no consent record (§6 gap). See <a href="../admin/coverage.html' + window.location.search + '" class="underline font-semibold">Coverage Audit</a> for per-source breakdown.</p>';
+        }
+        html += '</div></div>';
+        el.className = 'mb-4 rounded-lg border ' + borderCls + ' p-4 text-sm';
+        el.innerHTML = html;
+        el.classList.remove('hidden');
+    }
 
     function toggleMenu() {
         document.getElementById('sidebar').classList.toggle('open');
@@ -664,6 +755,10 @@ body{ background-color:transparent; }
     }
 
     function openNewCesJobModal() {
+        // Reset coverage result panel before showing the modal.
+        var cr = document.getElementById('coverage-result');
+        cr.classList.add('hidden');
+        cr.innerHTML = '';
         document.getElementById('new-ces-job-modal').style.display = 'flex';
     }
 
@@ -722,34 +817,57 @@ body{ background-color:transparent; }
 
         const btn = document.getElementById('start-ces-btn');
         btn.disabled = true;
-        btn.textContent = "Scheduling...";
+        btn.textContent = "Running…";
 
         try {
-            const payload = {
+            // vAIb-i9ja — FUSED check: run coverage audit + CES job in parallel.
+            // Coverage audit is read-only and fast; CES job is a background trigger.
+            // Both are shown together — one unified compliance picture.
+            const coveragePromise = (scope === 'FULL') ? runCoverageAudit() : Promise.resolve(null);
+
+            const cesPayload = {
                 "_func": "create_job",
                 "job_type": "CES",
                 "subtype": subtype,
                 "fiduciary_id": FIDUCIARY_ID
             };
-
-            const response = await fetch(API_URL_JOBS, {
+            const cesPromise = fetch(API_URL_JOBS, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${AUTH_TOKEN}` },
-                body: JSON.stringify(payload)
+                body: JSON.stringify(cesPayload)
             });
 
-            if (response.ok) {
-                alert("Compliance Enforcement Job Initiated.");
-                closeModal('new-ces-job-modal');
-                openCesJobsModal(); // Switch to view jobs
+            const [coverageSummary, cesResponse] = await Promise.all([coveragePromise, cesPromise]);
+
+            // Show coverage orphan result in the modal (always — even if null/unavailable).
+            if (scope === 'FULL') {
+                renderCoverageResult(coverageSummary);
+            }
+
+            if (cesResponse.ok) {
+                // Keep modal open so the DPO can see the coverage result; offer to view jobs.
+                btn.disabled = false;
+                btn.textContent = "Run Check";
+                const viewBtn = document.createElement('button');
+                viewBtn.type = 'button';
+                viewBtn.className = 'bg-[var(--muted)] text-[var(--foreground)] px-4 py-2 rounded-md text-sm font-medium hover:bg-[var(--muted)]';
+                viewBtn.textContent = 'View Jobs';
+                viewBtn.onclick = () => { closeModal('new-ces-job-modal'); openCesJobsModal(); };
+                const footer = document.querySelector('#new-ces-job-form .modal-footer');
+                // Avoid duplicate "View Jobs" buttons on repeat runs.
+                if (!footer.querySelector('.view-jobs-btn')) {
+                    viewBtn.classList.add('view-jobs-btn');
+                    footer.insertBefore(viewBtn, footer.querySelector('#start-ces-btn'));
+                }
             } else {
-                alert("Failed to schedule job.");
+                alert("Failed to schedule CES job.");
+                btn.disabled = false;
+                btn.textContent = "Run Check";
             }
         } catch(err) {
-            alert("Network Error.");
-        } finally {
+            alert("Network Error: " + (err.message || err));
             btn.disabled = false;
-            btn.textContent = "Start Engine";
+            btn.textContent = "Run Check";
         }
     });
 
