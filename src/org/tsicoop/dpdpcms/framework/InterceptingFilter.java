@@ -48,6 +48,13 @@ public class InterceptingFilter implements Filter {
             "erasure_request",
             "list_purge_requests",
             "update_purge_status",
+            // vAIb-i9ja (C3 coverage fuse): the gateway routes a coverage ORPHAN
+            // (a data subject the install processes with NO consent record) into the
+            // shared purge_requests DPO queue via this PURGE-scoped client call, using
+            // the tenant's own api-key (tenant-bound). Only CREATES an INITIATED row a
+            // DPO must still CONFIRM — never a destructive write (those remain
+            // update_purge_status, also PURGE scope + DPO-session-gated server-side).
+            "initiate_purge_request",
             "list_notifications",
             "mark_notification_read",
             "record_parent_consent",
@@ -94,6 +101,8 @@ public class InterceptingFilter implements Filter {
         // --- PURGE SCOPE ---
         CLIENT_FUNC_SCOPES.put("list_purge_requests", SCOPE_PURGE);
         CLIENT_FUNC_SCOPES.put("update_purge_status", SCOPE_PURGE);
+        // vAIb-i9ja (C3): coverage-orphan routing into the DPO queue (INITIATED only).
+        CLIENT_FUNC_SCOPES.put("initiate_purge_request", SCOPE_PURGE);
     }
     
     @Override

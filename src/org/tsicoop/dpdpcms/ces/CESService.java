@@ -18,6 +18,27 @@ import java.util.UUID;
 
 /**
  * CESService implements the compliance business logic.
+ *
+ * CES SCAN (this class, driven by JobManager.enforce on a "Run Compliance Check"):
+ * walks the CMS consent LEDGER per principal and routes erasure/retention-expiry into
+ * the shared {@code purge_requests} DPO queue (handleErasure / handleRetentionPurge ->
+ * insertPurgeRequest, with recordOrphanComplianceEvent for purposes that have no linked
+ * processor).
+ *
+ * COVERAGE FUSE (vAIb-i9ja, C3): the SECOND half of a complete "Run Compliance Check"
+ * is the PLATFORM COVERAGE scan — it pages the platform install (Wix members/orders/
+ * bookings/forms via a platform-agnostic connector) and finds ORPHANS: data subjects
+ * the install is PROCESSING that have NO consent record in this ledger at all (so the
+ * ledger-only CES scan above can never see them — there is no row to walk). That scan
+ * lives in the gateway (services/gateway/core/coverage_audit.py + routers/coverage.py)
+ * because that is the only tier with the platform connector + per-tenant creds. When
+ * the owner/DPO runs it with route_orphans=true, the gateway routes each orphan into
+ * THIS SAME {@code purge_requests} queue via the CMS {@code initiate_purge_request}
+ * func (Compliance.java) with trigger_event=ORPHAN_NO_CONSENT and app_id=NULL (no
+ * linked processor) — fiduciary server-injected, cross-tenant impossible. The result:
+ * the DPO's compliance console shows coverage orphans ALONGSIDE the ledger-derived
+ * retention/erasure items, and the existing dry-run -> confirm -> 15d-hold ->
+ * decommission oversight (B3, vAIb-ntsx) actions them identically.
  */
 public class CESService {
 

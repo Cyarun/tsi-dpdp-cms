@@ -132,14 +132,33 @@ public class Compliance implements Action {
                             return;
                         }
                     }
+                    // vAIb-i9ja (C3 coverage fuse): an ORPHAN_NO_CONSENT subject has NO
+                    // linked data processor by definition — it surfaced from the platform
+                    // coverage scan, not from any app's consent flow. Force app_id=NULL so
+                    // the row reads "No Linked Processor" (mirrors CESService.recordOrphan
+                    // ComplianceEvent), regardless of which tenant api-key carried the call.
+                    if (Constants.PURGE_TRIGGER_ORPHAN_NO_CONSENT.equals(triggerEvent)) {
+                        purgeAppId = null;
+                    }
 
-                    if (userId == null || userId.isEmpty() || fiduciaryId == null || triggerEvent == null || triggerEvent.isEmpty()) {
-                        OutputProcessor.errorResponse(res, HttpServletResponse.SC_BAD_REQUEST, "Bad Request", "Missing required fields (user_id, fiduciary_id, trigger_event) for 'initiate_purge_request'.", req.getRequestURI());
+                    // SEC (vAIb-ktvf class / vAIb-i9ja C3): the purge WRITE is tenant-scoped to the
+                    // CREDENTIAL-derived fiduciary (operator on admin path / api-key on client path),
+                    // NEVER the body fiduciary_id — else a tenant-A api-key could pass body
+                    // fiduciary_id=tenantB and create a purge row in tenant-B's DPO queue (cross-tenant
+                    // WRITE). The C3 coverage fuse drives this path with the tenant's own api-key, so
+                    // the credential fiduciary IS the verified tenant; the body value is ignored here.
+                    UUID purgeCallerFid = (loginUserId != null) ? getOperatorFiduciary(loginUserId) : credentialFiduciaryId;
+                    if (purgeCallerFid == null) {
+                        OutputProcessor.errorResponse(res, HttpServletResponse.SC_FORBIDDEN, "Forbidden", "Cannot resolve the caller's fiduciary for this operation.", req.getRequestURI());
+                        return;
+                    }
+                    if (userId == null || userId.isEmpty() || triggerEvent == null || triggerEvent.isEmpty()) {
+                        OutputProcessor.errorResponse(res, HttpServletResponse.SC_BAD_REQUEST, "Bad Request", "Missing required fields (user_id, trigger_event) for 'initiate_purge_request'.", req.getRequestURI());
                         return;
                     }
 
                     String details = (String) input.get("details");
-                    output = initiatePurgeRequest(userId, fiduciaryId, purposeId, purgeAppId, triggerEvent, details, loginUserId);
+                    output = initiatePurgeRequest(userId, purgeCallerFid, purposeId, purgeAppId, triggerEvent, details, loginUserId);
                     OutputProcessor.send(res, HttpServletResponse.SC_CREATED, output);
                     break;
                 }
@@ -354,6 +373,23 @@ public class Compliance implements Action {
         ResultSet rs = null;
         PoolDB pool = new PoolDB();
 
+        // vAIb-i9ja (C3 coverage fuse): the coverage scan re-runs on every "Run
+        // Compliance Check" (nightly + on-demand), so an unactioned orphan would be
+        // re-routed every run. IDEMPOTENT for the orphan trigger: if an OPEN
+        // (INITIATED / UNDER_LEGAL_HOLD) orphan request already exists for this
+        // principal, return it instead of inserting a duplicate. Erasure/expiry keep
+        // their existing behaviour (they are already gated by lastCESRun in CESService).
+        if (Constants.PURGE_TRIGGER_ORPHAN_NO_CONSENT.equals(triggerEvent)) {
+            UUID existing = findOpenPurgeRequestId(fiduciaryId, userId, triggerEvent);
+            if (existing != null) {
+                output.put("purge_request_id", existing.toString());
+                output.put("status", "EXISTING");
+                output.put("blocked_by_legal_hold", false);
+                output.put("message", "Orphan already routed to DPO; existing open request reused (idempotent).");
+                return new JSONObject() {{ put("success", true); put("data", output); }};
+            }
+        }
+
         // If a litigation hold already covers this principal, route as UNDER_LEGAL_HOLD (purge blocked).
         UUID activeHoldId = findActiveLegalHoldId(fiduciaryId, userId);
         String initialStatus = (activeHoldId != null) ? STATUS_UNDER_LEGAL_HOLD : STATUS_INITIATED;
@@ -558,6 +594,41 @@ public class Compliance implements Action {
      * data_categories) covers everything for the principal.
      * @throws SQLException if a database access error occurs.
      */
+    /**
+     * vAIb-i9ja (C3): returns the id of an OPEN purge_request (INITIATED or
+     * UNDER_LEGAL_HOLD — i.e. not yet actioned/terminal) for this principal +
+     * trigger, or null if none. Used to make orphan routing IDEMPOTENT across the
+     * repeated coverage scans a "Run Compliance Check" fires. Tenant-scoped by
+     * fiduciary_id (the caller passes the server-derived fiduciary).
+     * @throws SQLException if a database access error occurs.
+     */
+    private UUID findOpenPurgeRequestId(UUID fiduciaryId, String userId, String triggerEvent) throws SQLException {
+        Connection conn = null;
+        PreparedStatement pstmt = null;
+        ResultSet rs = null;
+        PoolDB pool = new PoolDB();
+        UUID id = null;
+        String sql = "SELECT id FROM purge_requests " +
+                "WHERE fiduciary_id = ? AND user_id = ? AND trigger_event = ? " +
+                "AND status IN (?, ?) ORDER BY initiated_at DESC LIMIT 1";
+        try {
+            conn = pool.getConnection();
+            pstmt = conn.prepareStatement(sql);
+            pstmt.setObject(1, fiduciaryId);
+            pstmt.setString(2, userId);
+            pstmt.setString(3, triggerEvent);
+            pstmt.setString(4, STATUS_INITIATED);
+            pstmt.setString(5, STATUS_UNDER_LEGAL_HOLD);
+            rs = pstmt.executeQuery();
+            if (rs.next()) {
+                id = UUID.fromString(rs.getString("id"));
+            }
+        } finally {
+            pool.cleanup(rs, pstmt, conn);
+        }
+        return id;
+    }
+
     private UUID findActiveLegalHoldId(UUID fiduciaryId, String userId) throws SQLException {
         Connection conn = null;
         PreparedStatement pstmt = null;

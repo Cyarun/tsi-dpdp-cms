@@ -170,8 +170,23 @@ body{ background-color:transparent; }
       <p class="text-xs text-red-700 mt-1 leading-relaxed">
         Orphans are data subjects your installation holds data on with <em>no consent record of any kind</em>.
         This is a §6 DPDPA liability — the data principal's data is being processed with no legal basis on file.
-        Use "Prepare decommissioning" (§6-B3, coming soon) or manually collect consent before the next compliance review.
+        Route them to the DPO's purge queue below (they land as <strong>INITIATED</strong> for the DPO to confirm,
+        alongside the CES retention/erasure items), or manually collect consent before the next compliance review.
       </p>
+      <!-- vAIb-i9ja (C3 FUSE): route orphans into the shared DPO purge_requests queue.
+           Re-runs the SAME owner-gated scan with route_orphans=true; the gateway writes
+           one INITIATED purge_request per orphan (trigger ORPHAN_NO_CONSENT) so the DPO's
+           "Run Compliance Check" surfaces them next to retention/erasure items. -->
+      <button id="route-orphans-btn" onclick="routeOrphansToDpo()"
+              class="mt-3 inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-semibold whitespace-nowrap"
+              style="border-color:var(--red-500);color:var(--red-700);background:white">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+        </svg>
+        Route orphans to DPO purge queue
+      </button>
+      <p id="route-orphans-result" class="text-xs text-red-700 mt-2 leading-relaxed hidden"></p>
     </div>
   </div>
 
@@ -539,6 +554,61 @@ async function runAudit() {
       + ' stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">'
       + '<circle cx="12" cy="12" r="10"/><polyline points="12 8 16 12 12 16"/>'
       + '<line x1="8" y1="12" x2="16" y2="12"/></svg> Run Audit';
+  }
+}
+
+/* ── Route orphans to the DPO purge queue (vAIb-i9ja, C3 FUSE) ─────────────
+ * Re-runs the SAME owner-gated scan with route_orphans=true. The gateway routes
+ * each orphan into the tenant's purge_requests DPO queue (INITIATED, trigger
+ * ORPHAN_NO_CONSENT) so a DPO "Run Compliance Check" surfaces coverage orphans
+ * alongside CES retention/erasure items. NO PII is returned — only a routed COUNT.
+ * Auth is identical to runAudit (owner signed instance, or DPO countersign header). */
+async function routeOrphansToDpo() {
+  var btn = document.getElementById('route-orphans-btn');
+  var result = document.getElementById('route-orphans-result');
+  var inst = signedInstance();
+  if (!inst) {
+    result.textContent = 'Missing signed instance — open this page through the Wix owner dashboard.';
+    result.classList.remove('hidden');
+    return;
+  }
+  if (!confirm('Route all detected orphans to the DPO purge queue? They will land as INITIATED for the DPO to confirm. This does not delete any data.')) {
+    return;
+  }
+  btn.disabled = true;
+  var orig = btn.innerHTML;
+  btn.innerHTML = '<span class="spinner"></span> Routing…';
+  result.classList.add('hidden');
+  try {
+    var hdrs = { 'Content-Type': 'application/json', 'Accept': 'application/json' };
+    var dpoHdr = dpoContextHeader();
+    if (dpoHdr) hdrs['X-Fabric-Dpo'] = dpoHdr;
+    var resp = await fetch(fabricBase() + '/coverage/audit', {
+      method: 'POST',
+      headers: hdrs,
+      credentials: 'same-origin',
+      body: JSON.stringify({ instance: inst, route_orphans: true })
+    });
+    var data; try { data = await resp.json(); } catch (_) { data = null; }
+    if (resp.status === 403) {
+      result.textContent = 'Access denied (403) — only the site owner or registered DPO can route orphans.';
+    } else if (!resp.ok || !data || !data.ok) {
+      var msg = (data && data.error) ? data.error : ('HTTP ' + resp.status);
+      result.textContent = 'Routing failed: ' + msg + '.';
+    } else {
+      var routed = (data.summary && data.summary.totals && data.summary.totals.orphan_routed) || 0;
+      result.textContent = routed + ' orphan(s) routed to the DPO purge queue (INITIATED). The DPO can now confirm them in Compliance.';
+      /* refresh the read view so the orphan counts/banner reflect the post-route state */
+      renderSummary((data.summary && data.summary.totals) || {});
+      renderSources((data.summary && data.summary.sources) || {});
+    }
+    result.classList.remove('hidden');
+  } catch (err) {
+    result.textContent = 'Network error — could not reach the audit endpoint: ' + (err.message || err);
+    result.classList.remove('hidden');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = orig;
   }
 }
 

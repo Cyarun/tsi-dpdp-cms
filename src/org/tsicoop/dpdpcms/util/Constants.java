@@ -37,6 +37,12 @@ public class Constants {
 
     public static final String PURGE_TRIGGER_ERASURE = "ErasureRequest";
     public static final String PURGE_TRIGGER_EXPIRY = "RetentionPolicyExpiry";
+    // vAIb-i9ja (C3 coverage fuse): a data subject the platform install is processing
+    // with NO consent record at all (the coverage scan's ORPHAN bucket). Routed into
+    // the SAME purge_requests DPO queue as erasure/retention so one "Run Compliance
+    // Check" surfaces platform-coverage orphans alongside CMS-ledger retention items.
+    // An orphan has no linked data processor, so its purge_request carries app_id=NULL.
+    public static final String PURGE_TRIGGER_ORPHAN_NO_CONSENT = "ORPHAN_NO_CONSENT";
 
     // --- Notification Types ---
     public static final String NOTIF_EXPIRY_REMINDER = "EXPIRY_NOTIFICATION"; // Pre-expiry alert
