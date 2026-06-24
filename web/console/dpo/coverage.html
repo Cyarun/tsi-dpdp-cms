@@ -68,11 +68,15 @@ body::before{
 }
 body{ background-color:transparent; }
 /* tinted glass cards (translucent, brand-blended) with their OWN blur so text stays crisp */
-[class*="bg-[var(--card)]"], .card, [class*="bg-white"]{
+[class*="bg-[var(--card)]"], .card:not(.modal-content), [class*="bg-white"]:not(.modal-content){
   background-color:var(--gl-card-strong) !important;
   -webkit-backdrop-filter:blur(8px); backdrop-filter:blur(8px);
   border:1px solid oklch(1 0 0 / 0.35) !important;
 }
+
+/* POPUP CARE (user): modals/overlays are SOLID over the glass — never see-through. */
+.modal-content{ background-color:#ffffff !important; -webkit-backdrop-filter:none !important; backdrop-filter:none !important; }
+.modal-overlay{ background:rgba(15,23,42,0.78) !important; z-index:1000; }
 </style>
 </head>
 
