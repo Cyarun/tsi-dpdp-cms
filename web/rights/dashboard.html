@@ -266,8 +266,20 @@
         const centerArea = document.getElementById('preference-center-body');
         if (!centerArea) return;
 
+        // vAIb-jlk6: get_policy is keyed by (policy_id, VERSION). The principal's session
+        // policies carry the ACTIVE version (principal_login -> getActivePolicies); pass it
+        // so we fetch the PUBLISHED (ACTIVE) version. Omitting it resolved version='' (the
+        // legacy ARCHIVED empty-version row) which the principal-facing read rejects (the
+        // consent surface only exposes the ACTIVE policy) -> "content unavailable". Fall
+        // back to the selected entry's version, else the matching session policy's version.
+        const _entry = (SESSION.policies || []).find(p => p.policy_id === policyId)
+                      || (activePolicyEntry && activePolicyEntry.policy_id === policyId ? activePolicyEntry : null);
+        const _version = _entry && _entry.version ? _entry.version : undefined;
+        const _policyReq = { policy_id: policyId };
+        if (_version) _policyReq.version = _version;
+
         const [policy, activeConsent] = await Promise.all([
-            apiCall('/api/v1/client/policy', 'get_policy', { policy_id: policyId }),
+            apiCall('/api/v1/client/policy', 'get_policy', _policyReq),
             apiCall('/api/v1/client/consent', 'get_active_consent', {
                 user_id: SESSION.userId,
                 fiduciary_id: SESSION.fiduciaryId,
