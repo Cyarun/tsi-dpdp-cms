@@ -114,8 +114,16 @@ async function apiCall(path, func, bodyExtra) {
     // Re-present the Wix member countersign on EVERY call so the fabric proxy can
     // verify it (per-call) AND bind it to the Bearer's principal. The proxy STRIPS
     // these before forwarding upstream, so the CMS never sees them.
+    // vAIb-jlk6: the countersign is HMAC(member|EMAIL|instance|ts) — fabric's
+    // _verify_member_principal recomputes it over the body `email`, so the email MUST
+    // travel with every call or the verify fails closed (403, "countersign not
+    // verified") for the WHOLE client-api surface (policy AND consent). The principal's
+    // email is the session user_id (the My-Data principal is keyed by their member
+    // email); send it so the per-call countersign verifies. The proxy strips it like the
+    // other countersign fields, so the CMS still scopes only off the signed Bearer.
     const cs = session
-        ? { instance: session.instance, member_sig: session.memberSig, member_ts: session.memberTs }
+        ? { email: session.userId, instance: session.instance,
+            member_sig: session.memberSig, member_ts: session.memberTs }
         : {};
     const body = JSON.stringify({ _func: func, ...cs, ...bodyExtra });
     try {
