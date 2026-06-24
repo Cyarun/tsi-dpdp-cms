@@ -6,64 +6,58 @@
     <title>DPDPA.center - ROPA Registry</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        :root {
-            --tsi-primary: #006A67;
-            --tsi-accent: #008D8A;
-            --background: #f4fbf9;
-            --card-bg: #FFFFFF;
-            --radius: 0.5rem;
-        }
-        body { background-color: var(--background); font-family: ui-sans-serif, system-ui, sans-serif; margin: 0; padding: 0; min-height: 100vh; }
+        /* W2: page-local teal :root removed — injected tweakcn tokens win */
+        body { background-color: var(--background); font-family: var(--font-sans, 'Inter', ui-sans-serif, system-ui, sans-serif); margin: 0; padding: 0; min-height: 100vh; }
         .primary-bg { background-color: var(--tsi-primary); }
         .primary-text { color: var(--tsi-primary); }
         .sidebar {
-            width: 250px; background-color: #f8fafc;
-            box-shadow: 2px 0 5px rgba(0,0,0,0.05); padding-top: 20px;
+            width: 250px; background-color: var(--secondary);
+            box-shadow: 2px 0 5px rgba(0,0,0,0.1); padding-top: 20px;
             position: fixed; top: 0; left: 0; height: 100vh;
-            z-index: 50; border-right: 1px solid #e2e8f0;
+            z-index: 50; border-right: 1px solid var(--border);
             transition: transform 0.3s ease-in-out;
         }
         @media (max-width: 1023px) { .sidebar { transform: translateX(-100%); } .sidebar.open { transform: translateX(0); } }
         @media (min-width: 1024px) { body { padding-left: 250px; } }
-        .nav-link { display: flex; align-items: center; padding: 10px 20px; margin: 5px 0; border-radius: 6px; color: #4a5568; transition: all 0.2s ease; }
-        .nav-link:hover, .nav-link.active { background-color: #e5f5f4; color: var(--tsi-primary); font-weight: 600; }
-        .card { background-color: var(--card-bg); border-radius: var(--radius); box-shadow: 0 1px 3px 0 rgba(0,0,0,0.1); padding: 20px; border: 1px solid #e2e8f0; }
-        .table-header { background-color: #f1f5f9; font-weight: 600; color: #4a5568; text-align: left; }
-        .mobile-header { display: flex; justify-content: space-between; align-items: center; padding: 10px 20px; background-color: #ffffff; border-bottom: 1px solid #e2e8f0; position: sticky; top: 0; z-index: 40; }
+        .nav-link { display: flex; align-items: center; padding: 10px 20px; margin: 5px 0; border-radius: var(--radius); color: var(--secondary-foreground); transition: all 0.2s ease; }
+        .nav-link:hover, .nav-link.active { background-color: var(--tsi-accent); color: var(--primary-foreground); font-weight: 600; }
+        .card { background-color: var(--card); border-radius: var(--radius); box-shadow: var(--shadow-sm); padding: 20px; border: 1px solid var(--border); }
+        .table-header { background-color: var(--muted); font-weight: 600; color: var(--muted-foreground); text-align: left; }
+        .mobile-header { display: flex; justify-content: space-between; align-items: center; padding: 10px 20px; background-color: var(--card); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 40; }
         @media (min-width: 1024px) { .mobile-header { display: none; } }
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15,23,42,0.7); display: none; justify-content: center; align-items: center; z-index: 1000; }
-        .modal-content { background: white; padding: 0; border-radius: 1rem; max-width: 860px; width: 95%; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); position: relative; max-height: 90vh; display: flex; flex-direction: column; overflow: hidden; }
+        .modal-content { background-color: var(--card); padding: 0; border-radius: var(--radius); max-width: 860px; width: 95%; box-shadow: var(--shadow-2xl); position: relative; max-height: 90vh; display: flex; flex-direction: column; overflow: hidden; }
         .modal-content.wide { max-width: 1100px; }
-        .modal-header { padding: 1.5rem 2rem; border-bottom: 1px solid #f1f5f9; background: white; }
-        .modal-body { padding: 1.5rem 2rem; flex: 1; overflow-y: auto; background: white; }
-        .modal-footer { padding: 1rem 2rem; border-top: 1px solid #f1f5f9; background: #f8fafc; display: flex; justify-content: flex-end; gap: 10px; }
-        .modal-close-btn { position: absolute; top: 1.5rem; right: 1.5rem; font-size: 1.5rem; color: #64748b; background: #f1f5f9; border: none; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; }
-        .modal-close-btn:hover { background: #e2e8f0; color: #0f172a; }
-        .field-label { display: block; font-size: 0.75rem; font-weight: 700; color: #374151; margin-bottom: 4px; }
-        .field-input { width: 100%; padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.875rem; outline: none; }
-        .field-input:focus { border-color: var(--tsi-primary); box-shadow: 0 0 0 2px rgba(0,106,103,0.15); }
-        .field-input[disabled] { background: #f8fafc; color: #94a3b8; }
+        .modal-header { padding: 1.5rem 2rem; border-bottom: 1px solid var(--border); background-color: var(--card); }
+        .modal-body { padding: 1.5rem 2rem; flex: 1; overflow-y: auto; background-color: var(--card); }
+        .modal-footer { padding: 1rem 2rem; border-top: 1px solid var(--border); background-color: var(--muted); display: flex; justify-content: flex-end; gap: 10px; }
+        .modal-close-btn { position: absolute; top: 1.5rem; right: 1.5rem; font-size: 1.5rem; color: var(--muted-foreground); background-color: var(--muted); border: none; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+        .modal-close-btn:hover { background-color: var(--border); color: var(--foreground); }
+        .field-label { display: block; font-size: 0.75rem; font-weight: 700; color: var(--foreground); margin-bottom: 4px; }
+        .field-input { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); font-size: 0.875rem; outline: none; background-color: var(--input); }
+        .field-input:focus { border-color: var(--tsi-primary); box-shadow: 0 0 0 2px rgba(36,51,92,0.15); }
+        .field-input[disabled] { background-color: var(--muted); color: var(--muted-foreground); }
         .sidebar-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 40; display: none; }
         .sidebar-backdrop.active { display: block; }
         .checklist-item { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; padding: 4px 0; }
         .checklist-ok { color: #16a34a; }
         .checklist-fail { color: #dc2626; }
-        .history-row { border-left: 3px solid #e2e8f0; padding: 8px 12px; margin-bottom: 8px; background: #f8fafc; border-radius: 0 6px 6px 0; }
+        .history-row { border-left: 3px solid var(--border); padding: 8px 12px; margin-bottom: 8px; background-color: var(--muted); border-radius: 0 var(--radius) var(--radius) 0; }
         /* Chip / tag inputs */
-        .chip-area { border: 1px solid #d1d5db; border-radius: 6px; padding: 8px 10px; min-height: 42px; background: #f9fafb; }
+        .chip-area { border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px; min-height: 42px; background-color: var(--muted); }
         .chip-list { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 6px; }
-        .chip { display: inline-flex; align-items: center; gap: 4px; background: #e0f2f1; color: #00695c; font-size: 0.72rem; font-weight: 700; padding: 3px 8px; border-radius: 9999px; }
-        .chip-remove { background: none; border: none; color: #00897b; cursor: pointer; font-size: 1rem; padding: 0 0 1px; line-height: 1; }
-        .chip-remove:hover { color: #c62828; }
-        .preset-tag { cursor: pointer; display: inline-block; font-size: 0.68rem; font-weight: 700; padding: 2px 9px; border-radius: 9999px; background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; transition: all 0.15s; }
-        .preset-tag:hover { background: #e0f2f1; color: #006A67; border-color: #99d6d3; }
+        .chip { display: inline-flex; align-items: center; gap: 4px; background-color: var(--secondary); color: var(--secondary-foreground); font-size: 0.72rem; font-weight: 700; padding: 3px 8px; border-radius: 9999px; }
+        .chip-remove { background: none; border: none; color: var(--secondary-foreground); cursor: pointer; font-size: 1rem; padding: 0 0 1px; line-height: 1; }
+        .chip-remove:hover { color: var(--primary); }
+        .preset-tag { cursor: pointer; display: inline-block; font-size: 0.68rem; font-weight: 700; padding: 2px 9px; border-radius: 9999px; background-color: var(--muted); color: var(--muted-foreground); border: 1px solid var(--border); transition: all 0.15s; }
+        .preset-tag:hover { background-color: var(--secondary); color: var(--secondary-foreground); border-color: var(--secondary); }
         /* Struct cards for processors / transfers */
-        .struct-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px 12px; margin-bottom: 6px; }
-        .sub-form { background: #f0faf9; border: 1px dashed #a7d8d6; border-radius: 6px; padding: 12px; margin-top: 8px; }
-        .sub-btn-add { font-size: 0.75rem; font-weight: 700; color: var(--tsi-primary); border: 1px solid #99d6d3; background: white; padding: 4px 12px; border-radius: 6px; cursor: pointer; }
-        .sub-btn-add:hover { background: #e0f2f1; }
-        .sub-btn-confirm { font-size: 0.75rem; font-weight: 700; color: white; background: var(--tsi-primary); border: none; padding: 5px 14px; border-radius: 6px; cursor: pointer; }
-        .sub-btn-cancel  { font-size: 0.75rem; font-weight: 600; color: #64748b; background: #e2e8f0; border: none; padding: 5px 12px; border-radius: 6px; cursor: pointer; }
+        .struct-card { background-color: var(--muted); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 12px; margin-bottom: 6px; }
+        .sub-form { background-color: var(--muted); border: 1px dashed var(--border); border-radius: var(--radius); padding: 12px; margin-top: 8px; }
+        .sub-btn-add { font-size: 0.75rem; font-weight: 700; color: var(--tsi-primary); border: 1px solid var(--border); background-color: var(--card); padding: 4px 12px; border-radius: var(--radius); cursor: pointer; }
+        .sub-btn-add:hover { background-color: var(--muted); }
+        .sub-btn-confirm { font-size: 0.75rem; font-weight: 700; color: var(--primary-foreground); background-color: var(--tsi-primary); border: none; padding: 5px 14px; border-radius: var(--radius); cursor: pointer; }
+        .sub-btn-cancel  { font-size: 0.75rem; font-weight: 600; color: var(--muted-foreground); background-color: var(--muted); border: none; padding: 5px 12px; border-radius: var(--radius); cursor: pointer; }
     </style>
 </head>
 
@@ -71,11 +65,11 @@
 
 <!-- Mobile Header -->
 <div class="mobile-header lg:hidden">
-    <button onclick="toggleSidebar()" class="p-2 text-gray-600">
+    <button onclick="toggleSidebar()" class="p-2 text-[var(--muted-foreground)]">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
     </button>
     <span class="text-xl font-bold primary-text">ROPA Registry</span>
-    <div class="text-sm text-gray-500">DPO User</div>
+    <div class="text-sm text-[var(--muted-foreground)]">DPO User</div>
 </div>
 
 <div id="backdrop" class="sidebar-backdrop lg:hidden" onclick="toggleSidebar()"></div>
@@ -83,7 +77,7 @@
 <!-- Sidebar -->
 <div id="sidebar" class="sidebar flex flex-col justify-between">
     <div>
-        <div class="px-5 pb-6 border-b border-gray-200 hidden lg:block">
+        <div class="px-5 pb-6 border-b border-[var(--border)] hidden lg:block">
             <span class="text-xl font-bold primary-text">DPDPA.center</span>
         </div>
         <nav class="flex flex-col space-y-1 mt-4 px-3">
@@ -99,9 +93,9 @@
             <a href="coverage.html" class="nav-link">Coverage Audit</a>
         </nav>
     </div>
-    <div class="p-3 border-t border-gray-200">
-        <div class="mt-2 text-sm text-gray-500 p-2 rounded-md flex justify-between items-center">
-            <span id="username" class="font-bold text-slate-700">DPO User</span>
+    <div class="p-3 border-t border-[var(--border)]">
+        <div class="mt-2 text-sm text-[var(--muted-foreground)] p-2 rounded-md flex justify-between items-center">
+            <span id="username" class="font-bold text-[var(--foreground)]">DPO User</span>
             <button onclick="handleLogout()" class="text-xs font-semibold text-red-500 hover:underline">Logout</button>
         </div>
     </div>
@@ -113,15 +107,15 @@
     <!-- Page Header -->
     <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
         <div>
-            <h1 class="text-2xl font-black text-slate-800 tracking-tight">ROPA Registry</h1>
-            <p class="text-xs text-slate-400 mt-1 font-medium">Records of Processing Activities — DPDP Act 2023, Section 8</p>
-            <p class="text-xs text-slate-400 mt-1 font-medium">Use the Policies screen to publish ROPA entries when activating a policy.</p>
+            <h1 class="text-2xl font-black text-[var(--foreground)] tracking-tight">ROPA Registry</h1>
+            <p class="text-xs text-[var(--muted-foreground)] mt-1 font-medium">Records of Processing Activities — DPDP Act 2023, Section 8</p>
+            <p class="text-xs text-[var(--muted-foreground)] mt-1 font-medium">Use the Policies screen to publish ROPA entries when activating a policy.</p>
         </div>
         <div class="flex gap-2 flex-wrap">
-            <button onclick="exportRopa()" class="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-50 transition">
+            <button onclick="exportRopa()" class="bg-[var(--card)] border border-[var(--border)] text-[var(--foreground)] px-4 py-2 rounded-md text-sm font-medium hover:bg-[var(--muted)] transition">
                 ↓ Export CSV
             </button>
-            <button onclick="exportRopaPdf()" class="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-50 transition">
+            <button onclick="exportRopaPdf()" class="bg-[var(--card)] border border-[var(--border)] text-[var(--foreground)] px-4 py-2 rounded-md text-sm font-medium hover:bg-[var(--muted)] transition">
                 ↓ Export PDF
             </button>
         </div>
@@ -147,7 +141,7 @@
         </div>
 
         <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-gray-200">
+            <table class="min-w-full divide-y divide-[var(--border)]">
                 <thead>
                     <tr class="table-header">
                         <th class="px-4 py-3 text-xs">Activity Name</th>
@@ -159,8 +153,8 @@
                         <th class="px-4 py-3 text-xs">Actions</th>
                     </tr>
                 </thead>
-                <tbody id="ropa-table-body" class="bg-white divide-y divide-gray-200">
-                    <tr><td colspan="7" class="p-6 text-center text-gray-400 italic">Loading registry...</td></tr>
+                <tbody id="ropa-table-body" class="bg-[var(--card)] divide-y divide-[var(--border)]">
+                    <tr><td colspan="7" class="p-6 text-center text-[var(--muted-foreground)] italic">Loading registry...</td></tr>
                 </tbody>
             </table>
         </div>
@@ -173,7 +167,7 @@
         <button class="modal-close-btn" onclick="closeViewModal()">&times;</button>
         <div class="modal-header">
             <h2 id="view-modal-title" class="text-xl font-bold primary-text">ROPA Entry Details</h2>
-            <p id="view-modal-subtitle" class="text-xs text-slate-400 mt-1"></p>
+            <p id="view-modal-subtitle" class="text-xs text-[var(--muted-foreground)] mt-1"></p>
         </div>
         <div class="modal-body">
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -182,70 +176,70 @@
                 <div class="lg:col-span-2 space-y-4">
                     <div class="grid grid-cols-2 gap-4">
                         <div>
-                            <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Legal Basis</p>
-                            <p id="v-legal-basis" class="text-sm font-semibold text-slate-700 mt-1">—</p>
+                            <p class="text-[10px] font-black text-[var(--muted-foreground)] uppercase tracking-widest">Legal Basis</p>
+                            <p id="v-legal-basis" class="text-sm font-semibold text-[var(--foreground)] mt-1">—</p>
                         </div>
                         <div>
-                            <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Retention</p>
-                            <p id="v-retention" class="text-sm font-semibold text-slate-700 mt-1">—</p>
+                            <p class="text-[10px] font-black text-[var(--muted-foreground)] uppercase tracking-widest">Retention</p>
+                            <p id="v-retention" class="text-sm font-semibold text-[var(--foreground)] mt-1">—</p>
                         </div>
                         <div class="col-span-2">
-                            <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Purpose</p>
-                            <p id="v-purpose" class="text-sm text-slate-600 mt-1">—</p>
+                            <p class="text-[10px] font-black text-[var(--muted-foreground)] uppercase tracking-widest">Purpose</p>
+                            <p id="v-purpose" class="text-sm text-[var(--muted-foreground)] mt-1">—</p>
                         </div>
                         <div>
-                            <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Data Categories</p>
-                            <p id="v-data-categories" class="text-xs text-slate-600 mt-1 break-words">—</p>
+                            <p class="text-[10px] font-black text-[var(--muted-foreground)] uppercase tracking-widest">Data Categories</p>
+                            <p id="v-data-categories" class="text-xs text-[var(--muted-foreground)] mt-1 break-words">—</p>
                         </div>
                         <div>
-                            <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Data Subjects</p>
-                            <p id="v-data-subjects" class="text-xs text-slate-600 mt-1 break-words">—</p>
+                            <p class="text-[10px] font-black text-[var(--muted-foreground)] uppercase tracking-widest">Data Subjects</p>
+                            <p id="v-data-subjects" class="text-xs text-[var(--muted-foreground)] mt-1 break-words">—</p>
                         </div>
                         <div class="col-span-2">
-                            <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Security Measures</p>
-                            <p id="v-security" class="text-sm text-slate-600 mt-1">—</p>
+                            <p class="text-[10px] font-black text-[var(--muted-foreground)] uppercase tracking-widest">Security Measures</p>
+                            <p id="v-security" class="text-sm text-[var(--muted-foreground)] mt-1">—</p>
                         </div>
                         <div>
-                            <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Processors</p>
-                            <p id="v-processors" class="text-xs text-slate-500 mt-1 break-words">—</p>
+                            <p class="text-[10px] font-black text-[var(--muted-foreground)] uppercase tracking-widest">Processors</p>
+                            <p id="v-processors" class="text-xs text-[var(--muted-foreground)] mt-1 break-words">—</p>
                         </div>
                         <div>
-                            <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Cross Border Transfers</p>
-                            <p id="v-cross-border" class="text-xs text-slate-500 mt-1 break-words">—</p>
+                            <p class="text-[10px] font-black text-[var(--muted-foreground)] uppercase tracking-widest">Cross Border Transfers</p>
+                            <p id="v-cross-border" class="text-xs text-[var(--muted-foreground)] mt-1 break-words">—</p>
                         </div>
                         <div>
-                            <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Policy</p>
-                            <p id="v-linked-policies" class="text-xs text-slate-500 mt-1 break-words">—</p>
+                            <p class="text-[10px] font-black text-[var(--muted-foreground)] uppercase tracking-widest">Policy</p>
+                            <p id="v-linked-policies" class="text-xs text-[var(--muted-foreground)] mt-1 break-words">—</p>
                         </div>
                         <div>
-                            <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Responsible DPO</p>
-                            <p id="v-dpo-id" class="text-xs text-slate-500 mt-1 break-words">—</p>
+                            <p class="text-[10px] font-black text-[var(--muted-foreground)] uppercase tracking-widest">Responsible DPO</p>
+                            <p id="v-dpo-id" class="text-xs text-[var(--muted-foreground)] mt-1 break-words">—</p>
                         </div>
                         <div>
-                            <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Active Consents</p>
-                            <p id="v-consent-count" class="text-sm font-semibold text-slate-700 mt-1">—</p>
+                            <p class="text-[10px] font-black text-[var(--muted-foreground)] uppercase tracking-widest">Active Consents</p>
+                            <p id="v-consent-count" class="text-sm font-semibold text-[var(--foreground)] mt-1">—</p>
                         </div>
                         <div>
-                            <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Withdrawn Consents</p>
-                            <p id="v-inactive-consent-count" class="text-sm font-semibold text-slate-700 mt-1">—</p>
+                            <p class="text-[10px] font-black text-[var(--muted-foreground)] uppercase tracking-widest">Withdrawn Consents</p>
+                            <p id="v-inactive-consent-count" class="text-sm font-semibold text-[var(--foreground)] mt-1">—</p>
                         </div>
                     </div>
 
                     <!-- Version History -->
                     <div class="mt-4">
-                        <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Version History</p>
+                        <p class="text-[10px] font-black text-[var(--muted-foreground)] uppercase tracking-widest mb-3">Version History</p>
                         <div id="v-history" class="space-y-1 max-h-48 overflow-y-auto">
-                            <p class="text-xs text-slate-400 italic">No history.</p>
+                            <p class="text-xs text-[var(--muted-foreground)] italic">No history.</p>
                         </div>
                     </div>
                 </div>
 
                 <!-- Right: Completeness Checklist -->
                 <div>
-                    <div class="bg-slate-50 border border-slate-200 rounded-xl p-5">
-                        <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">DPDP Completeness Checklist</p>
+                    <div class="bg-[var(--muted)] border border-[var(--border)] rounded-xl p-5">
+                        <p class="text-[10px] font-black text-[var(--muted-foreground)] uppercase tracking-widest mb-3">DPDP Completeness Checklist</p>
                         <div id="v-checklist" class="space-y-1">
-                            <p class="text-xs text-slate-400 italic">Loading...</p>
+                            <p class="text-xs text-[var(--muted-foreground)] italic">Loading...</p>
                         </div>
                         <div id="v-completeness-banner" class="hidden mt-4 p-2 rounded-lg text-center text-xs font-bold"></div>
                     </div>
@@ -254,7 +248,7 @@
             </div>
         </div>
         <div class="modal-footer">
-            <button onclick="closeViewModal()" class="bg-gray-200 text-gray-700 px-5 py-2 rounded-md text-sm font-medium hover:bg-gray-300">Close</button>
+            <button onclick="closeViewModal()" class="bg-[var(--muted)] text-[var(--foreground)] px-5 py-2 rounded-md text-sm font-medium hover:bg-[var(--muted)]">Close</button>
         </div>
     </div>
 </div>
@@ -290,7 +284,7 @@
             draft:        'bg-yellow-100 text-yellow-800',
             active:       'bg-green-100 text-green-800',
             under_review: 'bg-blue-100 text-blue-800',
-            retired:      'bg-gray-100 text-gray-600'
+            retired:      'bg-[var(--muted)] text-[var(--muted-foreground)]'
         };
         return `<span class="px-2 py-0.5 text-[10px] font-black rounded-full uppercase ${map[status] || 'bg-red-50 text-red-700'}">${status}</span>`;
     }
@@ -298,7 +292,7 @@
     // ---- Load entries ----
     async function loadEntries() {
         const tbody = document.getElementById('ropa-table-body');
-        tbody.innerHTML = '<tr><td colspan="7" class="p-6 text-center text-gray-400 italic">Syncing with registry...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" class="p-6 text-center text-[var(--muted-foreground)] italic">Syncing with registry...</td></tr>';
         const status = document.getElementById('status-filter').value;
         const basis  = document.getElementById('basis-filter').value;
 
@@ -312,7 +306,7 @@
             const data = await res.json();
             const entries = Array.isArray(data) ? data : (data.data || []);
             if (!entries.length) {
-                tbody.innerHTML = '<tr><td colspan="7" class="p-6 text-center text-slate-400 italic">No ROPA entries found. When a policy admin publishes a policy, entries will appear here for your review.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="7" class="p-6 text-center text-[var(--muted-foreground)] italic">No ROPA entries found. When a policy admin publishes a policy, entries will appear here for your review.</td></tr>';
                 return;
             }
             tbody.innerHTML = '';
@@ -345,16 +339,16 @@
             const label = key === '__none__'
                 ? 'Other Processing Activities'
                 : (IS_STAFF ? key : AV.policyTitle(key));
-            const labelCls = (key !== '__none__' && IS_STAFF) ? 'font-mono font-bold text-teal-800 ml-2' : 'font-bold text-teal-800 ml-2';
+            const labelCls = (key !== '__none__' && IS_STAFF) ? 'font-mono font-bold text-[var(--foreground)] ml-2' : 'font-bold text-[var(--foreground)] ml-2';
             const n = group.length;
 
             const hdr = document.createElement('tr');
-            hdr.className = 'bg-teal-50 border-t-2 border-teal-200';
+            hdr.className = 'bg-[var(--muted)] border-t-2 border-[var(--border)]';
             hdr.innerHTML = `
                 <td colspan="7" class="px-4 py-2">
-                    <span class="text-[10px] font-black text-teal-600 uppercase tracking-widest">Policy</span>
+                    <span class="text-[10px] font-black text-[var(--tsi-accent)] uppercase tracking-widest">Policy</span>
                     <span class="${labelCls}">${AV.esc(label)}</span>
-                    <span class="text-xs text-teal-400 ml-3">${n} activit${n === 1 ? 'y' : 'ies'}</span>
+                    <span class="text-xs text-[var(--muted-foreground)] ml-3">${n} activit${n === 1 ? 'y' : 'ies'}</span>
                 </td>
             `;
             tbody.appendChild(hdr);
@@ -364,7 +358,7 @@
 
     function buildRow(e) {
         const tr = document.createElement('tr');
-        tr.className = 'hover:bg-slate-50/50 transition-colors';
+        tr.className = 'hover:bg-[var(--muted)] transition-colors';
 
         const retention = e.retention_period_days
             ? `${e.retention_period_days}d (${e.retention_start_event || '—'})`
@@ -373,27 +367,27 @@
         // vAIb-kyog: tenant sees the policy's human title (or 'Active policy'); staff see raw id.
         const policyCell = IS_STAFF
             ? `<span class="font-mono text-indigo-600">${AV.esc(rawPolicy || '—')}</span>`
-            : `<span class="text-slate-700">${AV.esc(AV.policyTitle(rawPolicy))}</span>`;
+            : `<span class="text-[var(--foreground)]">${AV.esc(AV.policyTitle(rawPolicy))}</span>`;
         // Entry uuid sub-line: staff only (debug handle); tenant never sees it.
         const idSubline = IS_STAFF
-            ? `<div class="text-[10px] font-mono text-slate-400 mt-0.5">${AV.esc(e.id ? e.id.slice(0,8) + '…' : '')}</div>`
+            ? `<div class="text-[10px] font-mono text-[var(--muted-foreground)] mt-0.5">${AV.esc(e.id ? e.id.slice(0,8) + '…' : '')}</div>`
             : '';
         const legalBasisCell = AV.legalBasis(e.legal_basis) || '—';
 
         const actions = `
-            <button class="text-teal-700 hover:text-teal-900 font-bold text-xs mr-2" onclick="viewEntry('${e.id}')">View</button>
+            <button class="text-[var(--tsi-accent)] hover:text-[var(--foreground)] font-bold text-xs mr-2" onclick="viewEntry('${e.id}')">View</button>
         `;
 
         tr.innerHTML = `
-            <td class="px-4 py-4 text-sm font-bold text-slate-800 max-w-[240px]">
+            <td class="px-4 py-4 text-sm font-bold text-[var(--foreground)] max-w-[240px]">
                 <div class="truncate" title="${AV.esc(e.activity_name)}">${AV.esc(e.activity_name)}</div>
                 ${idSubline}
             </td>
             <td class="px-4 py-4 text-xs whitespace-nowrap">${policyCell}</td>
-            <td class="px-4 py-4 text-xs text-slate-500 whitespace-nowrap">${AV.esc(legalBasisCell)}</td>
+            <td class="px-4 py-4 text-xs text-[var(--muted-foreground)] whitespace-nowrap">${AV.esc(legalBasisCell)}</td>
             <td class="px-4 py-4 whitespace-nowrap">${statusBadge(e.status)}</td>
-            <td class="px-4 py-4 text-xs text-slate-500 whitespace-nowrap">${retention}</td>
-            <td class="px-4 py-4 text-xs text-slate-500 text-center">v${e.version}</td>
+            <td class="px-4 py-4 text-xs text-[var(--muted-foreground)] whitespace-nowrap">${retention}</td>
+            <td class="px-4 py-4 text-xs text-[var(--muted-foreground)] text-center">v${e.version}</td>
             <td class="px-4 py-4 whitespace-nowrap">${actions}</td>
         `;
         return tr;
@@ -408,8 +402,8 @@
     // ---- View / Completeness ----
     async function viewEntry(id) {
         document.getElementById('view-modal').style.display = 'flex';
-        document.getElementById('v-history').innerHTML = '<p class="text-xs text-slate-400 italic">Loading...</p>';
-        document.getElementById('v-checklist').innerHTML = '<p class="text-xs text-slate-400 italic">Loading...</p>';
+        document.getElementById('v-history').innerHTML = '<p class="text-xs text-[var(--muted-foreground)] italic">Loading...</p>';
+        document.getElementById('v-checklist').innerHTML = '<p class="text-xs text-[var(--muted-foreground)] italic">Loading...</p>';
 
         try {
             const [entryRes, validateRes] = await Promise.all([
@@ -455,19 +449,19 @@
                 histEl.innerHTML = e.history.map(h => {
                     // vAIb-kyog: tenant sees the responsible DPO name (or 'Recorded'); staff see the uuid.
                     const author = IS_STAFF
-                        ? (h.changed_by ? `<div class="text-[10px] text-slate-400 font-mono mt-0.5">by ${AV.esc(h.changed_by.slice(0,8))}…</div>` : '')
-                        : (h.changed_by ? `<div class="text-[10px] text-slate-400 mt-0.5">by ${AV.esc(dpoDisplay(h.changed_by))}</div>` : '');
+                        ? (h.changed_by ? `<div class="text-[10px] text-[var(--muted-foreground)] font-mono mt-0.5">by ${AV.esc(h.changed_by.slice(0,8))}…</div>` : '')
+                        : (h.changed_by ? `<div class="text-[10px] text-[var(--muted-foreground)] mt-0.5">by ${AV.esc(dpoDisplay(h.changed_by))}</div>` : '');
                     return `
                     <div class="history-row">
                         <div class="flex justify-between items-center">
-                            <span class="text-xs font-bold text-slate-600">Version ${AV.esc(h.version)}</span>
-                            <span class="text-[10px] text-slate-400">${AV.esc(new Date(h.changed_at).toLocaleString())}</span>
+                            <span class="text-xs font-bold text-[var(--muted-foreground)]">Version ${AV.esc(h.version)}</span>
+                            <span class="text-[10px] text-[var(--muted-foreground)]">${AV.esc(new Date(h.changed_at).toLocaleString())}</span>
                         </div>
                         ${author}
                     </div>`;
                 }).join('');
             } else {
-                histEl.innerHTML = '<p class="text-xs text-slate-400 italic">No history recorded.</p>';
+                histEl.innerHTML = '<p class="text-xs text-[var(--muted-foreground)] italic">No history recorded.</p>';
             }
 
             // Completeness checklist
@@ -562,8 +556,8 @@
 
         const css = `
             *, *::before, *::after { box-sizing: border-box; }
-            body { font-family: ui-sans-serif, system-ui, sans-serif; max-width: 1000px; margin: 0 auto; padding: 32px 24px; color: #1e293b; background: #f8fafc; }
-            .page-hdr { background: #006A67; color: white; padding: 28px 36px; border-radius: 12px 12px 0 0; }
+            body { font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; max-width: 1000px; margin: 0 auto; padding: 32px 24px; color: #1e293b; background: #f8fafc; }
+            .page-hdr { background: #24335c; color: white; padding: 28px 36px; border-radius: 12px 12px 0 0; }
             .page-hdr-label { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; opacity: 0.75; margin-bottom: 6px; }
             .page-hdr h1 { margin: 0 0 4px; font-size: 1.5rem; font-weight: 800; }
             .page-hdr p { margin: 0; font-size: 0.82rem; opacity: 0.85; }
@@ -571,15 +565,15 @@
             .entry { border-bottom: 2px solid #f1f5f9; padding: 28px 36px; }
             .entry:last-child { border-bottom: none; }
             .entry-hdr { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; }
-            .entry-title { font-size: 1rem; font-weight: 800; color: #006A67; }
+            .entry-title { font-size: 1rem; font-weight: 800; color: #24335c; }
             .badge { display: inline-block; font-size: 0.65rem; font-weight: 800; padding: 3px 10px; border-radius: 4px; }
             .badge-active { background: #dcfce7; color: #166534; }
-            .badge-consent { background: #e0f2f1; color: #006A67; }
+            .badge-consent { background: #eef0f6; color: #24335c; }
             .section-title { font-size: 0.62rem; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.1em; border-bottom: 1px solid #f1f5f9; padding-bottom: 5px; margin: 18px 0 10px; }
             .field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
             .field-label { font-size: 0.65rem; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 2px; }
             .field-value { font-size: 0.88rem; line-height: 1.5; }
-            .chip { display: inline-block; background: #e0f2f1; color: #00695c; font-size: 0.7rem; font-weight: 700; padding: 3px 9px; border-radius: 9999px; margin: 2px 3px 2px 0; }
+            .chip { display: inline-block; background: #eef0f6; color: #24335c; font-size: 0.7rem; font-weight: 700; padding: 3px 9px; border-radius: 9999px; margin: 2px 3px 2px 0; }
             table { width: 100%; border-collapse: collapse; font-size: 0.83rem; margin-top: 4px; }
             th { background: #f8fafc; text-align: left; padding: 7px 10px; font-size: 0.62rem; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.07em; border-bottom: 2px solid #e2e8f0; }
             td { padding: 7px 10px; border-bottom: 1px solid #f8fafc; vertical-align: top; }
@@ -742,20 +736,20 @@
     }
     function linkedPoliciesHuman(val) {
         const ids = AV.parseArr(val);
-        if (!ids.length) return '<span class="text-slate-400 text-xs">None</span>';
+        if (!ids.length) return '<span class="text-[var(--muted-foreground)] text-xs">None</span>';
         return ids.map(id => `<span class="inline-block bg-indigo-50 text-indigo-800 text-[11px] font-semibold px-2 py-0.5 rounded-full mr-1 mb-1">${AV.esc(AV.policyTitle(id))}</span>`).join('');
     }
     // Processors / transfers are STRUCTURED records (name/country/role). Render them as a small
     // readable line per item; never dump raw JSON to the tenant.
     function processorsHuman(val) {
         const procs = AV.parseArr(val).filter(p => p && typeof p === 'object');
-        if (!procs.length) return '<span class="text-slate-400 text-xs">None declared</span>';
-        return procs.map(p => `<div class="text-xs text-slate-600 mb-0.5"><strong>${AV.esc(p.name || '—')}</strong>${p.country ? ' · ' + AV.esc(p.country) : ''}${p.role ? ' · ' + AV.esc(AV.humanize(p.role)) : ''}</div>`).join('');
+        if (!procs.length) return '<span class="text-[var(--muted-foreground)] text-xs">None declared</span>';
+        return procs.map(p => `<div class="text-xs text-[var(--muted-foreground)] mb-0.5"><strong>${AV.esc(p.name || '—')}</strong>${p.country ? ' · ' + AV.esc(p.country) : ''}${p.role ? ' · ' + AV.esc(AV.humanize(p.role)) : ''}</div>`).join('');
     }
     function transfersHuman(val) {
         const ts = AV.parseArr(val).filter(t => t && typeof t === 'object');
-        if (!ts.length) return '<span class="text-slate-400 text-xs">None</span>';
-        return ts.map(t => `<div class="text-xs text-slate-600 mb-0.5"><strong>${AV.esc(t.destination_country || '—')}</strong>${t.safeguard ? ' · ' + AV.esc(AV.humanize(t.safeguard)) : ''}</div>`).join('');
+        if (!ts.length) return '<span class="text-[var(--muted-foreground)] text-xs">None</span>';
+        return ts.map(t => `<div class="text-xs text-[var(--muted-foreground)] mb-0.5"><strong>${AV.esc(t.destination_country || '—')}</strong>${t.safeguard ? ' · ' + AV.esc(AV.humanize(t.safeguard)) : ''}</div>`).join('');
     }
 
     // ---- Init ----

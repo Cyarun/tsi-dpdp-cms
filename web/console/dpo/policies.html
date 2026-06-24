@@ -7,18 +7,11 @@
     <!-- Load Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        :root {
-            --tsi-primary: #006A67; /* Primary Dark Teal Color */
-            --tsi-accent: #008D8A; /* Slightly lighter for accents */
-            --background: #f4fbf9; /* Light, clean background */
-            --card-bg: #FFFFFF;
-            --border: 20 5.9% 90%;
-            --radius: 0.5rem;
-        }
+        /* W2: page-local teal :root removed — injected tweakcn tokens win */
 
         body {
             background-color: var(--background);
-            font-family: ui-sans-serif, system-ui, sans-serif;
+            font-family: var(--font-sans, 'Inter', ui-sans-serif, system-ui, sans-serif);
             margin: 0;
             padding: 0;
             min-height: 100vh;
@@ -32,7 +25,7 @@
         /* --- Sidebar Styling --- */
         .sidebar {
             width: 250px;
-            background-color: #f8fafc;
+            background-color: var(--secondary);
             box-shadow: 2px 0 5px rgba(0, 0, 0, 0.05);
             padding-top: 20px;
             position: fixed;
@@ -53,28 +46,28 @@
             padding: 10px 20px;
             margin: 5px 0;
             border-radius: 6px;
-            color: #4a5568;
+            color: var(--muted-foreground);
             transition: background-color 0.2s ease, color 0.2s ease;
         }
 
         .nav-link:hover, .nav-link.active {
-            background-color: #e5f5f4;
+            background-color: var(--tsi-accent);
             color: var(--tsi-primary);
             font-weight: 600;
         }
 
         .card {
-            background-color: var(--card-bg);
+            background-color: var(--card);
             border-radius: var(--radius);
             box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
             padding: 20px;
-            border: 1px solid #e2e8f0;
+            border: 1px solid var(--border);
         }
 
         .table-header {
-            background-color: #f1f5f9;
+            background-color: var(--muted);
             font-weight: 600;
-            color: #4a5568;
+            color: var(--muted-foreground);
             text-align: left;
         }
 
@@ -84,7 +77,7 @@
             justify-content: space-between;
             align-items: center;
             padding: 10px 20px;
-            background-color: #ffffff;
+            background-color: var(--card);
             border-bottom: 1px solid #e2e8f0;
             position: sticky;
             top: 0;
@@ -118,7 +111,7 @@
         }
 
         .modal-content {
-            background: white;
+            background-color: var(--card);
             padding: 0;
             border-radius: 1rem;
             max-width: 1100px;
@@ -133,8 +126,8 @@
 
         .modal-header {
             padding: 1.5rem 2rem;
-            border-bottom: 1px solid #f1f5f9;
-            background: white;
+            border-bottom: 1px solid var(--border);
+            background-color: var(--card);
             z-index: 10;
         }
 
@@ -142,13 +135,13 @@
             padding: 1.5rem 2rem;
             flex: 1;
             overflow-y: auto;
-            background: white;
+            background-color: var(--card);
         }
 
         .modal-footer {
             padding: 1rem 2rem;
-            border-top: 1px solid #f1f5f9;
-            background: #f8fafc;
+            border-top: 1px solid var(--border);
+            background-color: var(--muted);
             display: flex;
             justify-content: flex-end;
             gap: 10px;
@@ -160,8 +153,8 @@
             top: 1.5rem;
             right: 1.5rem;
             font-size: 1.5rem;
-            color: #64748b;
-            background: #f1f5f9;
+            color: var(--muted-foreground);
+            background-color: var(--muted);
             border: none;
             width: 32px;
             height: 32px;
@@ -172,29 +165,29 @@
             cursor: pointer;
             transition: all 0.2s;
         }
-        .modal-close-btn:hover { background: #e2e8f0; color: #0f172a; }
+        .modal-close-btn:hover { background-color: var(--border); color: var(--foreground); }
 
         .taxonomy-badge {
             font-size: 0.65rem;
             font-weight: 800;
             padding: 2px 6px;
             border-radius: 4px;
-            background: #e2e8f0;
-            color: #475569;
+            background-color: var(--muted);
+            color: var(--muted-foreground);
             font-family: monospace;
         }
-        .chip-area { border: 1px solid #d1d5db; border-radius: 6px; padding: 8px 10px; min-height: 42px; background: #f9fafb; }
+        .chip-area { border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px; min-height: 42px; background-color: var(--muted); }
         .chip-list { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 6px; }
-        .chip { display: inline-flex; align-items: center; gap: 4px; background: #e0f2f1; color: #00695c; font-size: 0.72rem; font-weight: 700; padding: 3px 8px; border-radius: 9999px; }
-        .chip-remove { background: none; border: none; color: #00897b; cursor: pointer; font-size: 1rem; padding: 0 0 1px; line-height: 1; }
-        .chip-remove:hover { color: #c62828; }
-        .preset-tag { cursor: pointer; display: inline-block; font-size: 0.68rem; font-weight: 700; padding: 2px 9px; border-radius: 9999px; background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; transition: all 0.15s; }
-        .preset-tag:hover { background: #e0f2f1; color: #006A67; border-color: #99d6d3; }
-        .struct-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px 12px; margin-bottom: 6px; }
-        .sub-form { background: #f0faf9; border: 1px dashed #a7d8d6; border-radius: 6px; padding: 12px; margin-top: 8px; }
-        .sub-btn-add { font-size: 0.75rem; font-weight: 700; color: var(--tsi-primary); border: 1px solid #99d6d3; background: white; padding: 4px 12px; border-radius: 6px; cursor: pointer; }
-        .sub-btn-confirm { font-size: 0.75rem; font-weight: 700; color: white; background: var(--tsi-primary); border: none; padding: 5px 14px; border-radius: 6px; cursor: pointer; }
-        .sub-btn-cancel  { font-size: 0.75rem; font-weight: 600; color: #64748b; background: #e2e8f0; border: none; padding: 5px 12px; border-radius: 6px; cursor: pointer; }
+        .chip { display: inline-flex; align-items: center; gap: 4px; background-color: var(--secondary); color: var(--secondary-foreground); font-size: 0.72rem; font-weight: 700; padding: 3px 8px; border-radius: 9999px; }
+        .chip-remove { background: none; border: none; color: var(--secondary-foreground); cursor: pointer; font-size: 1rem; padding: 0 0 1px; line-height: 1; }
+        .chip-remove:hover { color: var(--primary); }
+        .preset-tag { cursor: pointer; display: inline-block; font-size: 0.68rem; font-weight: 700; padding: 2px 9px; border-radius: 9999px; background-color: var(--muted); color: var(--muted-foreground); border: 1px solid var(--border); transition: all 0.15s; }
+        .preset-tag:hover { background-color: var(--secondary); color: var(--secondary-foreground); border-color: var(--secondary); }
+        .struct-card { background-color: var(--muted); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 12px; margin-bottom: 6px; }
+        .sub-form { background-color: var(--muted); border: 1px dashed var(--border); border-radius: var(--radius); padding: 12px; margin-top: 8px; }
+        .sub-btn-add { font-size: 0.75rem; font-weight: 700; color: var(--tsi-primary); border: 1px solid var(--border); background-color: var(--card); padding: 4px 12px; border-radius: var(--radius); cursor: pointer; }
+        .sub-btn-confirm { font-size: 0.75rem; font-weight: 700; color: var(--primary-foreground); background-color: var(--tsi-primary); border: none; padding: 5px 14px; border-radius: var(--radius); cursor: pointer; }
+        .sub-btn-cancel  { font-size: 0.75rem; font-weight: 600; color: var(--muted-foreground); background-color: var(--muted); border: none; padding: 5px 12px; border-radius: var(--radius); cursor: pointer; }
     </style>
 </head>
 
@@ -202,17 +195,17 @@
 
 <!-- Mobile Header/Toggle -->
 <div class="mobile-header lg:hidden">
-    <button id="menu-toggle" class="p-2 rounded-md hover:bg-gray-100 primary-text">
+    <button id="menu-toggle" class="p-2 rounded-md hover:bg-[var(--muted)] primary-text">
         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-6 w-6"><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="18" x2="20" y2="18"/></svg>
     </button>
     <span class="text-xl font-bold primary-text">Policies</span>
-    <div class="text-sm text-gray-500">DPO User</div>
+    <div class="text-sm text-[var(--muted-foreground)]">DPO User</div>
 </div>
 
 <!-- Sidebar Navigation -->
 <div id="sidebar" class="sidebar lg:relative flex flex-col justify-between">
     <div>
-        <div class="px-5 pb-6 border-b border-gray-200 lg:block hidden">
+        <div class="px-5 pb-6 border-b border-[var(--border)] lg:block hidden">
             <span class="text-xl font-bold primary-text">DPDPA.center</span>
         </div>
         <nav class="flex flex-col space-y-1 mt-4 px-3">
@@ -228,9 +221,9 @@
             <a href="coverage.html" class="nav-link">Coverage Audit</a>
         </nav>
     </div>
-    <div class="p-3 border-t border-gray-200">
-        <div class="mt-2 text-sm text-gray-500 p-2 rounded-md hover:bg-gray-100 cursor-pointer flex justify-between items-center">
-            <span id="username" class="font-bold text-slate-700">DPO User</span>
+    <div class="p-3 border-t border-[var(--border)]">
+        <div class="mt-2 text-sm text-[var(--muted-foreground)] p-2 rounded-md hover:bg-[var(--muted)] cursor-pointer flex justify-between items-center">
+            <span id="username" class="font-bold text-[var(--foreground)]">DPO User</span>
             <a href="#" onclick="handleLogout()"><span class="text-xs font-semibold text-red-500">Logout</span></a>
         </div>
     </div>
@@ -242,7 +235,7 @@
 <!-- Main Content Area -->
 <main class="flex-1 p-4 lg:p-8 overflow-y-auto">
     <div class="flex justify-between items-center mb-6">
-        <h1 class="text-2xl font-black text-slate-800 tracking-tight">Policy Management</h1>
+        <h1 class="text-2xl font-black text-[var(--foreground)] tracking-tight">Policy Management</h1>
         <button id="add-policy-btn" class="primary-bg text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-opacity-90 transition duration-150">
             + Create New Policy
         </button>
@@ -250,13 +243,13 @@
 
     <!-- Policy List Card -->
     <div class="card">
-        <h2 class="text-lg font-bold text-slate-700 mb-4 tracking-tight">Search & Filter</h2>
+        <h2 class="text-lg font-bold text-[var(--foreground)] mb-4 tracking-tight">Search & Filter</h2>
 
         <!-- Enhanced Filter Bar -->
         <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-3">
             <div class="flex gap-3 flex-1 w-full md:w-auto">
-                <input type="text" id="search-input" placeholder="Search by Policy ID or Content..." class="p-2 border border-gray-300 rounded-md text-sm w-full max-w-sm outline-none focus:ring-2 focus:ring-teal-600 focus:border-transparent">
-                <select id="status-filter" class="p-2 border border-gray-300 rounded-md text-sm bg-white outline-none focus:ring-2 focus:ring-teal-600">
+                <input type="text" id="search-input" placeholder="Search by Policy ID or Content..." class="p-2 border border-[var(--border)] rounded-md text-sm w-full max-w-sm outline-none focus:ring-2 focus:ring-[var(--ring)] focus:border-transparent">
+                <select id="status-filter" class="p-2 border border-[var(--border)] rounded-md text-sm bg-[var(--card)] outline-none focus:ring-2 focus:ring-[var(--ring)]">
                     <option value="ALL" selected>All Statuses</option>
                     <option value="ACTIVE">ACTIVE</option>
                     <option value="UNDER_REVIEW">UNDER REVIEW</option>
@@ -267,7 +260,7 @@
         </div>
 
         <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-gray-200">
+            <table class="min-w-full divide-y divide-[var(--border)]">
                 <thead>
                 <tr class="table-header">
                     <th id="th-policy-col" class="px-4 py-3 text-sm">Policy</th>
@@ -277,9 +270,9 @@
                     <th class="px-4 py-3 text-sm">Actions</th>
                 </tr>
                 </thead>
-                <tbody id="policy-table-body" class="bg-white divide-y divide-gray-200">
+                <tbody id="policy-table-body" class="bg-[var(--card)] divide-y divide-[var(--border)]">
                 <tr>
-                    <td colspan="5" class="p-4 text-center text-gray-500">
+                    <td colspan="5" class="p-4 text-center text-[var(--muted-foreground)]">
                         Loading Policy data...
                     </td>
                 </tr>
@@ -302,7 +295,7 @@
 
         <div class="modal-header">
             <h2 id="modal-title" class="text-2xl font-semibold primary-text">Create New Policy</h2>
-            <p id="modal-step-hint" class="text-xs text-slate-400 mt-1 hidden"></p>
+            <p id="modal-step-hint" class="text-xs text-[var(--muted-foreground)] mt-1 hidden"></p>
         </div>
 
         <form id="policy-form" method="POST" class="flex flex-col flex-1 overflow-hidden">
@@ -312,12 +305,12 @@
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                     <div>
-                        <label for="policy-id-input" class="block text-sm font-medium text-gray-700 font-bold mb-1">Policy ID (Unique Key)</label>
-                        <input type="text" id="policy-id-input" name="policy_id" required placeholder="e.g., WEB_PRIVACY_V1" class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm outline-none focus:ring-2 focus:ring-teal-600">
+                        <label for="policy-id-input" class="block text-sm font-medium text-[var(--foreground)] font-bold mb-1">Policy ID (Unique Key)</label>
+                        <input type="text" id="policy-id-input" name="policy_id" required placeholder="e.g., WEB_PRIVACY_V1" class="mt-1 block w-full p-2 border border-[var(--border)] rounded-md shadow-sm outline-none focus:ring-2 focus:ring-[var(--ring)]">
                     </div>
                     <div>
-                        <label for="policy-jurisdiction-select" class="block text-sm font-medium text-gray-700 font-bold mb-1">Jurisdiction</label>
-                        <select id="policy-jurisdiction-select" name="jurisdiction" required class="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm outline-none focus:ring-2 focus:ring-teal-600">
+                        <label for="policy-jurisdiction-select" class="block text-sm font-medium text-[var(--foreground)] font-bold mb-1">Jurisdiction</label>
+                        <select id="policy-jurisdiction-select" name="jurisdiction" required class="mt-1 block w-full p-2 border border-[var(--border)] rounded-md shadow-sm outline-none focus:ring-2 focus:ring-[var(--ring)]">
                             <!-- Support only India (DPDP Act) -->
                             <option value="IN">India (DPDP Act, 2023)</option>
                         </select>
@@ -327,31 +320,31 @@
                 <div class="grid grid-cols-1 lg:grid-cols-5 gap-8">
                     <!-- Reduced width Content Pane -->
                     <div class="lg:col-span-3">
-                        <label class="block text-sm font-medium text-gray-700 font-bold mb-2">Policy JSON File</label>
+                        <label class="block text-sm font-medium text-[var(--foreground)] font-bold mb-2">Policy JSON File</label>
                         <div id="policy-file-zone"
-                             class="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-teal-400 transition-colors"
+                             class="border-2 border-dashed border-[var(--border)] rounded-lg p-8 text-center cursor-pointer hover:border-[var(--primary)] transition-colors"
                              onclick="document.getElementById('policy-file-input').click()"
                              ondragover="event.preventDefault()" ondrop="handleFileDrop(event)">
                             <input type="file" id="policy-file-input" accept=".json" class="hidden" />
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 mx-auto text-gray-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
-                            <p class="text-sm font-semibold text-slate-600">Click to upload or drag &amp; drop</p>
-                            <p class="text-xs text-slate-400 mt-1">.json files only — provided by your system designer</p>
-                            <p id="policy-file-name" class="text-xs font-mono text-teal-700 mt-2 hidden"></p>
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 mx-auto text-[var(--muted-foreground)] mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+                            <p class="text-sm font-semibold text-[var(--muted-foreground)]">Click to upload or drag &amp; drop</p>
+                            <p class="text-xs text-[var(--muted-foreground)] mt-1">.json files only — provided by your system designer</p>
+                            <p id="policy-file-name" class="text-xs font-mono text-[var(--tsi-accent)] mt-2 hidden"></p>
                         </div>
-                        <div id="policy-preview" class="hidden mt-4 bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-3">
-                            <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Policy Preview</p>
-                            <div id="preview-title" class="text-sm font-bold text-slate-800"></div>
+                        <div id="policy-preview" class="hidden mt-4 bg-[var(--muted)] border border-[var(--border)] rounded-lg p-4 space-y-3">
+                            <p class="text-[10px] font-black text-[var(--muted-foreground)] uppercase tracking-widest">Policy Preview</p>
+                            <div id="preview-title" class="text-sm font-bold text-[var(--foreground)]"></div>
                             <div id="preview-purposes" class="space-y-1"></div>
-                            <div id="preview-processors" class="text-xs text-slate-500 mt-1"></div>
-                            <div id="preview-subjects" class="text-xs text-slate-500"></div>
+                            <div id="preview-processors" class="text-xs text-[var(--muted-foreground)] mt-1"></div>
+                            <div id="preview-subjects" class="text-xs text-[var(--muted-foreground)]"></div>
                         </div>
                     </div>
 
                     <!-- Widened Validation Quick Tips sidebar -->
                     <div class="lg:col-span-2">
-                        <div class="bg-slate-50 p-6 rounded-xl border border-slate-200 sticky top-0">
-                            <h3 class="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">Validation Quick Tips</h3>
-                            <ul class="text-[11px] text-slate-600 space-y-4 leading-relaxed list-disc list-outside ml-3">
+                        <div class="bg-[var(--muted)] p-6 rounded-xl border border-[var(--border)] sticky top-0">
+                            <h3 class="text-xs font-black text-[var(--muted-foreground)] uppercase tracking-widest mb-4">Validation Quick Tips</h3>
+                            <ul class="text-[11px] text-[var(--muted-foreground)] space-y-4 leading-relaxed list-disc list-outside ml-3">
                                 <li><strong>Language parity:</strong> Make sure all field names are filled-in all supported languages.</li>
                                 <li><strong>Unique Purpose ID:</strong> The "id" field in <code>data_processing_purposes</code> must be a unique string.</li>
                                 <li><strong>Referential Integrity:</strong> <code>data_categories_involved</code> must be a subset of <code>data_categories_details</code>.</li>
@@ -376,19 +369,19 @@
             </div>
 
             <div class="modal-footer">
-                <button type="button" id="close-modal-btn" class="bg-gray-200 text-gray-700 px-6 py-2 rounded-md text-sm font-medium hover:bg-gray-300 transition-colors">Cancel</button>
+                <button type="button" id="close-modal-btn" class="bg-[var(--muted)] text-[var(--foreground)] px-6 py-2 rounded-md text-sm font-medium hover:bg-[var(--muted)] transition-colors">Cancel</button>
                 <button type="submit" id="save-policy-btn" class="primary-bg text-white px-8 py-2 rounded-md text-sm font-bold hover:bg-opacity-90 transition-all shadow-md">Next →</button>
             </div>
         </form>
 
         <!-- READ-ONLY VIEW (uses same scrollable container) -->
         <div id="policy-view-details" class="modal-body hidden">
-            <h3 class="font-semibold text-gray-800 mb-2">Policy Content Breakdown:</h3>
+            <h3 class="font-semibold text-[var(--foreground)] mb-2">Policy Content Breakdown:</h3>
             <!-- vAIb-kyog: tenant sees a clean human summary; TSI staff see the raw JSON artifact. -->
-            <div id="policy-human-output" class="text-sm text-slate-700 hidden"></div>
-            <pre id="policy-json-output" class="text-xs font-mono whitespace-pre-wrap bg-slate-50 border border-slate-200 p-6 rounded-lg overflow-x-auto hidden"></pre>
+            <div id="policy-human-output" class="text-sm text-[var(--foreground)] hidden"></div>
+            <pre id="policy-json-output" class="text-xs font-mono whitespace-pre-wrap bg-[var(--muted)] border border-[var(--border)] p-6 rounded-lg overflow-x-auto hidden"></pre>
             <div class="modal-footer px-0 mt-6 -mx-8 -mb-6">
-                <button type="button" onclick="closeModal()" class="bg-gray-200 text-gray-700 px-8 py-2 rounded-md text-sm font-bold hover:bg-gray-300 transition-all border border-gray-300 shadow-sm">
+                <button type="button" onclick="closeModal()" class="bg-[var(--muted)] text-[var(--foreground)] px-8 py-2 rounded-md text-sm font-bold hover:bg-[var(--muted)] transition-all border border-[var(--border)] shadow-sm">
                     Close Viewer
                 </button>
             </div>
@@ -405,7 +398,7 @@
                     </div>
                 </div>
                 <div class="overflow-x-auto">
-                    <table class="min-w-full divide-y divide-gray-200">
+                    <table class="min-w-full divide-y divide-[var(--border)]">
                         <thead>
                             <tr class="table-header">
                                 <th class="px-4 py-3 text-sm text-left">Activity Name</th>
@@ -415,15 +408,15 @@
                                 <th class="px-4 py-3 text-sm text-left">Actions</th>
                             </tr>
                         </thead>
-                        <tbody id="ropa-review-tbody" class="bg-white divide-y divide-gray-200">
-                            <tr><td colspan="5" class="p-4 text-center text-gray-400 italic">Loading ROPA entries...</td></tr>
+                        <tbody id="ropa-review-tbody" class="bg-[var(--card)] divide-y divide-[var(--border)]">
+                            <tr><td colspan="5" class="p-4 text-center text-[var(--muted-foreground)] italic">Loading ROPA entries...</td></tr>
                         </tbody>
                     </table>
                 </div>
-                <p class="text-xs text-slate-400 mt-4 font-medium">Publishing all entries will activate the policy and enable consent collection.</p>
+                <p class="text-xs text-[var(--muted-foreground)] mt-4 font-medium">Publishing all entries will activate the policy and enable consent collection.</p>
             </div>
             <div class="modal-footer">
-                <button type="button" onclick="closeModal()" class="bg-gray-200 text-gray-700 px-6 py-2 rounded-md text-sm font-medium hover:bg-gray-300 transition-colors">Done</button>
+                <button type="button" onclick="closeModal()" class="bg-[var(--muted)] text-[var(--foreground)] px-6 py-2 rounded-md text-sm font-medium hover:bg-[var(--muted)] transition-colors">Done</button>
             </div>
         </div>
     </div>
@@ -435,51 +428,51 @@
         <button type="button" class="modal-close-btn" onclick="closeRopaEntryModal()">&times;</button>
         <div class="modal-header">
             <h2 id="rem-title" class="text-xl font-bold primary-text">ROPA Entry Details</h2>
-            <p id="rem-subtitle" class="text-xs text-slate-400 mt-1"></p>
+            <p id="rem-subtitle" class="text-xs text-[var(--muted-foreground)] mt-1"></p>
         </div>
         <div class="modal-body">
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div class="lg:col-span-2 space-y-4">
                     <div class="grid grid-cols-2 gap-4">
                         <div>
-                            <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Legal Basis</p>
-                            <p id="rem-legal-basis" class="text-sm font-semibold text-slate-700 mt-1">—</p>
+                            <p class="text-[10px] font-black text-[var(--muted-foreground)] uppercase tracking-widest">Legal Basis</p>
+                            <p id="rem-legal-basis" class="text-sm font-semibold text-[var(--foreground)] mt-1">—</p>
                         </div>
                         <div>
-                            <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Retention</p>
-                            <p id="rem-retention" class="text-sm font-semibold text-slate-700 mt-1">—</p>
+                            <p class="text-[10px] font-black text-[var(--muted-foreground)] uppercase tracking-widest">Retention</p>
+                            <p id="rem-retention" class="text-sm font-semibold text-[var(--foreground)] mt-1">—</p>
                         </div>
                         <div class="col-span-2">
-                            <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Purpose</p>
-                            <p id="rem-purpose" class="text-sm text-slate-600 mt-1">—</p>
+                            <p class="text-[10px] font-black text-[var(--muted-foreground)] uppercase tracking-widest">Purpose</p>
+                            <p id="rem-purpose" class="text-sm text-[var(--muted-foreground)] mt-1">—</p>
                         </div>
                         <div>
-                            <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Data Categories</p>
-                            <p id="rem-data-categories" class="text-xs text-slate-600 mt-1 break-words">—</p>
+                            <p class="text-[10px] font-black text-[var(--muted-foreground)] uppercase tracking-widest">Data Categories</p>
+                            <p id="rem-data-categories" class="text-xs text-[var(--muted-foreground)] mt-1 break-words">—</p>
                         </div>
                         <div>
-                            <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Data Subjects</p>
-                            <p id="rem-data-subjects" class="text-xs text-slate-600 mt-1 break-words">—</p>
+                            <p class="text-[10px] font-black text-[var(--muted-foreground)] uppercase tracking-widest">Data Subjects</p>
+                            <p id="rem-data-subjects" class="text-xs text-[var(--muted-foreground)] mt-1 break-words">—</p>
                         </div>
                         <div class="col-span-2">
-                            <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Security Measures</p>
-                            <p id="rem-security" class="text-sm text-slate-600 mt-1">—</p>
+                            <p class="text-[10px] font-black text-[var(--muted-foreground)] uppercase tracking-widest">Security Measures</p>
+                            <p id="rem-security" class="text-sm text-[var(--muted-foreground)] mt-1">—</p>
                         </div>
                         <div>
-                            <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Processors</p>
-                            <p id="rem-processors" class="text-xs text-slate-500 mt-1 break-words">—</p>
+                            <p class="text-[10px] font-black text-[var(--muted-foreground)] uppercase tracking-widest">Processors</p>
+                            <p id="rem-processors" class="text-xs text-[var(--muted-foreground)] mt-1 break-words">—</p>
                         </div>
                         <div>
-                            <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Cross-Border Transfers</p>
-                            <p id="rem-cross-border" class="text-xs text-slate-500 mt-1 break-words">—</p>
+                            <p class="text-[10px] font-black text-[var(--muted-foreground)] uppercase tracking-widest">Cross-Border Transfers</p>
+                            <p id="rem-cross-border" class="text-xs text-[var(--muted-foreground)] mt-1 break-words">—</p>
                         </div>
                     </div>
                 </div>
                 <div>
-                    <div class="bg-slate-50 border border-slate-200 rounded-xl p-5">
-                        <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">DPDP Completeness Checklist</p>
+                    <div class="bg-[var(--muted)] border border-[var(--border)] rounded-xl p-5">
+                        <p class="text-[10px] font-black text-[var(--muted-foreground)] uppercase tracking-widest mb-3">DPDP Completeness Checklist</p>
                         <div id="rem-checklist" class="space-y-1">
-                            <p class="text-xs text-slate-400 italic">Loading...</p>
+                            <p class="text-xs text-[var(--muted-foreground)] italic">Loading...</p>
                         </div>
                         <div id="rem-completeness-banner" class="hidden mt-4 p-2 rounded-lg text-center text-xs font-bold"></div>
                     </div>
@@ -488,7 +481,7 @@
         </div>
         <div class="modal-footer">
             <button id="rem-publish-btn" class="bg-green-600 text-white px-5 py-2 rounded-md text-sm font-medium hover:bg-green-700 hidden" onclick="publishRopaEntryFromModal()">Publish Entry</button>
-            <button type="button" onclick="closeRopaEntryModal()" class="bg-gray-200 text-gray-700 px-5 py-2 rounded-md text-sm font-medium hover:bg-gray-300">Close</button>
+            <button type="button" onclick="closeRopaEntryModal()" class="bg-[var(--muted)] text-[var(--foreground)] px-5 py-2 rounded-md text-sm font-medium hover:bg-[var(--muted)]">Close</button>
         </div>
     </div>
 </div>
@@ -528,7 +521,7 @@
     async function loadPolicies() {
         const searchTerm = searchInput.value || "";
         const statusVal = statusFilter.value === 'ALL' ? "" : statusFilter.value;
-        tableBody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-gray-500 font-medium">Syncing with Registry...</td></tr>`;
+        tableBody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-[var(--muted-foreground)] font-medium">Syncing with Registry...</td></tr>`;
         errorMessageP.classList.add('hidden');
 
         try {
@@ -559,7 +552,7 @@
             if (Array.isArray(policies)) {
                 tableBody.innerHTML = '';
                 if (policies.length === 0) {
-                    tableBody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-gray-500 italic">No policies match the criteria.</td></tr>`;
+                    tableBody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-[var(--muted-foreground)] italic">No policies match the criteria.</td></tr>`;
                 } else {
                     policies.forEach(p => tableBody.appendChild(createPolicyRow(p)));
                 }
@@ -574,14 +567,14 @@
             'ACTIVE': 'bg-green-100 text-green-800',
             'UNDER_REVIEW': 'bg-blue-100 text-blue-800',
             'DRAFT': 'bg-yellow-100 text-yellow-800',
-            'ARCHIVED': 'bg-gray-100 text-gray-800'
+            'ARCHIVED': 'bg-[var(--muted)] text-[var(--foreground)]'
         };
         return `<span class="px-3 py-1 text-[10px] font-black rounded-full uppercase ${colors[status] || 'bg-red-50 text-red-700'}">${status}</span>`;
     }
 
     function createPolicyRow(policy) {
         const row = document.createElement('tr');
-        row.className = "hover:bg-slate-50/50 transition-colors";
+        row.className = "hover:bg-[var(--muted)] transition-colors";
         const isDraft = policy.status === 'DRAFT';
         const isUnderReview = policy.status === 'UNDER_REVIEW';
         const isArchived = policy.status === 'ARCHIVED';
@@ -598,13 +591,13 @@
         if (_title) AV.registerPolicyTitle(policy.id, _title);
         const policyLabel = IS_STAFF ? AV.esc(policy.id) : AV.esc(_title || AV.policyTitle(policy.id));
         row.innerHTML = `
-            <td class="px-4 py-4 whitespace-nowrap text-sm font-bold text-slate-800">${policyLabel}</td>
-            <td class="px-4 py-4 whitespace-nowrap text-sm text-slate-500">${AV.esc(policy.jurisdiction)}</td>
+            <td class="px-4 py-4 whitespace-nowrap text-sm font-bold text-[var(--foreground)]">${policyLabel}</td>
+            <td class="px-4 py-4 whitespace-nowrap text-sm text-[var(--muted-foreground)]">${AV.esc(policy.jurisdiction)}</td>
             <td class="px-4 py-4 whitespace-nowrap">
                 ${createStatusBadge(policy.status)}
                 ${isUnderReview ? '<div class="text-[10px] text-blue-500 mt-0.5">Pending DPO ROPA approval</div>' : ''}
             </td>
-            <td class="px-4 py-4 whitespace-nowrap text-xs text-slate-400 font-medium">${new Date(policy.effective_date).toLocaleDateString()}</td>
+            <td class="px-4 py-4 whitespace-nowrap text-xs text-[var(--muted-foreground)] font-medium">${new Date(policy.effective_date).toLocaleDateString()}</td>
             <td class="px-4 py-4 whitespace-nowrap">${actionsHtml}</td>
         `;
         return row;
@@ -618,7 +611,7 @@
         const humanEl = document.getElementById('policy-human-output');
         // vAIb-kyog: tenant -> clean human summary; TSI staff -> raw JSON artifact.
         if (IS_STAFF) { jsonEl.classList.remove('hidden'); humanEl.classList.add('hidden'); jsonEl.textContent = 'Parsing artifact...'; }
-        else          { humanEl.classList.remove('hidden'); jsonEl.classList.add('hidden'); humanEl.innerHTML = '<p class="text-xs text-slate-400 italic">Loading policy…</p>'; }
+        else          { humanEl.classList.remove('hidden'); jsonEl.classList.add('hidden'); humanEl.innerHTML = '<p class="text-xs text-[var(--muted-foreground)] italic">Loading policy…</p>'; }
         try {
             const res = await fetch(API_URL_POLICY, {
                 method: 'POST',
@@ -641,14 +634,14 @@
     // vAIb-kyog: render a plain-language policy summary for the tenant — purposes by name, legal
     // basis as a label, retention in plain English, data categories as chips. NO ids, NO raw JSON.
     function renderPolicyHuman(content) {
-        if (!content || typeof content !== 'object') return '<p class="text-xs text-slate-400">No policy content.</p>';
+        if (!content || typeof content !== 'object') return '<p class="text-xs text-[var(--muted-foreground)]">No policy content.</p>';
         const lang = Object.keys(content)[0];
         const block = content[lang] || {};
         const purposes = block.data_processing_purposes || [];
         const head = `
             <div class="mb-4">
-                <p class="text-lg font-bold text-slate-800">${AV.esc(block.title || 'Privacy Policy')}</p>
-                ${block.general_purpose_description ? `<p class="text-sm text-slate-600 mt-1">${AV.esc(block.general_purpose_description)}</p>` : ''}
+                <p class="text-lg font-bold text-[var(--foreground)]">${AV.esc(block.title || 'Privacy Policy')}</p>
+                ${block.general_purpose_description ? `<p class="text-sm text-[var(--muted-foreground)] mt-1">${AV.esc(block.general_purpose_description)}</p>` : ''}
             </div>`;
         const purposeCards = purposes.length ? purposes.map(p => {
             const cats = AV.chips(p.data_categories_involved, AV.dataCategory);
@@ -656,17 +649,17 @@
                 ? `${AV.esc(p.retention_duration_value)} ${AV.esc(AV.humanize(p.retention_duration_unit))} ${AV.esc(AV.retentionEvent(p.retention_start_event) || '')}`.trim()
                 : '';
             return `
-            <div class="border border-slate-200 rounded-lg p-4 mb-3">
+            <div class="border border-[var(--border)] rounded-lg p-4 mb-3">
                 <div class="flex items-center gap-2 flex-wrap">
-                    <span class="font-semibold text-slate-800">${AV.esc(p.name || AV.humanize(p.id))}</span>
+                    <span class="font-semibold text-[var(--foreground)]">${AV.esc(p.name || AV.humanize(p.id))}</span>
                     ${p.is_mandatory_for_service ? '<span class="text-[10px] font-bold uppercase text-cyan-700">Required for service</span>' : ''}
                 </div>
-                ${p.description ? `<p class="text-xs text-slate-500 mt-1">${AV.esc(p.description)}</p>` : ''}
-                <div class="mt-2 text-xs"><span class="text-slate-400 font-semibold uppercase tracking-wide mr-1">Legal basis:</span>${AV.esc(AV.legalBasis(p.legal_basis) || '—')}</div>
-                <div class="mt-1 text-xs"><span class="text-slate-400 font-semibold uppercase tracking-wide mr-1">Data used:</span>${cats}</div>
-                ${ret ? `<div class="mt-1 text-xs"><span class="text-slate-400 font-semibold uppercase tracking-wide mr-1">Kept for:</span>${ret}</div>` : ''}
+                ${p.description ? `<p class="text-xs text-[var(--muted-foreground)] mt-1">${AV.esc(p.description)}</p>` : ''}
+                <div class="mt-2 text-xs"><span class="text-[var(--muted-foreground)] font-semibold uppercase tracking-wide mr-1">Legal basis:</span>${AV.esc(AV.legalBasis(p.legal_basis) || '—')}</div>
+                <div class="mt-1 text-xs"><span class="text-[var(--muted-foreground)] font-semibold uppercase tracking-wide mr-1">Data used:</span>${cats}</div>
+                ${ret ? `<div class="mt-1 text-xs"><span class="text-[var(--muted-foreground)] font-semibold uppercase tracking-wide mr-1">Kept for:</span>${ret}</div>` : ''}
             </div>`;
-        }).join('') : '<p class="text-xs text-slate-400 italic">No processing purposes declared.</p>';
+        }).join('') : '<p class="text-xs text-[var(--muted-foreground)] italic">No processing purposes declared.</p>';
         return head + purposeCards;
     }
 
@@ -890,22 +883,22 @@
 
         const purposes = block.data_processing_purposes || [];
         document.getElementById('preview-purposes').innerHTML =
-            `<p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">${purposes.length} Processing Purpose(s)</p>` +
+            `<p class="text-[10px] font-black text-[var(--muted-foreground)] uppercase tracking-widest mb-1">${purposes.length} Processing Purpose(s)</p>` +
             purposes.map(p => {
                 const rtpHtml = (p.recipients_or_third_parties || []).map(name => {
                     const matched = registeredNames.size === 0 || registeredNames.has(name.toLowerCase());
                     return matched
-                        ? `<span class="text-teal-600 text-[10px] font-mono bg-teal-50 px-1.5 py-0.5 rounded">${name}</span>`
+                        ? `<span class="text-[var(--tsi-accent)] text-[10px] font-mono bg-[var(--muted)] px-1.5 py-0.5 rounded">${name}</span>`
                         : `<span class="text-amber-700 text-[10px] font-mono bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded" title="No App registered with this name">⚠ ${name}</span>`;
                 }).join(' ');
                 return `
                 <div class="flex flex-wrap gap-2 text-xs items-center py-0.5">
-                    <span class="font-semibold text-slate-700">${AV.esc(p.name || AV.humanize(p.id))}</span>
-                    <span class="text-slate-300">·</span>
-                    <span class="text-slate-500">${AV.esc(AV.legalBasis(p.legal_basis) || '—')}</span>
-                    <span class="text-slate-300">·</span>
-                    <span class="text-slate-400">${(p.data_categories_involved || []).length} data cat(s)</span>
-                    ${rtpHtml ? `<span class="text-slate-300">·</span>${rtpHtml}` : ''}
+                    <span class="font-semibold text-[var(--foreground)]">${AV.esc(p.name || AV.humanize(p.id))}</span>
+                    <span class="text-[var(--border)]">·</span>
+                    <span class="text-[var(--muted-foreground)]">${AV.esc(AV.legalBasis(p.legal_basis) || '—')}</span>
+                    <span class="text-[var(--border)]">·</span>
+                    <span class="text-[var(--muted-foreground)]">${(p.data_categories_involved || []).length} data cat(s)</span>
+                    ${rtpHtml ? `<span class="text-[var(--border)]">·</span>${rtpHtml}` : ''}
                 </div>`;
             }).join('');
 
@@ -950,7 +943,7 @@
 
     async function loadRopaReviewEntries(policyId) {
         const tbody = document.getElementById('ropa-review-tbody');
-        tbody.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-gray-400 italic">Loading ROPA entries...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-[var(--muted-foreground)] italic">Loading ROPA entries...</td></tr>';
         try {
             const res = await fetch('/api/v1/admin/ropa', {
                 method: 'POST',
@@ -961,7 +954,7 @@
             const allEntries = Array.isArray(data) ? data : (data.data || []);
             const entries = allEntries.filter(e => parseRopaArr(e.linked_policy_ids).includes(policyId));
             if (!entries.length) {
-                tbody.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-slate-400 italic">No ROPA entries found for this policy.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-[var(--muted-foreground)] italic">No ROPA entries found for this policy.</td></tr>';
                 return;
             }
             tbody.innerHTML = '';
@@ -974,28 +967,28 @@
     function buildRopaReviewRow(e) {
         const tr = document.createElement('tr');
         tr.id = `ropa-row-${e.id}`;
-        tr.className = 'hover:bg-slate-50/50 transition-colors';
+        tr.className = 'hover:bg-[var(--muted)] transition-colors';
         const canPublish = e.status === 'draft' || e.status === 'under_review';
         const retention = e.retention_period_days
             ? `${e.retention_period_days}d (${e.retention_start_event || '—'})`
             : '<span class="text-red-400 text-[10px] font-bold">NOT SET</span>';
         const statusColors = { draft: 'bg-yellow-100 text-yellow-800', active: 'bg-green-100 text-green-800', under_review: 'bg-blue-100 text-blue-800' };
-        const badge = `<span class="px-2 py-0.5 text-[10px] font-black rounded-full uppercase ${statusColors[e.status] || 'bg-gray-100 text-gray-600'}">${e.status}</span>`;
+        const badge = `<span class="px-2 py-0.5 text-[10px] font-black rounded-full uppercase ${statusColors[e.status] || 'bg-[var(--muted)] text-[var(--muted-foreground)]'}">${e.status}</span>`;
         const escapedName = e.activity_name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
         const actions = `
-            <button class="text-teal-700 hover:text-teal-900 font-bold text-xs mr-2" onclick="viewRopaEntryInline('${e.id}')">View</button>
+            <button class="text-[var(--tsi-accent)] hover:text-[var(--foreground)] font-bold text-xs mr-2" onclick="viewRopaEntryInline('${e.id}')">View</button>
             ${canPublish ? `<button class="text-green-600 hover:text-green-800 font-bold text-xs" onclick="publishRopaEntry('${e.id}', '${escapedName}')">Publish</button>` : '<span class="text-green-600 font-bold text-xs">Active</span>'}
         `;
         // vAIb-kyog: entry uuid sub-line is staff-only; tenant never sees it.
-        const idSubline = IS_STAFF ? `<div class="text-[10px] font-mono text-slate-400 mt-0.5">${AV.esc(e.id ? e.id.slice(0,8) + '…' : '')}</div>` : '';
+        const idSubline = IS_STAFF ? `<div class="text-[10px] font-mono text-[var(--muted-foreground)] mt-0.5">${AV.esc(e.id ? e.id.slice(0,8) + '…' : '')}</div>` : '';
         tr.innerHTML = `
-            <td class="px-4 py-3 text-sm font-bold text-slate-800 max-w-[240px]">
+            <td class="px-4 py-3 text-sm font-bold text-[var(--foreground)] max-w-[240px]">
                 <div class="truncate" title="${AV.esc(e.activity_name)}">${AV.esc(e.activity_name)}</div>
                 ${idSubline}
             </td>
-            <td class="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">${AV.esc(AV.legalBasis(e.legal_basis) || '—')}</td>
+            <td class="px-4 py-3 text-xs text-[var(--muted-foreground)] whitespace-nowrap">${AV.esc(AV.legalBasis(e.legal_basis) || '—')}</td>
             <td class="px-4 py-3 whitespace-nowrap">${badge}</td>
-            <td class="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">${retention}</td>
+            <td class="px-4 py-3 text-xs text-[var(--muted-foreground)] whitespace-nowrap">${retention}</td>
             <td class="px-4 py-3 whitespace-nowrap">${actions}</td>
         `;
         return tr;
@@ -1005,7 +998,7 @@
         currentViewingEntryId = id;
         const modal = document.getElementById('ropa-entry-modal');
         modal.style.display = 'flex';
-        document.getElementById('rem-checklist').innerHTML = '<p class="text-xs text-slate-400 italic">Loading...</p>';
+        document.getElementById('rem-checklist').innerHTML = '<p class="text-xs text-[var(--muted-foreground)] italic">Loading...</p>';
         try {
             const [entryRes, validateRes] = await Promise.all([
                 fetch('/api/v1/admin/ropa', { method:'POST', headers:{ 'Content-Type':'application/json','Authorization':`Bearer ${AUTH_TOKEN}` }, body: JSON.stringify({ _func:'get_entry', id }) }),
