@@ -58,7 +58,28 @@
         .sub-btn-add:hover { background-color: var(--muted); }
         .sub-btn-confirm { font-size: 0.75rem; font-weight: 700; color: var(--primary-foreground); background-color: var(--tsi-primary); border: none; padding: 5px 14px; border-radius: var(--radius); cursor: pointer; }
         .sub-btn-cancel  { font-size: 0.75rem; font-weight: 600; color: var(--muted-foreground); background-color: var(--muted); border: none; padding: 5px 12px; border-radius: var(--radius); cursor: pointer; }
-    </style>
+    
+/* vAIb-mr3u glass backing (propagated from dashboard.html — all DPO pages) */
+:root {
+            --navy-900: #101d4a; --navy-800: #182a63;
+            --glass-navy: rgba(16, 29, 74, 0.72);     /* brand-navy scrim over the blur */
+            --glass-navy-solid: rgba(16, 29, 74, 0.94);/* @supports-off near-opaque fallback */
+        }
+body::before {
+            content: "";
+            position: fixed;
+            inset: 0;
+            z-index: -1;
+            background-color: var(--glass-navy);
+            -webkit-backdrop-filter: blur(12px) saturate(115%);
+            backdrop-filter: blur(12px) saturate(115%);
+            pointer-events: none;
+        }
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+            body::before { background-color: var(--glass-navy-solid); }
+        }
+body{background-color:#101d4a;}
+</style>
 </head>
 
 <body>
