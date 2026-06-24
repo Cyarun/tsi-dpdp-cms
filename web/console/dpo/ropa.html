@@ -670,10 +670,10 @@
         const entryBlocks = pdfKeys.map(key => {
             const group = pdfGroups[key];
             const label = key === '__none__' ? 'Other Processing Activities' : AV.policyTitle(key);
-            const hdr = `<div style="background:#f0fdfa;border-left:4px solid #0d9488;padding:10px 20px;margin:8px 0 0;">
-              <span style="font-size:0.6rem;font-weight:800;color:#0d9488;text-transform:uppercase;letter-spacing:0.1em">Policy</span>
-              <span style="font-weight:700;color:#134e4a;margin-left:8px">${AV.esc(label)}</span>
-              <span style="font-size:0.75rem;color:#5eead4;margin-left:10px">${group.length} activit${group.length===1?'y':'ies'}</span>
+            const hdr = `<div style="background:#eef0f6;border-left:4px solid #24335c;padding:10px 20px;margin:8px 0 0;">
+              <span style="font-size:0.6rem;font-weight:800;color:#24335c;text-transform:uppercase;letter-spacing:0.1em">Policy</span>
+              <span style="font-weight:700;color:#24335c;margin-left:8px">${AV.esc(label)}</span>
+              <span style="font-size:0.75rem;color:#6b7280;margin-left:10px">${group.length} activit${group.length===1?'y':'ies'}</span>
             </div>`;
             return hdr + group.map(entryBlock).join('');
         }).join('');
