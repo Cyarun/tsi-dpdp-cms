@@ -83,18 +83,26 @@
         }
     
 
-/* vAIb-mr3u — Apple liquid-glass: light frost, host softly visible, DARK text legible. */
-:root{ --lg: rgba(255,255,255,0.62); --lg-solid: rgba(247,248,251,0.97); }
+
+/* vAIb-mr3u — LAYERED glass (legible over BUSY host photos):
+   1) heavy blur(24px) DISSOLVES the host's nail/flower photo into an abstract wash
+      (high-frequency photo detail is destroyed, so nothing recognizable fights the text);
+   2) a stronger white frost (0.78) gives the glass body without going opaque;
+   3) content CARDS sit on a near-solid surface (0.92) so the actual text is always crisp.
+   The glass is the CHROME; the content rides near-solid cards. AA-safe on any host. */
+:root{ --lg: rgba(255,255,255,0.78); --lg-solid: rgba(248,249,252,0.98); --lg-card: rgba(255,255,255,0.92); }
 body::before{
   content:""; position:fixed; inset:0; z-index:-1;
   background:var(--lg);
-  -webkit-backdrop-filter:blur(20px) saturate(180%);
-  backdrop-filter:blur(20px) saturate(180%);
+  -webkit-backdrop-filter:blur(24px) saturate(140%) brightness(1.04);
+  backdrop-filter:blur(24px) saturate(140%) brightness(1.04);
 }
 @supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
   body::before{ background:var(--lg-solid); }
 }
-body{ background-color:#f7f8fb; }
+body{ background-color:#f5f6fa; }
+/* content cards: near-solid so text is crisp over the heavy-blur glass */
+[class*="bg-[var(--card)]"], .card, [class*="bg-white"]{ background-color:var(--lg-card) !important; }
 </style>
 </head>
 
