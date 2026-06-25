@@ -76,6 +76,18 @@ public class DiscoveryBaseline implements Action {
         // Serialise to JSON string for ?::jsonb storage. The value is a JSONObject
         // already parsed from the request body by InputProcessor.
         String inventoryJson = inventoryObj.toString();
+        // Defence in depth (security review follow-up): the baseline is value-free by
+        // contract (category/source/activity METADATA + counts, never PII values). Do
+        // not depend solely on the caller — reject an inventory that smells of raw PII
+        // (an '@' suggests an email value leaked into the snapshot). The legitimate
+        // fabric caller never sends values, so this is a no-op for it and a hard stop
+        // for a buggy/compromised caller.
+        if (inventoryJson.indexOf('@') >= 0) {
+            OutputProcessor.errorResponse(res, 400, "Bad Request",
+                    "inventory must be value-free (no PII values); received an '@' (email-like value).",
+                    req.getRequestURI());
+            return;
+        }
 
         int activityCount = 0;
         Object ac = input.get("activity_count");
