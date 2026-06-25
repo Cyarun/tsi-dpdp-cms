@@ -91,7 +91,15 @@ public class Compliance implements Action {
             }
 
             UUID fiduciaryId = null;
-            String fiduciaryIdStr = input.get("fiduciary_id") != null?(String) input.get("fiduciary_id"):new Fiduciary().getFiduciaryId(UUID.fromString(apiKey),apiSecret);
+            // vAIb (U6 fix): the body fiduciary_id is an optional display/listing filter. When
+            // absent, fall back to the api-key's fiduciary — but ONLY if an api-key is present.
+            // On the ADMIN/operator path (apiKey == null) UUID.fromString(null) threw an NPE ->
+            // 500 for any Compliance func called with an operator JWT and no body fiduciary_id
+            // (the existing purge/legal funcs always sent a body fid, so the latent NPE never
+            // fired until list_coverage_findings, which is purely credential-scoped). Guard it.
+            String fiduciaryIdStr = (input.get("fiduciary_id") != null)
+                    ? (String) input.get("fiduciary_id")
+                    : (apiKey != null ? new Fiduciary().getFiduciaryId(UUID.fromString(apiKey), apiSecret) : null);
             // SEC (vAIb-ktvf review #2): the CREDENTIAL-derived fiduciary — NEVER the body. The body
             // fiduciary_id above is a display/listing filter that the caller can pass; it must NOT be
             // trusted as the tenant identity on the deletion/oversight path (a tenant-A api-key could
