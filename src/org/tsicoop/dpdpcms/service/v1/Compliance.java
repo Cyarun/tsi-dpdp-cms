@@ -288,6 +288,18 @@ public class Compliance implements Action {
                     break;
                 }
 
+                case "list_coverage_findings": {
+                    // SEC: tenant-scope to the credential-derived fiduciary (operator/api-key), not body.
+                    UUID covFid = (loginUserId != null) ? getOperatorFiduciary(loginUserId) : credentialFiduciaryId;
+                    if (covFid == null) {
+                        OutputProcessor.errorResponse(res, HttpServletResponse.SC_FORBIDDEN, "Forbidden", "Cannot resolve the caller's fiduciary for this operation.", req.getRequestURI());
+                        return;
+                    }
+                    output = getLatestCoverageFinding(covFid);
+                    OutputProcessor.send(res, HttpServletResponse.SC_OK, output);
+                    break;
+                }
+
                 default:
                     OutputProcessor.errorResponse(res, HttpServletResponse.SC_BAD_REQUEST, "Bad Request", "Unknown or unsupported '_func' value: " + func, req.getRequestURI());
                     break;
@@ -460,6 +472,53 @@ public class Compliance implements Action {
      * the operators table — never trust a body fiduciary_id on the deletion path. A platform
      * operator (NULL fiduciary) returns null → the caller must reject (no implicit all-tenant).
      */
+    /**
+     * Returns the latest coverage_findings row for the given fiduciary, or {found:false} when none.
+     * @return JSONObject with coverage stats or {found:false}.
+     * @throws SQLException if a database access error occurs.
+     */
+    private JSONObject getLatestCoverageFinding(UUID fiduciaryId) throws SQLException {
+        JSONObject out = new JSONObject();
+        Connection conn = null;
+        PreparedStatement pstmt = null;
+        ResultSet rs = null;
+        PoolDB pool = new PoolDB();
+
+        String sql = "SELECT id, scanned_at, baseline_activity_count, covered_count, gap_count, gap_activities " +
+                     "FROM coverage_findings WHERE fiduciary_id = ? ORDER BY scanned_at DESC LIMIT 1";
+
+        try {
+            conn = pool.getConnection();
+            pstmt = conn.prepareStatement(sql);
+            pstmt.setObject(1, fiduciaryId);
+            rs = pstmt.executeQuery();
+            if (rs.next()) {
+                out.put("found", true);
+                out.put("baseline_activity_count", rs.getInt("baseline_activity_count"));
+                out.put("covered_count", rs.getInt("covered_count"));
+                out.put("gap_count", rs.getInt("gap_count"));
+                if (rs.getTimestamp("scanned_at") != null) {
+                    out.put("scanned_at", rs.getTimestamp("scanned_at").toInstant().toString());
+                }
+                // Parse the gap_activities JSONB column (array of activity-name strings).
+                String gapRaw = rs.getString("gap_activities");
+                JSONArray gapArr = new JSONArray();
+                if (gapRaw != null && !gapRaw.isEmpty()) {
+                    try {
+                        Object parsed = new JSONParser().parse(gapRaw);
+                        if (parsed instanceof JSONArray) gapArr = (JSONArray) parsed;
+                    } catch (ParseException ignore) { /* return empty array on malformed JSONB */ }
+                }
+                out.put("gap_activities", gapArr);
+            } else {
+                out.put("found", false);
+            }
+        } finally {
+            pool.cleanup(rs, pstmt, conn);
+        }
+        return out;
+    }
+
     private UUID getOperatorFiduciary(UUID operatorId) throws SQLException {
         if (operatorId == null) return null;
         PoolDB pool = new PoolDB();

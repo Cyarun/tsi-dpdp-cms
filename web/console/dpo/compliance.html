@@ -229,6 +229,41 @@ body{ background-color: var(--background, #f6f7fb); }
         </div>
     </div>
 
+    <!-- Consent Coverage Panel -->
+    <div id="coverage-panel" class="card mb-6">
+        <div class="flex justify-between items-center mb-4">
+            <h2 class="text-lg font-bold text-[var(--foreground)] tracking-tight">Consent Coverage</h2>
+            <button onclick="loadCoverageFindings()" class="text-xs primary-text font-bold uppercase hover:underline">Refresh</button>
+        </div>
+        <!-- Stats row -->
+        <div id="coverage-stats" class="grid grid-cols-3 gap-4 mb-4">
+            <div class="rounded-lg border border-[var(--border)] bg-[var(--card)] p-4 text-center">
+                <p id="cov-discovered" class="text-3xl font-black text-[var(--foreground)]">—</p>
+                <p class="text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wide mt-1">Discovered</p>
+            </div>
+            <div class="rounded-lg border border-[var(--border)] bg-[var(--card)] p-4 text-center">
+                <p id="cov-covered" class="text-3xl font-black text-[var(--foreground)]">—</p>
+                <p class="text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wide mt-1">Covered</p>
+            </div>
+            <div class="rounded-lg border border-[var(--border)] bg-[var(--card)] p-4 text-center">
+                <p id="cov-gap" class="text-3xl font-black text-[var(--foreground)]">—</p>
+                <p class="text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wide mt-1">Coverage Gap</p>
+            </div>
+        </div>
+        <!-- Gap activities list -->
+        <div id="coverage-gap-section" class="hidden">
+            <p class="text-xs font-bold text-[var(--muted-foreground)] uppercase tracking-wide mb-2">Activities missing a RoPA entry</p>
+            <div id="coverage-gap-list" class="flex flex-wrap gap-2"></div>
+            <p class="text-xs text-[var(--muted-foreground)] mt-2">These activities were discovered at onboarding but have no active RoPA entry — review &amp; add to RoPA.</p>
+        </div>
+        <!-- State messages -->
+        <div id="coverage-empty" class="hidden text-sm text-[var(--muted-foreground)] py-2">
+            No coverage scan yet — Run Compliance Check to generate coverage findings.
+        </div>
+        <div id="coverage-error" class="hidden text-sm text-red-600 py-2"></div>
+        <p id="coverage-scanned-at" class="text-[11px] text-[var(--muted-foreground)] mt-3 hidden"></p>
+    </div>
+
     <!-- Purge Request List Card -->
     <div class="card">
         <h2 class="text-lg font-bold text-[var(--foreground)] mb-4 tracking-tight">Search & Filter</h2>
@@ -928,6 +963,86 @@ body{ background-color: var(--background, #f6f7fb); }
     window.openHoldFromPurge = openHoldFromPurge;
     window.toggleRecordsInput = toggleRecordsInput;
     window.handleLogout = () => { localStorage.clear(); window.location.href = "../index.html"; };
+
+    // --- CONSENT COVERAGE PANEL ---
+
+    async function loadCoverageFindings() {
+        // Reset to loading state.
+        document.getElementById('cov-discovered').textContent = '—';
+        document.getElementById('cov-covered').textContent = '—';
+        document.getElementById('cov-gap').textContent = '—';
+        document.getElementById('coverage-gap-section').classList.add('hidden');
+        document.getElementById('coverage-empty').classList.add('hidden');
+        document.getElementById('coverage-error').classList.add('hidden');
+        document.getElementById('coverage-scanned-at').classList.add('hidden');
+
+        try {
+            const response = await fetch(API_URL_PURGE, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${AUTH_TOKEN}` },
+                body: JSON.stringify({ '_func': 'list_coverage_findings' })
+            });
+
+            if (!response.ok) {
+                const errData = await response.json().catch(() => ({}));
+                const msg = (errData && errData.message) ? errData.message : 'Server returned ' + response.status + '.';
+                document.getElementById('coverage-error').textContent = 'Could not load coverage data: ' + msg;
+                document.getElementById('coverage-error').classList.remove('hidden');
+                return;
+            }
+
+            const data = await response.json();
+
+            if (!data.found) {
+                document.getElementById('coverage-empty').classList.remove('hidden');
+                return;
+            }
+
+            // Render stats.
+            const discovered = data.baseline_activity_count || 0;
+            const covered = data.covered_count || 0;
+            const gap = data.gap_count || 0;
+
+            document.getElementById('cov-discovered').textContent = discovered;
+            document.getElementById('cov-covered').textContent = covered;
+
+            const gapEl = document.getElementById('cov-gap');
+            gapEl.textContent = gap;
+            if (gap === 0) {
+                gapEl.className = 'text-3xl font-black text-green-600';
+            } else {
+                gapEl.className = 'text-3xl font-black text-red-600';
+            }
+
+            // Render gap activity chips if any.
+            const gapActivities = Array.isArray(data.gap_activities) ? data.gap_activities : [];
+            if (gap > 0 && gapActivities.length > 0) {
+                const listEl = document.getElementById('coverage-gap-list');
+                listEl.innerHTML = '';
+                gapActivities.forEach(function(name) {
+                    const chip = document.createElement('span');
+                    chip.className = 'inline-block px-3 py-1 rounded-full text-xs font-medium bg-red-50 text-red-700 border border-red-200';
+                    chip.textContent = name; // textContent — no HTML parsing, XSS-safe.
+                    listEl.appendChild(chip);
+                });
+                document.getElementById('coverage-gap-section').classList.remove('hidden');
+            }
+
+            // Scanned-at timestamp.
+            if (data.scanned_at) {
+                const scannedEl = document.getElementById('coverage-scanned-at');
+                scannedEl.textContent = 'Last scanned: ' + new Date(data.scanned_at).toLocaleString();
+                scannedEl.classList.remove('hidden');
+            }
+
+        } catch (e) {
+            document.getElementById('coverage-error').textContent = 'Failed to load coverage data. Check your connection and try again.';
+            document.getElementById('coverage-error').classList.remove('hidden');
+        }
+    }
+
+    window.loadCoverageFindings = loadCoverageFindings;
+    loadCoverageFindings();
 </script>
 </body>
 </html>
