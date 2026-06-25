@@ -1,0 +1,23 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "record_discovery_baseline — vAIb (U3) persist onboarding discovery footprint as tenant baseline",
+  "type": "object",
+  "properties": {
+    "_func": {
+      "type": "string"
+    },
+    "inventory": {
+      "type": "object"
+    },
+    "activity_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "source_breakdown": {
+      "type": "object"
+    }
+  },
+  "required": [
+    "_func"
+  ]
+}
