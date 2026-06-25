@@ -219,6 +219,16 @@ public class JobManager implements ServletContextListener {
             e.printStackTrace();
             throw new RuntimeException("Compliance Batch failed due to Database Error: " + e.getMessage(), e);
         }
+
+        // Coverage reconcile (vAIb RoPA-coverage-baseline U5): runs once per scan, per tenant,
+        // AFTER the principal loop. Compares the onboarding discovery baseline against the active
+        // RoPA and persists gap findings to coverage_findings for the DPO console (U6) to read.
+        // Fail-soft: a coverage hiccup must NOT fail the whole CES job — mirrors the existing style.
+        try {
+            cesService.reconcileCoverage(fiduciaryId);
+        } catch (Exception e) {
+            System.err.println("[CES COVERAGE] reconcileCoverage failed (non-fatal): " + e.getMessage());
+        }
     }
 
     /**

@@ -12,8 +12,10 @@ import java.sql.*;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -578,6 +580,126 @@ public class CESService {
             pool.cleanup(rs,stmt,conn);
         }
         return response;
+    }
+
+    /**
+     * Coverage reconcile (vAIb RoPA-coverage-baseline U5) — runs ONCE per CES scan,
+     * per tenant, AFTER the per-principal loop in JobManager.enforce completes.
+     *
+     * Reads the latest discovery_baseline.inventory for the fiduciary, extracts the
+     * activity names from inventory.purposes[].name, then compares them (case-insensitive,
+     * trimmed) against the active ropa_entries.activity_name set. Persists one row to
+     * coverage_findings: baseline_activity_count, covered_count, gap_count, and the list
+     * of gap activity names (metadata only, NO PII).
+     *
+     * Fail-soft: if no baseline exists for this tenant, the method returns immediately
+     * (nothing to reconcile). Exceptions propagate to the caller, which wraps this in a
+     * try/catch that logs and swallows so a coverage hiccup never fails the whole CES job.
+     *
+     * @param fiduciaryId the tenant UUID — the trusted job fiduciary, NOT user input.
+     */
+    public void reconcileCoverage(UUID fiduciaryId) throws Exception {
+        // --- 1. Read the latest discovery baseline inventory for this fiduciary ---
+        String baselineSql = "SELECT inventory FROM discovery_baseline WHERE fiduciary_id=? ORDER BY captured_at DESC LIMIT 1";
+        String inventoryJson = null;
+        PoolDB baselinePool = new PoolDB();
+        Connection baselineConn = null;
+        PreparedStatement baselineStmt = null;
+        ResultSet baselineRs = null;
+        try {
+            baselineConn = baselinePool.getConnection();
+            baselineStmt = baselineConn.prepareStatement(baselineSql);
+            baselineStmt.setObject(1, fiduciaryId);
+            baselineRs = baselineStmt.executeQuery();
+            if (baselineRs.next()) {
+                inventoryJson = baselineRs.getString("inventory");
+            }
+        } finally {
+            baselinePool.cleanup(baselineRs, baselineStmt, baselineConn);
+        }
+
+        if (inventoryJson == null) {
+            // No baseline for this tenant — nothing to reconcile.
+            System.out.println("[CES COVERAGE] reconcileCoverage: no discovery_baseline found for fiduciary=" + fiduciaryId + " -- skipping");
+            return;
+        }
+
+        // --- 2. Parse inventory.purposes[].name into the baseline activity set ---
+        JSONObject inventory = (JSONObject) new JSONParser().parse(inventoryJson);
+        JSONArray purposes = (JSONArray) inventory.get("purposes");
+        List<String> baselineNames = new ArrayList<>();
+        if (purposes != null) {
+            Iterator<JSONObject> pit = purposes.iterator();
+            while (pit.hasNext()) {
+                JSONObject purpose = pit.next();
+                String name = (String) purpose.get("name");
+                if (name != null && !name.trim().isEmpty()) {
+                    baselineNames.add(name.trim());
+                }
+            }
+        }
+        int baselineCount = baselineNames.size();
+        if (baselineCount == 0) {
+            System.out.println("[CES COVERAGE] reconcileCoverage: baseline inventory has 0 purposes for fiduciary=" + fiduciaryId + " -- skipping");
+            return;
+        }
+
+        // --- 3. Read active ropa_entries.activity_name for this fiduciary ---
+        String ropaSql = "SELECT activity_name FROM ropa_entries WHERE fiduciary_id=? AND status='active'";
+        Set<String> activeRopaNames = new HashSet<>();
+        PoolDB ropaPool = new PoolDB();
+        Connection ropaConn = null;
+        PreparedStatement ropaStmt = null;
+        ResultSet ropaRs = null;
+        try {
+            ropaConn = ropaPool.getConnection();
+            ropaStmt = ropaConn.prepareStatement(ropaSql);
+            ropaStmt.setObject(1, fiduciaryId);
+            ropaRs = ropaStmt.executeQuery();
+            while (ropaRs.next()) {
+                String name = ropaRs.getString("activity_name");
+                if (name != null) {
+                    activeRopaNames.add(name.trim().toLowerCase());
+                }
+            }
+        } finally {
+            ropaPool.cleanup(ropaRs, ropaStmt, ropaConn);
+        }
+
+        // --- 4. Compute covered / gap sets (case-insensitive, trimmed comparison) ---
+        JSONArray gapNames = new JSONArray();
+        int coveredCount = 0;
+        for (String baseName : baselineNames) {
+            if (activeRopaNames.contains(baseName.toLowerCase())) {
+                coveredCount++;
+            } else {
+                gapNames.add(baseName);
+            }
+        }
+        int gapCount = gapNames.size();
+
+        System.out.println("[CES COVERAGE] reconcileCoverage: fiduciary=" + fiduciaryId
+                + " baseline=" + baselineCount + " covered=" + coveredCount + " gaps=" + gapCount);
+
+        // --- 5. INSERT one coverage_findings row ---
+        String insertSql = "INSERT INTO coverage_findings (fiduciary_id, baseline_activity_count, covered_count, gap_count, gap_activities) VALUES (?, ?, ?, ?, ?::jsonb)";
+        PoolDB insertPool = new PoolDB();
+        Connection insertConn = null;
+        PreparedStatement insertStmt = null;
+        try {
+            insertConn = insertPool.getConnection();
+            insertStmt = insertConn.prepareStatement(insertSql);
+            insertStmt.setObject(1, fiduciaryId);
+            insertStmt.setInt(2, baselineCount);
+            insertStmt.setInt(3, coveredCount);
+            insertStmt.setInt(4, gapCount);
+            insertStmt.setString(5, gapNames.toJSONString());
+            insertStmt.executeUpdate();
+        } finally {
+            insertPool.cleanup(null, insertStmt, insertConn);
+        }
+
+        System.out.println("[CES COVERAGE] reconcileCoverage: coverage_findings row inserted for fiduciary=" + fiduciaryId);
     }
 
     /**
