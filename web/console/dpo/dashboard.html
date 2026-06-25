@@ -273,10 +273,15 @@ body{ background-color: var(--background, #f6f7fb); }
 
 </main>
 
+<script src="../audience-view.js"></script>
+<script src="../tenant-scope.js"></script>
 <script>
     const API_URL_DASHBOARD = '/api/v1/admin/admindash';
     const AUTH_TOKEN = localStorage.getItem('authToken');
     const FIDUCIARY_ID = localStorage.getItem('fiduciary_id');
+    // vAIb: audience-clean — DPO/tenant sees human request refs (REQ-XXXXXX), not raw uuid tails.
+    const AV = window.AudienceView;
+    const IS_STAFF = AV ? AV.isStaffView() : false;
 
     function toggleSidebar() {
         document.getElementById('sidebar').classList.toggle('open');
@@ -376,7 +381,7 @@ body{ background-color: var(--background, #f6f7fb); }
                     const isOverdue = g.days_left < 0;
                     return `
                         <tr class="hover:bg-[var(--muted)] transition-colors">
-                            <td class="px-4 py-3 font-mono text-xs text-[var(--muted-foreground)]">...${g.grievance_id.slice(-8)}</td>
+                            <td class="px-4 py-3 text-xs text-[var(--muted-foreground)]">${IS_STAFF ? ('<span class=\'font-mono\'>...' + AV.esc(g.grievance_id.slice(-8)) + '</span>') : AV.esc(AV.shortRef(g.grievance_id, 'REQ'))}</td>
                             <td class="px-4 py-3 font-bold text-[var(--foreground)]">${g.type.replace(/_/g, ' ')}</td>
                             <td class="px-4 py-3 text-[var(--muted-foreground)]">${new Date(g.submission_timestamp).toLocaleDateString()}</td>
                             <td class="px-4 py-3 font-semibold ${isOverdue ? 'text-red-600' : 'text-[var(--muted-foreground)]'}">

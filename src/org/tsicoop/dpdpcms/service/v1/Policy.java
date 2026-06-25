@@ -624,7 +624,7 @@ public class Policy implements Action {
         ResultSet rs = null;
         PoolDB pool = new PoolDB();
 
-        StringBuilder sqlBuilder = new StringBuilder("SELECT id, version, fiduciary_id, effective_date, status, jurisdiction, created_at, last_updated_at FROM consent_policies WHERE status is not null");
+        StringBuilder sqlBuilder = new StringBuilder("SELECT id, version, fiduciary_id, effective_date, status, jurisdiction, policy_content, created_at, last_updated_at FROM consent_policies WHERE status is not null");
         List<Object> params = new ArrayList<>();
 
         if (statusFilter != null && !statusFilter.isEmpty()) {
@@ -659,6 +659,15 @@ public class Policy implements Action {
                 policy.put("effective_date", rs.getTimestamp("effective_date").toInstant().toString());
                 policy.put("status", rs.getString("status"));
                 policy.put("jurisdiction", rs.getString("jurisdiction"));
+                // vAIb: the list row must show the policy's human title, not the hardcoded
+                // "Active policy" fallback. The frontend reads policy_content (multilingual)
+                // to derive the title; also surface a flat "title" for any consumer. Without
+                // this the list omitted policy_content -> every row rendered "Active policy".
+                String pcJson = rs.getString("policy_content");
+                if (pcJson != null) {
+                    policy.put("policy_content", pcJson);
+                    policy.put("title", extractPolicyTitle(pcJson));
+                }
                 policy.put("created_at", rs.getTimestamp("created_at").toInstant().toString());
                 policy.put("last_updated_at", rs.getTimestamp("last_updated_at").toInstant().toString());
                 policiesArray.add(policy);

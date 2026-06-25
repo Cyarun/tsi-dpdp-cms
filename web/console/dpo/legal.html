@@ -315,9 +315,19 @@ body{ background-color: var(--background, #f6f7fb); }
                 body: JSON.stringify({ "_func": "list_certificates", "fiduciary_id": FIDUCIARY_ID })
             });
 
-            if (response.ok) {
-                const list = await response.json();
-                if(list.length === 0) {
+            if (!response.ok) {
+                // Real error (auth/scope/server) — show the actual reason, NOT a generic
+                // "connection failed". An empty registry is NOT an error (handled below).
+                let reason = 'Unable to load (HTTP ' + response.status + ').';
+                try { const err = await response.json(); if (err && err.message) reason = AV.esc(err.message); } catch (_) {}
+                tbody.innerHTML = '<tr><td colspan="5" class="py-12 text-center text-[var(--muted-foreground)] font-medium">' + reason + '</td></tr>';
+                return;
+            }
+            {
+                const raw = await response.json();
+                // Backend sends a bare JSON array; coerce defensively in case it is wrapped.
+                const list = Array.isArray(raw) ? raw : (Array.isArray(raw && raw.output) ? raw.output : []);
+                if (list.length === 0) {
                     tbody.innerHTML = '<tr><td colspan="5" class="py-12 text-center text-[var(--muted-foreground)]">No certificates have been generated yet.</td></tr>';
                     return;
                 }
@@ -338,8 +348,8 @@ body{ background-color: var(--background, #f6f7fb); }
                 `;
                 }).join('');
             }
-        } catch (e) { 
-            tbody.innerHTML = '<tr><td colspan="5" class="py-12 text-center text-red-500 font-black">Registry Connection Failed.</td></tr>'; 
+        } catch (e) {
+            tbody.innerHTML = '<tr><td colspan="5" class="py-12 text-center text-[var(--muted-foreground)] font-medium">Could not reach the registry. Please retry.</td></tr>';
         }
     }
 
