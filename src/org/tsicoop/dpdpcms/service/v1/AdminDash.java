@@ -192,6 +192,13 @@ public class AdminDash implements Action {
             metrics.put("ropa_active", getCount(conn, pool, "SELECT COUNT(*) FROM ropa_entries WHERE fiduciary_id = ? AND status = 'active' AND created_at >= ?::timestamp AND created_at <= ?::timestamp", fiduciaryId, start, end));
             metrics.put("ropa_draft",  getCount(conn, pool, "SELECT COUNT(*) FROM ropa_entries WHERE fiduciary_id = ? AND status = 'draft'  AND created_at >= ?::timestamp AND created_at <= ?::timestamp", fiduciaryId, start, end));
 
+            // 7. COVERAGE GAP (vAIb-ermw): the latest CES coverage-reconcile finding for this
+            // tenant. Surfaces "X discovered activities have no active RoPA entry" so the DPO
+            // dashboard can raise a proactive §6 alert the moment the console opens (instead of
+            // the DPO having to remember to visit the coverage page). Fail-soft: a missing
+            // coverage_findings table/row defaults the count to 0 (no alert), never a 500.
+            metrics.put("coverage_gap", getLatestGapCount(conn, pool, fiduciaryId));
+
         } finally {
             if (pool != null && conn != null) pool.cleanup(null, null, conn);
         }
@@ -213,6 +220,31 @@ public class AdminDash implements Action {
             pstmt.setString(3, end + " 23:59:59");
             rs = pstmt.executeQuery();
             return rs.next() ? rs.getInt(1) : 0;
+        } finally {
+            if (pool != null) pool.cleanup(rs, pstmt, null);
+        }
+    }
+
+    /**
+     * vAIb-ermw: latest CES coverage-reconcile gap_count for this tenant (the number of
+     * discovered processing activities with NO active RoPA entry). Drives the DPO
+     * dashboard's proactive §6 coverage alert. FAIL-SOFT by design: if the
+     * coverage_findings table or a row is absent (no scan has run yet), returns 0 (no
+     * alert) and SWALLOWS the SQLException — a coverage read must NEVER 500 the whole
+     * dashboard. Tenant-scoped to the SERVER-DERIVED fiduciaryId.
+     */
+    private int getLatestGapCount(Connection conn, PoolDB pool, UUID fiduciaryId) {
+        PreparedStatement pstmt = null;
+        ResultSet rs = null;
+        String sql = "SELECT gap_count FROM coverage_findings WHERE fiduciary_id = ? ORDER BY scanned_at DESC LIMIT 1";
+        try {
+            pstmt = conn.prepareStatement(sql);
+            pstmt.setObject(1, fiduciaryId);
+            rs = pstmt.executeQuery();
+            return rs.next() ? rs.getInt(1) : 0;
+        } catch (SQLException e) {
+            System.err.println("[DPO METRICS] coverage_gap read failed (non-fatal): " + e.getMessage());
+            return 0;
         } finally {
             if (pool != null) pool.cleanup(rs, pstmt, null);
         }

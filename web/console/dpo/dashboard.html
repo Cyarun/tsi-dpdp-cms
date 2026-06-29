@@ -250,6 +250,26 @@ body{ background-color: var(--background, #f6f7fb); }
         </div>
     </div>
 
+    <!-- vAIb-ermw: COVERAGE ALERT — proactive §6 banner shown ONLY when the latest CES
+         coverage scan found discovered activities with no active RoPA entry. Hidden by
+         default; revealed by renderMetrics when m.coverage_gap > 0. -->
+    <div id="coverage-alert" class="card mb-6 hidden" style="border:1px solid #fca5a5; background:#fef2f2;">
+        <div class="flex items-start gap-3">
+            <span style="font-size:1.25rem; line-height:1.4;">⚠️</span>
+            <div class="flex-1">
+                <h2 class="text-base font-bold text-red-700 mb-1">Action required: coverage gap detected</h2>
+                <p class="text-sm text-red-700/90 mb-3">
+                    <span id="coverage-alert-count" class="font-black">0</span> discovered processing
+                    activit<span id="coverage-alert-plural">ies</span> ha<span id="coverage-alert-have">ve</span>
+                    <strong>no active RoPA entry</strong>. Under DPDP §6 every processing activity must be
+                    recorded — review the gap and add the missing entries to your RoPA, or retire the activity.
+                </p>
+                <a href="compliance.html" class="inline-block text-xs font-bold uppercase tracking-wide px-3 py-2 rounded-md"
+                   style="background:#dc2626; color:#fff;">Review coverage on Compliance →</a>
+            </div>
+        </div>
+    </div>
+
     <!-- Section: Urgent Requests Table -->
     <div class="card">
         <h2 class="text-lg font-bold text-[var(--foreground)] mb-4 tracking-tight">Urgent: Pending DPO Action</h2>
@@ -351,6 +371,21 @@ body{ background-color: var(--background, #f6f7fb); }
                 // Consolidated Grievance Card
                 document.getElementById('metric-grievances-total').textContent = m.grievances_total || 0;
                 document.getElementById('metric-grievances-pending').textContent = `(${m.grievances_pending || 0} Pending)`;
+
+                // vAIb-ermw: proactive §6 coverage alert — reveal ONLY when the latest CES
+                // scan found a gap (discovered activities with no active RoPA entry).
+                const gap = parseInt(m.coverage_gap, 10) || 0;
+                const covAlert = document.getElementById('coverage-alert');
+                if (covAlert) {
+                    if (gap > 0) {
+                        document.getElementById('coverage-alert-count').textContent = gap;
+                        document.getElementById('coverage-alert-plural').textContent = gap === 1 ? 'y' : 'ies';
+                        document.getElementById('coverage-alert-have').textContent = gap === 1 ? 's' : 've';
+                        covAlert.classList.remove('hidden');
+                    } else {
+                        covAlert.classList.add('hidden');
+                    }
+                }
             }
         } catch (error) {
             console.error("Metric load failure:", error);
