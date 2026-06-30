@@ -1,0 +1,136 @@
+/* ──────────────────────────────────────────────────────────────────────────
+   DPO Console — SHARED stylesheet (vAIb-lba1 / vAIb-3ni2)
+
+   ONE source of truth for all 9 DPO pages. Replaces the per-page <style>
+   patchwork (navy glass / tweakcn oklch / !important wars) that made the
+   console look inconsistent.
+
+   HOST-THEME SYNC: the fabric (console.py _theme_style_block) injects exactly
+   THREE host tokens for this blend surface — derived from the tenant's Wix
+   --wst-* theme via the dpo-element widget:
+     --tsi-primary   the host brand/accent colour (e.g. NailTalk pink)
+     --background    the host page background
+     --tsi-text      the host body text colour
+   plus body/h* font-family. EVERYTHING here derives from those, so the console
+   automatically adopts each tenant site's look — no fixed brand, no per-tenant
+   edits. Clean white surfaces (like My-Data) + the host accent for nav/links/
+   stats. Fallbacks keep it legible if a token is absent.
+   ────────────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* local design tokens, all derived from the host-injected ones */
+  --dpo-accent:        var(--tsi-primary, #db1481);
+  --dpo-text:          var(--tsi-text, #1e293b);
+  --dpo-muted:         color-mix(in srgb, var(--tsi-text, #1e293b) 55%, transparent);
+  --dpo-bg:            var(--background, #f6f7fb);
+  --dpo-surface:       #ffffff;
+  --dpo-border:        rgba(15, 23, 42, 0.10);
+  --dpo-radius:        12px;
+  --dpo-shadow:        0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
+  --dpo-shadow-card:   0 1px 3px rgba(15, 23, 42, 0.08);
+}
+
+/* ── base ─────────────────────────────────────────────────────────────── */
+body {
+  background-color: var(--dpo-bg);
+  color: var(--dpo-text);
+  margin: 0;
+}
+@media (min-width: 1024px) { body { padding-left: 250px; } }
+
+.primary-text { color: var(--dpo-accent); }
+.primary-bg   { background-color: var(--dpo-accent); }
+
+/* ── sidebar: clean white panel, host-accent active pill ───────────────── */
+.sidebar {
+  width: 250px; position: fixed; top: 0; left: 0; height: 100vh; z-index: 50;
+  background: var(--dpo-surface);
+  border-right: 1px solid var(--dpo-border);
+  padding-top: 20px;
+  transition: transform 0.3s ease-in-out;
+}
+@media (max-width: 1023px) {
+  .sidebar { transform: translateX(-100%); box-shadow: 2px 0 16px rgba(15,23,42,0.12); }
+  .sidebar.open { transform: translateX(0); }
+}
+/* mobile backdrop behind the open sidebar */
+.sidebar-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,0.5); z-index: 40; display: none; }
+.sidebar-backdrop.active { display: block; }
+.nav-link {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 16px; margin: 3px 12px;
+  border-radius: 9px;
+  color: var(--dpo-text);
+  font-size: 0.9rem; font-weight: 500;
+  text-decoration: none;
+  transition: background-color .15s ease, color .15s ease;
+}
+.nav-link:hover {
+  background: color-mix(in srgb, var(--dpo-accent) 10%, transparent);
+  color: var(--dpo-accent);
+}
+.nav-link.active {
+  background: var(--dpo-accent);
+  color: #ffffff;
+  font-weight: 700;
+}
+
+/* ── cards / surfaces ──────────────────────────────────────────────────── */
+.card {
+  background: var(--dpo-surface);
+  border: 1px solid var(--dpo-border);
+  border-radius: var(--dpo-radius);
+  box-shadow: var(--dpo-shadow-card);
+  padding: 20px;
+}
+
+/* page heading sits on the light body → dark host text */
+main > div > h1, main h1 { color: var(--dpo-text); }
+
+/* filter chips / small surfaces */
+.filter-chip {
+  background: var(--dpo-surface);
+  border: 1px solid var(--dpo-border);
+  border-radius: 9px;
+  box-shadow: var(--dpo-shadow);
+}
+
+/* ── stat numbers / accents (consistent with My-Data) ─────────────────── */
+.stat-value { color: var(--dpo-text); font-weight: 800; }
+.stat-accent { color: var(--dpo-accent); }
+
+/* ── tables: clean, readable, host-neutral ─────────────────────────────── */
+table { width: 100%; border-collapse: collapse; }
+thead th {
+  text-align: left; font-size: 0.7rem; font-weight: 800;
+  text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--dpo-muted);
+  padding: 12px 16px; border-bottom: 1px solid var(--dpo-border);
+}
+tbody td { padding: 14px 16px; font-size: 0.875rem; border-bottom: 1px solid var(--dpo-border); }
+tbody tr:hover { background: color-mix(in srgb, var(--dpo-accent) 4%, transparent); }
+
+/* ── buttons / links ───────────────────────────────────────────────────── */
+.btn-primary {
+  background: var(--dpo-accent); color: #fff; border: 0;
+  padding: 9px 18px; border-radius: 9px; font-weight: 700; font-size: 0.875rem;
+  cursor: pointer; transition: filter .15s ease;
+}
+.btn-primary:hover { filter: brightness(0.93); }
+.link-action { color: var(--dpo-accent); font-weight: 700; text-decoration: none; }
+.link-action:hover { text-decoration: underline; }
+
+/* ── status badges ─────────────────────────────────────────────────────── */
+.badge { display: inline-block; padding: 3px 10px; border-radius: 999px;
+  font-size: 0.68rem; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; }
+.badge-active   { background: #ecfdf5; color: #047857; }
+.badge-archived, .badge-retired { background: #f1f5f9; color: #64748b; }
+.badge-draft    { background: #fffbeb; color: #b45309; }
+
+/* ── modals: solid white, dark backdrop (never see-through) ────────────── */
+.modal-content {
+  background: var(--dpo-surface) !important;
+  -webkit-backdrop-filter: none !important; backdrop-filter: none !important;
+  border-radius: var(--dpo-radius);
+}
+.modal-overlay { background: rgba(15, 23, 42, 0.55) !important; z-index: 1000; }
