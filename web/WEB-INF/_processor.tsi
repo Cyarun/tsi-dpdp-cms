@@ -16,6 +16,7 @@
 /api/v1/ropa=org.tsicoop.dpdpcms.service.v1.Ropa
 /api/v1/principal=org.tsicoop.dpdpcms.service.v1.Principal
 /api/v1/discoverbaseline=org.tsicoop.dpdpcms.service.v1.DiscoveryBaseline
+/api/v1/datapointcatalog=org.tsicoop.dpdpcms.service.v1.DataPointCatalog
 
 
 

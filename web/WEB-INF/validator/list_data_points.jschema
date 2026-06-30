@@ -1,0 +1,13 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "list_data_points — vAIb (mydata-ui P0) retrieve global data-point catalog",
+  "type": "object",
+  "properties": {
+    "_func": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "_func"
+  ]
+}
