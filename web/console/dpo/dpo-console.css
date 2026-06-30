@@ -83,6 +83,10 @@ body {
   box-shadow: var(--dpo-shadow-card);
   padding: 20px;
 }
+/* stat-card top stripe: force the host accent so cards are UNIFORM (like My-Data),
+   overriding the legacy per-card Tailwind colours (border-blue-600/indigo/amber/
+   orange and the unset --primary that fell back to black). One rule, all pages. */
+.card.border-t-4 { border-top-color: var(--dpo-accent) !important; }
 
 /* page heading sits on the light body → dark host text */
 main > div > h1, main h1 { color: var(--dpo-text); }
@@ -133,4 +137,28 @@ tbody tr:hover { background: color-mix(in srgb, var(--dpo-accent) 4%, transparen
   -webkit-backdrop-filter: none !important; backdrop-filter: none !important;
   border-radius: var(--dpo-radius);
 }
-.modal-overlay { background: rgba(15, 23, 42, 0.55) !important; z-index: 1000; }
+.modal-overlay { background: rgba(15, 23, 42, 0.55) !important; z-index: 1000;
+  position: fixed; inset: 0; display: none; align-items: center; justify-content: center; padding: 20px; }
+.modal-overlay.active, .modal-overlay[style*="flex"] { display: flex; }
+.modal-content { max-width: 640px; width: 100%; max-height: 90vh; overflow-y: auto;
+  box-shadow: 0 20px 50px -12px rgba(15,23,42,0.35); }
+.modal-header { padding: 20px 24px; border-bottom: 1px solid var(--dpo-border); }
+.modal-body { padding: 20px 24px; }
+.modal-footer { padding: 16px 24px; border-top: 1px solid var(--dpo-border);
+  display: flex; justify-content: flex-end; gap: 10px; }
+.modal-close-btn { background: none; border: 0; font-size: 1.4rem; cursor: pointer;
+  color: var(--dpo-muted); line-height: 1; }
+.modal-close-btn:hover { color: var(--dpo-text); }
+
+/* shared accents used across pages */
+.accent-text { color: var(--dpo-accent); }
+.border-primary { border-color: var(--dpo-accent); }
+.table-header { background: color-mix(in srgb, var(--dpo-text) 4%, transparent);
+  font-size: 0.7rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--dpo-muted); }
+
+/* mobile header (pages that have one) */
+.mobile-header { display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 16px; background: var(--dpo-surface); border-bottom: 1px solid var(--dpo-border);
+  position: sticky; top: 0; z-index: 30; }
+@media (min-width: 1024px) { .mobile-header { display: none; } }

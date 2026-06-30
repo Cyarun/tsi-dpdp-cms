@@ -7,70 +7,11 @@
     <title>DPDPA.center - Audit Explorer</title>
     <!-- Load Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="dpo-console.css">
     <!-- Load SheetJS for Excel Export -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
-        /* W2: page-local teal :root removed — injected tweakcn tokens win */
-
-        body {
-            background-color: var(--background);
-            font-family: var(--font-sans, 'Inter', ui-sans-serif, system-ui, sans-serif);
-            margin: 0;
-            padding: 0;
-            min-height: 100vh;
-        }
-
-        .primary-bg { background-color: var(--tsi-primary); }
-        .primary-text { color: var(--tsi-primary); }
-
-        /* Sidebar Styling */
-        .sidebar {
-            width: 250px;
-            background-color: var(--secondary);
-            box-shadow: 2px 0 5px rgba(0, 0, 0, 0.05);
-            padding-top: 20px;
-            position: fixed;
-            height: 100vh;
-            overflow-y: auto;
-            z-index: 50;
-            transition: transform 0.3s ease-in-out;
-            transform: translateX(-250px);
-        }
-
-        .sidebar.open { transform: translateX(0); }
-
-        .nav-link {
-            display: flex;
-            align-items: center;
-            padding: 10px 20px;
-            margin: 5px 0;
-            border-radius: 6px;
-            color: var(--muted-foreground);
-            transition: background-color 0.2s ease, color 0.2s ease;
-        }
-
-        .nav-link:hover, .nav-link.active {
-            background-color: var(--tsi-accent);
-            color: var(--tsi-primary);
-            font-weight: 600;
-        }
-
-        .card {
-            background-color: var(--card);
-            border-radius: var(--radius);
-            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
-            padding: 20px;
-            border: 1px solid var(--border);
-        }
-
-        .table-header {
-            background-color: var(--muted);
-            font-weight: 600;
-            color: var(--muted-foreground);
-            text-align: left;
-        }
-
-        /* Actor Tags */
+        /* Actor Tags — audit-page-specific */
         .actor-tag {
             display: inline-flex;
             align-items: center;
@@ -84,84 +25,7 @@
         .tag-app { background-color: #e0f2fe; color: #0369a1; }
         .tag-system { background-color: var(--muted); color: #475569; }
         .tag-user { background-color: #f0fdf4; color: #166534; }
-
-        /* Mobile Layout */
-        .mobile-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 10px 20px;
-            background-color: var(--card);
-            border-bottom: 1px solid #e2e8f0;
-            position: sticky;
-            top: 0;
-            z-index: 40;
-        }
-
-        @media (min-width: 1024px) {
-            .sidebar { transform: translateX(0); }
-            .mobile-header { display: none; }
-            body { padding-left: 250px; }
-        }
-
-        /* Modal Styles */
-        .modal-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.6);
-            display: none;
-            justify-content: center;
-            align-items: center;
-            z-index: 1000;
-        }
-
-        .modal-content {
-            background-color: var(--card);
-            padding: 30px;
-            border-radius: var(--radius);
-            max-width: 700px;
-            width: 95%;
-            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
-            position: relative;
-        }
-    
-
-
-
-/* vAIb-arf8 — SOLID panel (user-chosen look): the console adopts the HOST palette
-   (--background/--tsi-primary/--tsi-text/fonts threaded from the site) but renders on
-   OPAQUE surfaces, so it reads as a native panel — NOT a see-through glass overlay.
-   backdrop-filter no-ops behind a cross-origin iframe (it samples the iframe's own
-   backdrop, not the host pixels), so the old glass bled the host photo through sharp;
-   opaque surfaces remove the bleed entirely and are reliable across browsers. */
-:root{
-  --gl-card:        #ffffff;  /* opaque card */
-  --gl-card-strong: #ffffff;
-}
-/* Solid host-blend background (a hair off the host --background so cards read as raised).
-   No fixed blur scrim — it did nothing useful in the iframe and tinted everything navy. */
-body{ background-color: var(--background, #f6f7fb); }
-[class*="bg-[var(--card)]"], .card:not(.modal-content), [class*="bg-white"]:not(.modal-content){
-  background-color:#ffffff !important;
-  border:1px solid var(--border, rgba(15,23,42,0.10)) !important;
-}
-/* vAIb-arf8 — the sidebar is now WHITE; its nav text used --secondary-foreground /
-   --muted-foreground which were LIGHT (designed for the old navy sidebar) -> invisible.
-   Force DARK host text on the resting links; the active/hover link keeps its own accent. */
-/* vAIb-arf8 — uniform SOLID white sidebar (matches the opaque-panel look). The page CSS sets
-   .sidebar background to var(--secondary) = NAVY on the host theme; dark nav text on navy is
-   invisible. Force the sidebar opaque white so dark resting links + the pink active pill read right. */
-.sidebar{ background-color:#ffffff !important; border-right:1px solid var(--border, rgba(15,23,42,0.10)) !important; box-shadow:none !important; }
-.sidebar .nav-link{ color: var(--tsi-text, var(--foreground, #334155)) !important; }
-.sidebar .nav-link.active, .sidebar .nav-link:hover{ color: var(--primary-foreground, #ffffff) !important; }
-
-/* POPUP CARE (user): modals/overlays are SOLID over the glass — never see-through. */
-.modal-content{ background-color:#ffffff !important; -webkit-backdrop-filter:none !important; backdrop-filter:none !important; }
-.modal-overlay{ background:rgba(15,23,42,0.78) !important; z-index:1000; }
-</style>
+    </style>
 </head>
 
 <body class="flex lg:p-0">

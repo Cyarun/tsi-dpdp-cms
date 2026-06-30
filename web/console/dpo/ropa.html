@@ -5,40 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DPDPA.center - ROPA Registry</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="dpo-console.css">
     <style>
-        /* W2: page-local teal :root removed — injected tweakcn tokens win */
-        body { background-color: var(--background); font-family: var(--font-sans, 'Inter', ui-sans-serif, system-ui, sans-serif); margin: 0; padding: 0; min-height: 100vh; }
-        .primary-bg { background-color: var(--tsi-primary); }
-        .primary-text { color: var(--tsi-primary); }
-        .sidebar {
-            width: 250px; background-color: var(--secondary);
-            box-shadow: 2px 0 5px rgba(0,0,0,0.1); padding-top: 20px;
-            position: fixed; top: 0; left: 0; height: 100vh;
-            z-index: 50; border-right: 1px solid var(--border);
-            transition: transform 0.3s ease-in-out;
-        }
-        @media (max-width: 1023px) { .sidebar { transform: translateX(-100%); } .sidebar.open { transform: translateX(0); } }
-        @media (min-width: 1024px) { body { padding-left: 250px; } }
-        .nav-link { display: flex; align-items: center; padding: 10px 20px; margin: 5px 0; border-radius: var(--radius); color: var(--secondary-foreground); transition: all 0.2s ease; }
-        .nav-link:hover, .nav-link.active { background-color: var(--tsi-accent); color: var(--primary-foreground); font-weight: 600; }
-        .card { background-color: var(--card); border-radius: var(--radius); box-shadow: var(--shadow-sm); padding: 20px; border: 1px solid var(--border); }
-        .table-header { background-color: var(--muted); font-weight: 600; color: var(--muted-foreground); text-align: left; }
-        .mobile-header { display: flex; justify-content: space-between; align-items: center; padding: 10px 20px; background-color: var(--card); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 40; }
-        @media (min-width: 1024px) { .mobile-header { display: none; } }
-        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15,23,42,0.7); display: none; justify-content: center; align-items: center; z-index: 1000; }
-        .modal-content { background-color: var(--card); padding: 0; border-radius: var(--radius); max-width: 860px; width: 95%; box-shadow: var(--shadow-2xl); position: relative; max-height: 90vh; display: flex; flex-direction: column; overflow: hidden; }
         .modal-content.wide { max-width: 1100px; }
-        .modal-header { padding: 1.5rem 2rem; border-bottom: 1px solid var(--border); background-color: var(--card); }
-        .modal-body { padding: 1.5rem 2rem; flex: 1; overflow-y: auto; background-color: var(--card); }
-        .modal-footer { padding: 1rem 2rem; border-top: 1px solid var(--border); background-color: var(--muted); display: flex; justify-content: flex-end; gap: 10px; }
-        .modal-close-btn { position: absolute; top: 1.5rem; right: 1.5rem; font-size: 1.5rem; color: var(--muted-foreground); background-color: var(--muted); border: none; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; }
-        .modal-close-btn:hover { background-color: var(--border); color: var(--foreground); }
         .field-label { display: block; font-size: 0.75rem; font-weight: 700; color: var(--foreground); margin-bottom: 4px; }
         .field-input { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius); font-size: 0.875rem; outline: none; background-color: var(--input); }
         .field-input:focus { border-color: var(--tsi-primary); box-shadow: 0 0 0 2px rgba(36,51,92,0.15); }
         .field-input[disabled] { background-color: var(--muted); color: var(--muted-foreground); }
-        .sidebar-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 40; display: none; }
-        .sidebar-backdrop.active { display: block; }
         .checklist-item { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; padding: 4px 0; }
         .checklist-ok { color: #16a34a; }
         .checklist-fail { color: #dc2626; }
@@ -58,41 +31,7 @@
         .sub-btn-add:hover { background-color: var(--muted); }
         .sub-btn-confirm { font-size: 0.75rem; font-weight: 700; color: var(--primary-foreground); background-color: var(--tsi-primary); border: none; padding: 5px 14px; border-radius: var(--radius); cursor: pointer; }
         .sub-btn-cancel  { font-size: 0.75rem; font-weight: 600; color: var(--muted-foreground); background-color: var(--muted); border: none; padding: 5px 12px; border-radius: var(--radius); cursor: pointer; }
-    
-
-
-
-/* vAIb-arf8 — SOLID panel (user-chosen look): the console adopts the HOST palette
-   (--background/--tsi-primary/--tsi-text/fonts threaded from the site) but renders on
-   OPAQUE surfaces, so it reads as a native panel — NOT a see-through glass overlay.
-   backdrop-filter no-ops behind a cross-origin iframe (it samples the iframe's own
-   backdrop, not the host pixels), so the old glass bled the host photo through sharp;
-   opaque surfaces remove the bleed entirely and are reliable across browsers. */
-:root{
-  --gl-card:        #ffffff;  /* opaque card */
-  --gl-card-strong: #ffffff;
-}
-/* Solid host-blend background (a hair off the host --background so cards read as raised).
-   No fixed blur scrim — it did nothing useful in the iframe and tinted everything navy. */
-body{ background-color: var(--background, #f6f7fb); }
-[class*="bg-[var(--card)]"], .card:not(.modal-content), [class*="bg-white"]:not(.modal-content){
-  background-color:#ffffff !important;
-  border:1px solid var(--border, rgba(15,23,42,0.10)) !important;
-}
-/* vAIb-arf8 — the sidebar is now WHITE; its nav text used --secondary-foreground /
-   --muted-foreground which were LIGHT (designed for the old navy sidebar) -> invisible.
-   Force DARK host text on the resting links; the active/hover link keeps its own accent. */
-/* vAIb-arf8 — uniform SOLID white sidebar (matches the opaque-panel look). The page CSS sets
-   .sidebar background to var(--secondary) = NAVY on the host theme; dark nav text on navy is
-   invisible. Force the sidebar opaque white so dark resting links + the pink active pill read right. */
-.sidebar{ background-color:#ffffff !important; border-right:1px solid var(--border, rgba(15,23,42,0.10)) !important; box-shadow:none !important; }
-.sidebar .nav-link{ color: var(--tsi-text, var(--foreground, #334155)) !important; }
-.sidebar .nav-link.active, .sidebar .nav-link:hover{ color: var(--primary-foreground, #ffffff) !important; }
-
-/* POPUP CARE (user): modals/overlays are SOLID over the glass — never see-through. */
-.modal-content{ background-color:#ffffff !important; -webkit-backdrop-filter:none !important; backdrop-filter:none !important; }
-.modal-overlay{ background:rgba(15,23,42,0.78) !important; z-index:1000; }
-</style>
+    </style>
 </head>
 
 <body>
