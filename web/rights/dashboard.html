@@ -288,7 +288,22 @@
         ]);
 
         if (!policy || !policy.policy_content) {
-            centerArea.innerHTML = '<p style="color:#64748b;text-align:center;padding:40px;">Policy content unavailable. Please contact the organisation.</p>';
+            // vAIb: the policy fetch can fail because the Wix MEMBER COUNTERSIGN went
+            // STALE (an old tab past the ~10-min window) -> the fabric proxy 403s ->
+            // no policy_content. That is NOT "contact the organisation" — it is a
+            // recoverable session-expiry. Reloading re-runs the widget, which re-mints
+            // a fresh countersign and re-loads the dashboard. Offer that, not a dead end.
+            centerArea.innerHTML =
+                '<div style="text-align:center;padding:40px;color:#475569">'
+                + '<p style="font-weight:700;margin:0 0 6px;color:#0f172a">Your session needs a refresh</p>'
+                + '<p style="margin:0 0 18px;font-size:0.9rem;opacity:.8">For your security, the secure session times out after a few minutes. '
+                + 'Reload to view and manage your consent.</p>'
+                + '<button id="vaib-reload" style="padding:10px 20px;border:0;border-radius:9px;'
+                + 'background:var(--tsi-primary,#db1481);color:#fff;font-weight:700;cursor:pointer;font-size:0.9rem">Reload</button>'
+                + '<p style="margin:14px 0 0;font-size:0.78rem;opacity:.6">If this keeps happening, please log out and log back in.</p>'
+                + '</div>';
+            var rb = document.getElementById('vaib-reload');
+            if (rb) rb.onclick = function () { try { location.reload(); } catch (e) {} };
             return;
         }
 
