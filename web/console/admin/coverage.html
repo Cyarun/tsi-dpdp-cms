@@ -460,6 +460,37 @@ function renderSources(sources) {
   document.getElementById('table-wrap').classList.remove('hidden');
 }
 
+/* ── Cached load (vAIb-h6o3) ──────────────────────────────────────────────
+ * On page open, show the LAST cached audit result instantly (POST /coverage/last)
+ * instead of re-running the full live Wix walk. The DPO/owner clicks 'Run Audit'
+ * for a fresh scan. Falls back silently to the empty state when no scan has run. */
+async function loadCached() {
+  var inst = signedInstance();
+  if (!inst && !dpoContextHeader()) return;   // no auth context — wait for Run Audit
+  var meta = document.getElementById('audit-meta');
+  try {
+    var hdrs = { 'Content-Type': 'application/json', 'Accept': 'application/json' };
+    var dpoHdr = dpoContextHeader();
+    if (dpoHdr) hdrs['X-Fabric-Dpo'] = dpoHdr;
+    var resp = await fetch(fabricBase() + '/coverage/last', {
+      method: 'POST', headers: hdrs, credentials: 'same-origin',
+      body: JSON.stringify({ instance: inst || '' })
+    });
+    if (!resp.ok) return;                       // fail-soft — leave empty state
+    var data = await resp.json();
+    var c = data && data.cached;
+    if (!c || c.found === false || !c.summary) return;   // no cache yet — empty state
+    var summary = c.summary || {};
+    renderSummary(summary.totals || {});
+    renderSources(summary.sources || {});
+    var parts = [];
+    if (summary.tenant_suffix) parts.push('tenant …' + esc(summary.tenant_suffix));
+    if (c.scanned_at) parts.push('last scanned ' + esc(c.scanned_at));
+    parts.push('cached — click Run Audit to refresh');
+    meta.textContent = parts.join(' \xb7 ');
+  } catch (_) { /* fail-soft — empty state, Run Audit available */ }
+}
+
 /* ── Main audit call ────────────────────────────────────────────────────── */
 
 async function runAudit() {
@@ -622,10 +653,9 @@ window.onload = function () {
   ) ? '' : _rawUser;
   if (storedUser) document.getElementById('username').textContent = storedUser;
 
-  /* Auto-run if the signed instance is present (normal console flow) */
-  if (signedInstance()) {
-    runAudit();
-  }
+  /* vAIb-h6o3: on load, show the LAST cached result instantly (no full re-scan).
+   * The owner/DPO clicks 'Run Audit' for a fresh live scan. */
+  loadCached();
 };
 </script>
 

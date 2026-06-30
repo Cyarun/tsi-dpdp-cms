@@ -1,0 +1,28 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "record_coverage_audit — vAIb (mydata-ui) persist coverage audit result as tenant cache",
+  "type": "object",
+  "properties": {
+    "_func": {
+      "type": "string"
+    },
+    "summary": {
+      "type": "object"
+    },
+    "covered_total": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "derived_total": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "orphan_total": {
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "required": [
+    "_func"
+  ]
+}
