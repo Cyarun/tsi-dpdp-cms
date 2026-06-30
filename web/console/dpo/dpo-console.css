@@ -30,6 +30,16 @@
   --dpo-shadow-card:   0 1px 3px rgba(15, 23, 42, 0.08);
 }
 
+/* Neutralise the leftover tweakcn console theme: its injected :root sets
+   --primary to the dpdpa brand RED (oklch 0.59 0.23 28), which any page-level
+   `border-[var(--primary)]` consumer then paints red (the Legal "Crystallize
+   Evidence Trail" card was the visible one). On the host-blend surface --primary
+   must BE the host accent. body-scope > the injected :root, so this wins. */
+body {
+  --primary: var(--dpo-accent);
+  --ring:    var(--dpo-accent);
+}
+
 /* ── base ─────────────────────────────────────────────────────────────── */
 body {
   background-color: var(--dpo-bg);
