@@ -386,14 +386,22 @@
             timestamp_updated: new Date().toISOString()
         }));
 
-        const result = await apiCall('/api/v1/client/consent', 'record_consent', {
+        // vAIb-sv91 (save path): record_consent resolves the policy by (policy_id, VERSION).
+        // Omitting policy_version makes the CMS look up version='' -> 400 "Referenced policy
+        // not found" -> save fails. The active version rides on the session policy entry
+        // (principal_login -> getActivePolicies); pass it so the save matches the ACTIVE row.
+        const _saveEntry = activePolicyEntry || currentPolicy || {};
+        const _saveVersion = _saveEntry.version || (currentPolicy && currentPolicy.version) || '';
+        const _savePayload = {
             user_id: SESSION.userId,
             fiduciary_id: SESSION.fiduciaryId,
-            policy_id: activePolicyEntry ? activePolicyEntry.policy_id : currentPolicy.policy_id,
+            policy_id: _saveEntry.policy_id || (currentPolicy && currentPolicy.policy_id),
             language_selected: currentLang,
             consent_mechanism: 'save_preferences_center',
             data_point_consents: dataPointConsents
-        });
+        };
+        if (_saveVersion) _savePayload.policy_version = _saveVersion;
+        const result = await apiCall('/api/v1/client/consent', 'record_consent', _savePayload);
 
         const banner = document.getElementById('save-success');
         if (result && (result.success || result.consent_record_id || result.id)) {
