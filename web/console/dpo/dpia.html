@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DPDPA.center - DPIA Report</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="dpo-console.css">
+    <style>
+        /* DPIA-page-specific — everything else derives from dpo-console.css tokens */
+        .status-pill {
+            font-size: 0.65rem; font-weight: 800; padding: 3px 10px; border-radius: 9999px;
+            text-transform: uppercase; letter-spacing: .03em; display: inline-flex; align-items: center; gap: 4px;
+        }
+        .status-compliant     { background: #ecfdf5; color: #047857; }
+        .status-attention     { background: #fffbeb; color: #b45309; }
+        .status-non_compliant { background: #fef2f2; color: #b91c1c; }
+        .citation-chip {
+            display: inline-block; font-size: 0.68rem; font-weight: 700; font-family: ui-monospace, monospace;
+            padding: 2px 8px; border-radius: 6px; background: color-mix(in srgb, var(--dpo-accent, #db1481) 8%, transparent);
+            color: var(--dpo-accent, #db1481); white-space: nowrap;
+        }
+        .gap-row { border-left: 3px solid #dc2626; background: #fef2f2; border-radius: 0 8px 8px 0; }
+        .section-num {
+            width: 28px; height: 28px; border-radius: 999px; background: var(--dpo-accent, #db1481);
+            color: #fff; font-weight: 800; font-size: 0.75rem; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+        }
+        .spinner {
+            display: inline-block; width: 14px; height: 14px;
+            border: 2px solid rgba(255,255,255,.35); border-top-color: #fff; border-radius: 50%;
+            animation: spin .65s linear infinite; vertical-align: middle;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+
+<body class="flex lg:p-0">
+
+<!-- Mobile Header -->
+<div class="lg:hidden flex items-center justify-between p-4 bg-[var(--card,#fff)] border-b border-[var(--border)] sticky top-0 z-30">
+    <button onclick="toggleSidebar()" class="p-2 text-[var(--muted-foreground)] focus:outline-none">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+        </svg>
+    </button>
+    <span class="font-bold primary-text">DPDPA.center</span>
+    <div class="w-6"></div>
+</div>
+
+<div id="sidebar-backdrop" class="sidebar-backdrop lg:hidden" onclick="toggleSidebar()"></div>
+
+<!-- Sidebar Navigation -->
+<div id="sidebar" class="sidebar lg:relative flex flex-col justify-between">
+    <div>
+        <div class="px-5 pb-6 border-b border-[var(--border)]">
+            <span class="text-xl font-bold primary-text">DPDPA.center</span>
+        </div>
+        <nav class="flex flex-col space-y-1 mt-4 px-3">
+            <a href="dashboard.html" class="nav-link">Dashboard</a>
+            <a href="policies.html" class="nav-link">Policies</a>
+            <a href="principals.html" class="nav-link">Principals</a>
+            <a href="compliance.html" class="nav-link">Compliance</a>
+            <a href="grievances.html" class="nav-link">Grievances</a>
+            <a href="audit.html" class="nav-link">Audit</a>
+            <a href="legal.html" class="nav-link">Legal</a>
+            <a href="ropa.html" class="nav-link">ROPA</a>
+            <a href="dpia.html" class="nav-link active">DPIA Report</a>
+            <a href="reports.html" class="nav-link">Reports</a>
+        </nav>
+    </div>
+    <div class="p-3 border-t border-[var(--border)]">
+        <div class="mt-2 text-sm text-[var(--muted-foreground)] p-2 rounded-md hover:bg-[var(--muted)] cursor-pointer flex justify-between items-center">
+            <span id="username" class="font-bold text-[var(--foreground)]">DPO User</span>
+            <a href="#" onclick="handleLogout()"><span class="text-xs font-semibold text-red-500">Logout</span></a>
+        </div>
+    </div>
+</div>
+
+<!-- Main Content -->
+<main class="flex-1 p-4 lg:p-8">
+    <header class="mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+            <h1 class="text-2xl font-black text-[var(--foreground)] tracking-tight">Data Protection Impact Assessment</h1>
+            <p class="text-sm text-[var(--muted-foreground)] max-w-2xl">
+                The §3 11-section Board-submission structure, assembled from this tenant's live Record of
+                Processing Activities. Every attribute carries its exact DPDP Act 2023 §/Rule citation.
+            </p>
+        </div>
+        <div class="flex items-center gap-2 shrink-0">
+            <input id="reporting-period" type="text" placeholder="Reporting period (e.g. 2026-2027)"
+                   class="text-sm px-3 py-2 border border-[var(--border)] rounded-lg bg-[var(--card,#fff)] w-52">
+            <button id="run-btn" onclick="runDpia()" class="btn-primary flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 8 16 12 12 16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                Generate Report
+            </button>
+            <button id="download-btn" onclick="downloadReport()" disabled
+                    class="inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-bold border border-[var(--border)] text-[var(--foreground)] bg-[var(--card,#fff)] disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[var(--muted)] transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                Download DPIA report
+            </button>
+        </div>
+    </header>
+
+    <!-- Error alert -->
+    <div id="dpia-error" class="hidden mb-6 flex gap-3 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+        <svg class="mt-0.5 h-4 w-4 shrink-0 text-red-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        <span></span>
+    </div>
+
+    <!-- Empty state -->
+    <div id="empty-state" class="card py-16 text-center text-[var(--muted-foreground)]">
+        <svg class="mx-auto h-8 w-8 mb-3 opacity-40" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+        <p class="text-sm italic">Click "Generate Report" to assemble the DPIA from the current RoPA.</p>
+    </div>
+
+    <!-- Report body (hidden until loaded) -->
+    <div id="report-body" class="hidden space-y-6">
+
+        <!-- Meta strip -->
+        <div class="card flex flex-wrap items-center justify-between gap-3">
+            <div class="flex flex-wrap items-center gap-4 text-sm">
+                <span class="font-bold text-[var(--foreground)]">Fiduciary <span id="meta-fiduciary" class="font-mono text-[var(--muted-foreground)]"></span></span>
+                <span class="text-[var(--muted-foreground)]">Generated <span id="meta-generated"></span></span>
+                <span class="text-[var(--muted-foreground)]">Period <span id="meta-period"></span></span>
+                <span id="meta-sdf" class="status-pill"></span>
+            </div>
+            <span id="overall-status" class="status-pill text-sm"></span>
+        </div>
+        <p id="in-force-note" class="text-xs text-[var(--muted-foreground)] italic px-1"></p>
+
+        <!-- Summary cards -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div class="card border-t-4">
+                <p class="text-xs font-black text-[var(--muted-foreground)] uppercase tracking-widest mb-2">Activities assessed</p>
+                <p class="text-3xl stat-value" id="stat-total">0</p>
+            </div>
+            <div class="card border-t-4">
+                <p class="text-xs font-black text-[var(--muted-foreground)] uppercase tracking-widest mb-2">Compliant</p>
+                <p class="text-3xl font-extrabold text-emerald-600" id="stat-compliant">0</p>
+            </div>
+            <div class="card border-t-4">
+                <p class="text-xs font-black text-[var(--muted-foreground)] uppercase tracking-widest mb-2">Needs attention</p>
+                <p class="text-3xl font-extrabold text-amber-600" id="stat-attention">0</p>
+            </div>
+            <div class="card border-t-4">
+                <p class="text-xs font-black text-[var(--muted-foreground)] uppercase tracking-widest mb-2">Total gap flags</p>
+                <p class="text-3xl font-extrabold text-red-600" id="stat-gaps">0</p>
+            </div>
+        </div>
+
+        <!-- 11 Board-report sections -->
+        <div id="sections-wrap" class="space-y-4"></div>
+
+        <!-- Per-activity table -->
+        <div class="card">
+            <h2 class="text-lg font-bold text-[var(--foreground)] mb-1">Processing Activities</h2>
+            <p class="text-xs text-[var(--muted-foreground)] mb-4">Each RoPA activity's lawful ground, citation, and compliance status.</p>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left">
+                    <thead>
+                    <tr class="table-header">
+                        <th class="pb-3 px-2">Activity</th>
+                        <th class="pb-3 px-2">Lawful Ground</th>
+                        <th class="pb-3 px-2">Citation</th>
+                        <th class="pb-3 px-2">Data Categories</th>
+                        <th class="pb-3 px-2">Retention</th>
+                        <th class="pb-3 px-2">Gaps</th>
+                        <th class="pb-3 px-2 text-right">Status</th>
+                    </tr>
+                    </thead>
+                    <tbody id="activities-tbody" class="text-sm divide-y divide-[var(--border)]"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Gap flags — prominent -->
+        <div class="card border-2 border-red-200">
+            <div class="flex items-center gap-2 mb-1">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                <h2 class="text-lg font-bold text-red-700">Gap Flags</h2>
+            </div>
+            <p class="text-xs text-[var(--muted-foreground)] mb-4">Every gap carries its §/Rule citation. Organisation-level gaps first, then per-activity.</p>
+            <div id="gaps-wrap" class="space-y-2"></div>
+        </div>
+    </div>
+</main>
+
+<!-- vAIb-kyog: shared audience dictionary + tenant/staff gate (clean labels vs raw IDs) -->
+<script src="../audience-view.js"></script>
+<script src="../tenant-scope.js"></script>
+<script>
+/* ── DPIA Report UI (vAIb-ry6i) ────────────────────────────────────────────
+ *
+ * AUTH: POST /v1/dpia/report — OWNER-or-DPO gated, same seam as coverage.html
+ * (/v1/coverage/audit): the signed Wix instance travels as the ?instance= query
+ * param the console proxy forwards (console.py GET /v1/console/cms/{path}), and
+ * on the DPO-member surface as the X-Fabric-Dpo countersign header. We never
+ * trust the localStorage bearer token for this call — the DPIA reveals the whole
+ * tenant processing posture, so it is a privileged owner/DPO-only read gated
+ * server-side on the verified signed instance / member countersign.
+ *
+ * PATH: fabricBase() derives the /v1 root the SAME way coverage.html does
+ * (served under /.../console/cms/dpo/dpia.html -> base = prefix before
+ * /console/cms). NO PII: the report is activity metadata + counts + citations.
+ */
+
+let currentReport = null;
+
+function fabricBase() {
+    var p = window.location.pathname || '';
+    var i = p.indexOf('/console/cms');
+    if (i <= 0) return '/vaib/fabric';
+    return p.slice(0, i);
+}
+
+function signedInstance() {
+    return new URLSearchParams(window.location.search).get('instance') || '';
+}
+
+/* Mirrors coverage.html's dpoContextHeader(): forwards the DPO member countersign
+ * (email/member_sig/member_ts) as the base64-JSON X-Fabric-Dpo header when the
+ * page is opened on the DPO-member surface (no owner signed instance present). */
+function dpoContextHeader() {
+    var q = new URLSearchParams(window.location.search);
+    var ctx = {
+        instance:   q.get('instance')   || '',
+        email:      q.get('email')      || '',
+        member_sig: q.get('member_sig') || '',
+        member_ts:  q.get('member_ts')  || ''
+    };
+    if (!ctx.email || !ctx.member_sig || !ctx.member_ts) return '';
+    try { return btoa(JSON.stringify(ctx)); } catch (e) { return ''; }
+}
+
+function esc(s) {
+    if (s == null) return '';
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;');
+}
+
+function toggleSidebar() {
+    document.getElementById('sidebar').classList.toggle('open');
+    document.getElementById('sidebar-backdrop').classList.toggle('active');
+}
+
+function handleLogout() {
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('username');
+    window.location.href = "../index.html";
+}
+
+const STATUS_LABEL = { compliant: 'Compliant', attention: 'Remedial', non_compliant: 'Non-compliant' };
+
+function statusPill(status, extraClass) {
+    var cls = 'status-' + (status || 'attention');
+    var label = STATUS_LABEL[status] || esc(status || 'unknown');
+    return '<span class="status-pill ' + cls + (extraClass ? ' ' + extraClass : '') + '">' + label + '</span>';
+}
+
+function citationChip(citation) {
+    if (!citation || !citation.citation) return '';
+    var title = citation.title ? esc(citation.title) + ' — ' : '';
+    return '<span class="citation-chip" title="' + title + esc(citation.what_it_attests || '') + '">' + esc(citation.citation) + '</span>';
+}
+
+/* ── Render: meta + summary ─────────────────────────────────────────────── */
+
+function renderMeta(report) {
+    var meta = report.meta || {};
+    var overall = report.overall || {};
+    document.getElementById('meta-fiduciary').textContent = meta.fiduciary_ref || '(unmasked)';
+    document.getElementById('meta-generated').textContent = meta.generated_at || '—';
+    document.getElementById('meta-period').textContent = meta.reporting_period || '(unset)';
+    var sdfEl = document.getElementById('meta-sdf');
+    sdfEl.textContent = meta.is_significant_data_fiduciary ? 'Significant Data Fiduciary' : 'Not SDF-designated';
+    sdfEl.className = 'status-pill ' + (meta.is_significant_data_fiduciary ? 'status-attention' : 'status-compliant');
+    document.getElementById('overall-status').outerHTML = '<span id="overall-status">' + statusPill(overall.compliance_status) + '</span>';
+    document.getElementById('in-force-note').textContent = meta.in_force_note || '';
+
+    document.getElementById('stat-total').textContent = overall.activities_assessed || 0;
+    var byStatus = overall.activities_by_status || {};
+    document.getElementById('stat-compliant').textContent = byStatus.compliant || 0;
+    document.getElementById('stat-attention').textContent = byStatus.attention || 0;
+    document.getElementById('stat-gaps').textContent = overall.total_gaps || 0;
+}
+
+/* ── Render: 11-section Board report structure ─────────────────────────── */
+
+function renderSectionContent(section) {
+    var id = section.id;
+    var c = section.content || {};
+    switch (id) {
+        case 'executive_summary':
+            return '<div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">'
+                + '<div><p class="text-[var(--muted-foreground)] text-xs uppercase font-bold tracking-wider">Reporting period</p><p class="font-bold">' + esc(c.reporting_period || '(unset)') + '</p></div>'
+                + '<div><p class="text-[var(--muted-foreground)] text-xs uppercase font-bold tracking-wider">Activities assessed</p><p class="font-bold">' + esc(c.activities_assessed) + '</p></div>'
+                + '<div><p class="text-[var(--muted-foreground)] text-xs uppercase font-bold tracking-wider">Overall status</p><p>' + statusPill(c.overall_compliance_status) + '</p></div>'
+                + '<div><p class="text-[var(--muted-foreground)] text-xs uppercase font-bold tracking-wider">Total gaps</p><p class="font-bold text-red-600">' + esc(c.total_gaps) + '</p></div>'
+                + '</div>';
+        case 'data_principal_rights':
+            return '<div class="grid grid-cols-1 md:grid-cols-2 gap-2">' + (c.rights || []).map(function(r) {
+                var ok = r.assessed || r.implemented;
+                return '<div class="flex items-center justify-between gap-2 border border-[var(--border)] rounded-lg px-3 py-2">'
+                    + '<span class="font-semibold capitalize text-sm">' + esc((r.right || '').replace(/_/g,' ')) + '</span>'
+                    + '<span class="flex items-center gap-2">' + citationChip(r.citation) + statusPill(ok ? 'compliant' : 'attention') + '</span>'
+                    + '</div>';
+            }).join('') + '</div>';
+        case 'processing_audit':
+            return '<p class="text-sm"><span class="font-bold">' + esc(c.activities_assessed) + '</span> activities assessed, '
+                + '<span class="font-bold">' + esc(c.consent_basis_activities) + '</span> on a consent basis. '
+                + '<span class="text-[var(--muted-foreground)]">' + esc(c.note || '') + '</span></p>';
+        case 'security_breach':
+            return '<div class="flex flex-wrap items-center gap-3 text-sm">'
+                + '<span>Breach process recorded: ' + statusPill(c.breach_process_recorded ? 'compliant' : 'non_compliant') + '</span>'
+                + citationChip(c.breach_citation) + citationChip(c.security_citation) + '</div>';
+        case 'consent_notice':
+            return '<div class="flex flex-wrap items-center gap-3 text-sm">'
+                + '<span>' + esc(c.consent_basis_activities) + ' consent-basis activities</span>'
+                + '<span>Consent Manager registered: ' + statusPill(c.consent_manager_registered ? 'compliant' : 'attention') + '</span>'
+                + citationChip(c.notice_citation) + '</div>';
+        case 'children_data':
+            var pcd = c.processes_children_data;
+            var label = pcd === true ? 'Yes — assessed' : (pcd === false ? 'No — assessed' : 'Not assessed');
+            var st = pcd === true ? 'attention' : (pcd === false ? 'compliant' : 'attention');
+            return '<p class="text-sm">Processes children\'s data: ' + statusPill(st) + ' <span class="ml-1">' + esc(label) + '</span></p>'
+                + '<p class="text-xs text-[var(--muted-foreground)] mt-2">' + esc(c.note || '') + '</p>';
+        case 'cross_border':
+            return '<p class="text-sm"><span class="font-bold">' + esc(c.activities_with_transfers) + '</span> activities with cross-border transfers.</p>'
+                + '<p class="text-xs text-[var(--muted-foreground)] mt-2">' + esc(c.restricted_list_status || '') + '</p>';
+        case 'algorithmic':
+            return '<p class="text-xs text-[var(--muted-foreground)]">' + esc(c.note || '') + '</p>';
+        case 'grievance_dpo':
+            return '<div class="flex flex-wrap items-center gap-3 text-sm">'
+                + '<span>DPO appointed: ' + statusPill(c.has_dpo ? 'compliant' : 'non_compliant') + '</span>' + citationChip(c.dpo_citation)
+                + '<span>Grievance mechanism: ' + statusPill(c.has_grievance_mechanism ? 'compliant' : 'non_compliant') + '</span>' + citationChip(c.grievance_citation)
+                + '</div>';
+        case 'auditor_findings':
+            return '<p class="text-sm">Independent auditor: ' + statusPill(c.has_auditor ? 'compliant' : 'attention') + '</p>'
+                + '<p class="text-xs text-[var(--muted-foreground)] mt-2">' + esc(c.note || '') + '</p>';
+        case 'significant_observations':
+            var orgGaps = c.organisation_gaps || [];
+            return '<p class="text-sm mb-2">Overall status: ' + statusPill(c.overall_compliance_status) + ' &middot; <span class="font-bold text-red-600">' + esc(c.total_gaps) + '</span> total gap flags.</p>'
+                + (orgGaps.length ? '<ul class="text-xs text-[var(--muted-foreground)] list-disc pl-4 space-y-0.5">' + orgGaps.map(function(g) {
+                    return '<li>' + esc(g.detail) + ' ' + citationChip(g.citation) + '</li>';
+                  }).join('') + '</ul>' : '<p class="text-xs text-[var(--muted-foreground)]">' + esc(c.note || '') + '</p>');
+        default:
+            return '<pre class="text-xs whitespace-pre-wrap text-[var(--muted-foreground)]">' + esc(JSON.stringify(c, null, 2)) + '</pre>';
+    }
+}
+
+function renderSections(sections) {
+    var wrap = document.getElementById('sections-wrap');
+    wrap.innerHTML = (sections || []).map(function(s) {
+        return '<div class="card">'
+            + '<div class="flex items-start gap-3 mb-3">'
+            + '<span class="section-num">' + esc(s.n) + '</span>'
+            + '<div class="flex-1">'
+            + '<div class="flex items-center justify-between flex-wrap gap-2">'
+            + '<h3 class="text-base font-bold text-[var(--foreground)]">' + esc(s.title) + '</h3>'
+            + citationChip(s.citation)
+            + '</div>'
+            + '</div></div>'
+            + '<div class="pl-10">' + renderSectionContent(s) + '</div>'
+            + '</div>';
+    }).join('');
+}
+
+/* ── Render: per-activity table ─────────────────────────────────────────── */
+
+function renderActivities(activities) {
+    var tbody = document.getElementById('activities-tbody');
+    if (!activities || activities.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="py-10 text-center text-[var(--muted-foreground)] italic">No RoPA activities found for this tenant.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = activities.map(function(a) {
+        var comp = a.components || {};
+        var cats = (comp.data_categories && comp.data_categories.categories) || [];
+        var retentionDays = comp.retention && comp.retention.retention_period_days;
+        var groundCitation = comp.processing_purpose && comp.processing_purpose.citation;
+        var gaps = a.gaps || [];
+        return '<tr class="hover:bg-[var(--muted)] transition-colors align-top">'
+            + '<td class="py-3 px-2 font-bold text-[var(--foreground)]">' + esc(a.activity_name) + '</td>'
+            + '<td class="py-3 px-2 capitalize">' + esc((a.lawful_ground || 'UNSET').replace(/_/g,' ')) + '</td>'
+            + '<td class="py-3 px-2">' + citationChip(groundCitation) + '</td>'
+            + '<td class="py-3 px-2 text-xs text-[var(--muted-foreground)]">' + (cats.length ? esc(cats.slice(0,4).join(', ')) + (cats.length > 4 ? ' +' + (cats.length - 4) : '') : '<span class="text-red-600 font-semibold">none</span>') + '</td>'
+            + '<td class="py-3 px-2 text-xs">' + (retentionDays ? esc(retentionDays) + ' days' : '<span class="text-red-600 font-semibold">unset</span>') + '</td>'
+            + '<td class="py-3 px-2 text-xs">' + (gaps.length ? '<span class="font-bold text-red-600">' + gaps.length + '</span>' : '<span class="text-[var(--muted-foreground)]">0</span>') + '</td>'
+            + '<td class="py-3 px-2 text-right">' + statusPill(a.compliance_status) + '</td>'
+            + '</tr>';
+    }).join('');
+}
+
+/* ── Render: gap flags (org-level first, then per-activity) ────────────── */
+
+function renderGaps(report) {
+    var wrap = document.getElementById('gaps-wrap');
+    var orgGaps = (report.overall && report.overall.organisation_gaps) || [];
+    var rows = [];
+
+    orgGaps.forEach(function(g) {
+        rows.push('<div class="gap-row px-4 py-3">'
+            + '<div class="flex items-center justify-between gap-2 flex-wrap">'
+            + '<span class="text-xs font-black text-red-700 uppercase tracking-wide">Organisation &middot; ' + esc((g.code || '').replace(/_/g,' ')) + '</span>'
+            + citationChip(g.citation) + '</div>'
+            + '<p class="text-sm text-red-800 mt-1">' + esc(g.detail) + '</p>'
+            + '</div>');
+    });
+
+    (report.activities || []).forEach(function(a) {
+        (a.gaps || []).forEach(function(g) {
+            rows.push('<div class="gap-row px-4 py-3">'
+                + '<div class="flex items-center justify-between gap-2 flex-wrap">'
+                + '<span class="text-xs font-black text-red-700 uppercase tracking-wide">' + esc(a.activity_name) + ' &middot; ' + esc((g.code || '').replace(/_/g,' ')) + '</span>'
+                + citationChip(g.citation) + '</div>'
+                + '<p class="text-sm text-red-800 mt-1">' + esc(g.detail) + '</p>'
+                + '</div>');
+        });
+    });
+
+    wrap.innerHTML = rows.length ? rows.join('')
+        : '<p class="text-sm text-emerald-700 font-semibold py-4 text-center">No gap flags — all assessed activities and organisation-level provisions are compliant.</p>';
+}
+
+/* ── Main call ──────────────────────────────────────────────────────────── */
+
+async function runDpia() {
+    var btn = document.getElementById('run-btn');
+    var errBox = document.getElementById('dpia-error');
+    var emptyState = document.getElementById('empty-state');
+    var reportBody = document.getElementById('report-body');
+
+    errBox.classList.add('hidden');
+    errBox.querySelector('span').textContent = '';
+
+    var inst = signedInstance();
+    if (!inst && !dpoContextHeader()) {
+        errBox.querySelector('span').textContent = 'Missing signed instance — this page must be opened through the Wix owner dashboard or the DPO console. If you see this in production, the console proxy is not forwarding the ?instance= param correctly.';
+        errBox.classList.remove('hidden');
+        return;
+    }
+
+    btn.disabled = true;
+    var origHtml = btn.innerHTML;
+    btn.innerHTML = '<span class="spinner"></span> Generating…';
+
+    try {
+        var hdrs = { 'Content-Type': 'application/json', 'Accept': 'application/json' };
+        var dpoHdr = dpoContextHeader();
+        if (dpoHdr) hdrs['X-Fabric-Dpo'] = dpoHdr;
+        var period = document.getElementById('reporting-period').value || '';
+
+        var resp = await fetch(fabricBase() + '/dpia/report', {
+            method: 'POST',
+            headers: hdrs,
+            credentials: 'same-origin',
+            body: JSON.stringify({ instance: inst || '', reporting_period: period })
+        });
+
+        var data;
+        try { data = await resp.json(); } catch (_) { data = null; }
+
+        if (resp.status === 401) {
+            errBox.querySelector('span').textContent = 'Authentication failed (401) — your session is invalid or expired. Reload the console to get a fresh session.';
+            errBox.classList.remove('hidden');
+            return;
+        }
+        if (resp.status === 403) {
+            errBox.querySelector('span').textContent = 'Access denied (403) — the DPIA report is restricted to the site owner or the tenant’s registered DPO.';
+            errBox.classList.remove('hidden');
+            return;
+        }
+        if (!resp.ok || !data || !data.ok || !data.report) {
+            var msg = (data && data.error) ? data.error : ('HTTP ' + resp.status);
+            errBox.querySelector('span').textContent = 'DPIA generation failed: ' + msg + '.';
+            errBox.classList.remove('hidden');
+            return;
+        }
+
+        currentReport = data.report;
+        renderMeta(currentReport);
+        renderSections(currentReport.sections);
+        renderActivities(currentReport.activities);
+        renderGaps(currentReport);
+
+        emptyState.classList.add('hidden');
+        reportBody.classList.remove('hidden');
+        document.getElementById('download-btn').disabled = false;
+
+    } catch (err) {
+        errBox.querySelector('span').textContent = 'Network error — could not reach the DPIA endpoint: ' + (err.message || err);
+        errBox.classList.remove('hidden');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = origHtml;
+    }
+}
+
+/* ── Download — the assembled report as pretty JSON (the Board-submission
+ * artifact). No re-fetch, no PII beyond what's already rendered on screen. */
+function downloadReport() {
+    if (!currentReport) return;
+    var meta = currentReport.meta || {};
+    var dateStamp = (meta.generated_at || new Date().toISOString()).slice(0, 10);
+    var filename = 'DPIA_Report_' + (meta.fiduciary_ref || 'tenant').replace(/[^a-zA-Z0-9._-]/g, '') + '_' + dateStamp + '.json';
+    var blob = new Blob([JSON.stringify(currentReport, null, 2)], { type: 'application/json' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+/* ── Init ───────────────────────────────────────────────────────────────── */
+window.onload = function () {
+    var _rawUser = localStorage.getItem('username') || '';
+    var USER_NAME = (/^Site Owner \(Wix\)\s+[0-9a-f-]{8,}/.test(_rawUser) || /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.test(_rawUser)) ? '' : _rawUser;
+    document.getElementById('username').textContent = USER_NAME || 'DPO User';
+};
+</script>
+</body>
+
+</html>
