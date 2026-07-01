@@ -339,11 +339,80 @@
         renderPreferenceCenter(centerArea, policyMap, existingPrefs, existingMech);
     }
 
+    // DPDP: an ESSENTIAL purpose (is_mandatory_for_service, e.g. Account & Membership) is
+    // required for a registered account to function. The banner fires ONLY when the member
+    // has EXPLICITLY WITHDRAWN/denied that essential (existingPrefs[id] === false) — an
+    // active choice that makes the account non-functional. We deliberately do NOT nag when
+    // the essential is simply un-recorded or lacks a mechanism: these are legitimate-use /
+    // contract-basis purposes (not consent the member 'grants'), so a legacy member with no
+    // explicit record is fine. The banner is a reactivation path for a real withdrawal, not
+    // a pre-tick prompt. Non-destructive: access is not blocked (user choice).
+    function missingEssential(lc, existingPrefs, existingMech) {
+        const purposes = (lc && lc.data_processing_purposes) || [];
+        return purposes.filter(p =>
+            p.is_mandatory_for_service && existingPrefs && existingPrefs[p.id] === false
+        );
+    }
+
+    // One-click reactivate: record acknowledgment for the essential purpose(s) via the
+    // normal record_consent path (real mechanism), then reload the consent view.
+    async function reactivateEssential() {
+        const btn = document.getElementById('reactivate-essential');
+        if (btn) { btn.disabled = true; btn.textContent = 'Reactivating…'; }
+        try {
+            const lc = currentLangContent;
+            const essential = missingEssential(lc, window._existingPrefs || {}, window._existingMech || {});
+            const now = new Date().toISOString();
+            const dataPointConsents = essential.map(p => ({
+                data_point_id: p.id,
+                consent_granted: true,
+                purpose_agreed_to: p.name,
+                timestamp_updated: now
+            }));
+            const _entry = activePolicyEntry || currentPolicy || {};
+            const _version = _entry.version || (currentPolicy && currentPolicy.version) || '';
+            const payload = {
+                user_id: SESSION.userId,
+                fiduciary_id: SESSION.fiduciaryId,
+                policy_id: _entry.policy_id || (currentPolicy && currentPolicy.policy_id),
+                language_selected: currentLang,
+                consent_mechanism: 'save_preferences_center',
+                data_point_consents: dataPointConsents
+            };
+            if (_version) payload.policy_version = _version;
+            const result = await apiCall('/api/v1/client/consent', 'record_consent', payload);
+            if (result && (result.success || result.consent_record_id || result.id)) {
+                await renderConsentTab(document.getElementById('tab-content'));
+            } else if (btn) { btn.disabled = false; btn.textContent = 'Reactivate my account'; }
+        } catch (e) {
+            if (btn) { btn.disabled = false; btn.textContent = 'Reactivate my account'; }
+        }
+    }
+
     function renderPreferenceCenter(area, policyMap, existingPrefs, existingMech) {
         existingMech = existingMech || {};
+        window._existingPrefs = existingPrefs;   // for reactivateEssential()
+        window._existingMech = existingMech;
         const langs = Object.keys(policyMap);
         const lc = currentLangContent;
         if (!lc) { area.innerHTML = '<p style="color:#64748b;text-align:center;padding:40px;">Policy content unavailable.</p>'; return; }
+
+        // Essential-consent reactivation banner (DPDP: account not functional without it).
+        const _missingEss = missingEssential(lc, existingPrefs, existingMech);
+        const essentialBanner = _missingEss.length ? `
+            <div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:10px;padding:16px 18px;margin-bottom:18px;">
+                <div style="display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+                    <div style="flex:1;min-width:220px;">
+                        <div style="font-weight:800;font-size:0.9rem;color:#92400e;">Your account is not fully functional</div>
+                        <div style="font-size:0.8rem;color:#78716c;margin-top:4px;line-height:1.5;">
+                            ${esc(_missingEss.map(p => p.name).join(', '))} ${_missingEss.length > 1 ? 'are' : 'is'} required to provide your account and its services.
+                            Until this is granted, some features may be unavailable. You can grant it now to reactivate, or raise a
+                            <a href="#" onclick="setTab('grievance');return false;" style="color:var(--tsi-primary,#db1481);font-weight:600;">request</a>.
+                        </div>
+                    </div>
+                    <button id="reactivate-essential" onclick="reactivateEssential()" style="background:var(--tsi-primary,#db1481);color:#fff;border:0;border-radius:9px;padding:10px 18px;font-weight:700;font-size:0.82rem;cursor:pointer;white-space:nowrap;">Reactivate my account</button>
+                </div>
+            </div>` : '';
 
         let purposeHtml = (lc.data_processing_purposes || []).map(p => {
             // DPDP §6 — determine the initial toggle state.
@@ -382,6 +451,7 @@
         let langOptions = langs.map(l => `<option value="${l}" ${l === currentLang ? 'selected' : ''}>${l.toUpperCase()}</option>`).join('');
 
         area.innerHTML = `
+            ${essentialBanner}
             <div id="save-success" class="success-banner">Your consent preferences have been saved.</div>
 
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
