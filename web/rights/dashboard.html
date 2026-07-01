@@ -313,26 +313,57 @@
         currentLangContent = policyMap[currentLang];
         document.documentElement.lang = currentLang;
 
+        // DPDP §6: consent must be an individual affirmative opt-in. A stored "granted"
+        // for a CONSENT-basis purpose only counts as a real preference if it carries a
+        // genuine verification_mechanism (cookie banner / form / OTP / marketing action).
+        // A blank/derived mechanism is NOT consent -> we must NOT pre-check that toggle
+        // (no pre-ticked boxes, no auto-selection). renderPreferenceCenter enforces this
+        // per-purpose using the mechanism map below.
         let existingPrefs = {};
+        let existingMech = {};
         if (activeConsent && activeConsent.data_point_consents) {
             const dpc = activeConsent.data_point_consents;
             if (Array.isArray(dpc)) {
-                dpc.forEach(p => { existingPrefs[p.data_point_id] = !!p.consent_granted; });
+                dpc.forEach(p => {
+                    existingPrefs[p.data_point_id] = !!p.consent_granted;
+                    existingMech[p.data_point_id] = (p.verification_mechanism || '').trim();
+                });
             } else if (typeof dpc === 'object') {
-                Object.keys(dpc).forEach(k => { existingPrefs[k] = !!(dpc[k].consent_granted); });
+                Object.keys(dpc).forEach(k => {
+                    existingPrefs[k] = !!(dpc[k].consent_granted);
+                    existingMech[k] = ((dpc[k].verification_mechanism) || '').trim();
+                });
             }
         }
 
-        renderPreferenceCenter(centerArea, policyMap, existingPrefs);
+        renderPreferenceCenter(centerArea, policyMap, existingPrefs, existingMech);
     }
 
-    function renderPreferenceCenter(area, policyMap, existingPrefs) {
+    function renderPreferenceCenter(area, policyMap, existingPrefs, existingMech) {
+        existingMech = existingMech || {};
         const langs = Object.keys(policyMap);
         const lc = currentLangContent;
         if (!lc) { area.innerHTML = '<p style="color:#64748b;text-align:center;padding:40px;">Policy content unavailable.</p>'; return; }
 
         let purposeHtml = (lc.data_processing_purposes || []).map(p => {
-            const checked = existingPrefs[p.id] !== undefined ? existingPrefs[p.id] : p.is_mandatory_for_service;
+            // DPDP §6 — determine the initial toggle state.
+            //  * Mandatory (legitimate-use / contract) purposes: ON + disabled (not consent).
+            //  * CONSENT-basis purposes: ON only if the principal genuinely opted in — i.e.
+            //    a stored granted=true that carries a REAL verification_mechanism. A blank/
+            //    derived mechanism is NOT consent, so it defaults OFF (no pre-ticked box,
+            //    the principal must select it individually).
+            const isConsentBasis = String(p.legal_basis || '').toLowerCase() === 'consent';
+            let checked;
+            if (p.is_mandatory_for_service) {
+                checked = true;
+            } else if (existingPrefs[p.id] === undefined) {
+                checked = false;                              // never opted in -> OFF
+            } else if (isConsentBasis) {
+                // require a genuine mechanism for a consent-basis grant to pre-check
+                checked = existingPrefs[p.id] && !!(existingMech[p.id]);
+            } else {
+                checked = existingPrefs[p.id];
+            }
             const disabled = p.is_mandatory_for_service ? 'disabled' : '';
             return `
             <div class="toggle-row ${p.is_mandatory_for_service ? 'mandatory' : ''}">
