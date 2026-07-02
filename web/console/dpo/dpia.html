@@ -9,6 +9,9 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Chart.js (vAIb-dpia-dash): donut / radar / bar for the auditor dashboard -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.5.0/chart.umd.min.js"></script>
+    <!-- jsPDF + autoTable: DPB-submittable PDF export of the DPIA report -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
     <link rel="stylesheet" href="dpo-console.css">
     <style>
         /* DPIA-page-specific — everything else derives from dpo-console.css tokens */
@@ -160,7 +163,7 @@
             <button id="download-btn" onclick="downloadReport()" disabled
                     class="inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-bold border border-[var(--border)] text-[var(--foreground)] bg-[var(--card,#fff)] disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[var(--muted)] transition-colors">
                 <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                Download DPIA report
+                Download PDF
             </button>
         </div>
     </header>
@@ -1000,17 +1003,113 @@ async function runDpia() {
 
 /* ── Download — the assembled report as pretty JSON (the Board-submission
  * artifact). No re-fetch, no PII beyond what's already rendered on screen. */
+/* Export the DPIA as a formatted, DPB-submittable PDF (jsPDF + autoTable). Falls back
+   to JSON only if the PDF libs failed to load (offline/CDN block) so the button never
+   dead-ends. */
 function downloadReport() {
     if (!currentReport) return;
     var meta = currentReport.meta || {};
+    var overall = currentReport.overall || {};
     var dateStamp = (meta.generated_at || new Date().toISOString()).slice(0, 10);
-    var filename = 'DPIA_Report_' + (meta.fiduciary_ref || 'tenant').replace(/[^a-zA-Z0-9._-]/g, '') + '_' + dateStamp + '.json';
-    var blob = new Blob([JSON.stringify(currentReport, null, 2)], { type: 'application/json' });
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement('a');
-    a.href = url; a.download = filename;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    var base = 'DPIA_Report_' + String(meta.fiduciary_ref || 'tenant').replace(/[^a-zA-Z0-9._-]/g, '') + '_' + dateStamp;
+
+    var jspdf = window.jspdf && window.jspdf.jsPDF;
+    if (!jspdf) {  // fallback: never leave the auditor without their report
+        var blob = new Blob([JSON.stringify(currentReport, null, 2)], { type: 'application/json' });
+        var u = URL.createObjectURL(blob), fa = document.createElement('a');
+        fa.href = u; fa.download = base + '.json';
+        document.body.appendChild(fa); fa.click(); document.body.removeChild(fa); URL.revokeObjectURL(u);
+        return;
+    }
+
+    var doc = new jspdf({ unit: 'pt', format: 'a4' });
+    var W = doc.internal.pageSize.getWidth(), M = 40, y = 48;
+    var s = function (v) { return String(v == null ? '' : v); };
+    var line = function (txt, size, style, color) {
+        doc.setFont('helvetica', style || 'normal'); doc.setFontSize(size || 10);
+        doc.setTextColor.apply(doc, color || [30, 41, 59]);
+        var wrapped = doc.splitTextToSize(s(txt), W - 2 * M);
+        doc.text(wrapped, M, y); y += wrapped.length * (size ? size + 3 : 13);
+    };
+    var gap = function (n) { y += (n || 8); };
+    var afterTable = function () { y = (doc.lastAutoTable ? doc.lastAutoTable.finalY : y) + 16; };
+
+    // ── Title + meta ──────────────────────────────────────────────────────
+    line('Data Protection Impact Assessment', 18, 'bold', [16, 29, 74]);
+    line((meta.framework || 'DPDP Act 2023 + DPDP Rules 2025'), 10, 'normal', [100, 116, 139]); gap(4);
+    var mand = meta.mandate || {};
+    line('Mandate: ' + s(mand.citation) + (mand.in_force ? '  (' + s(mand.in_force) + ')' : ''), 9, 'italic', [100, 116, 139]);
+    gap(6);
+    doc.autoTable({
+        startY: y, theme: 'plain', styles: { fontSize: 9, cellPadding: 2 },
+        body: [
+            ['Fiduciary', s(meta.fiduciary_ref)],
+            ['Reporting period', s(meta.reporting_period) || '—'],
+            ['Significant Data Fiduciary', meta.is_significant_data_fiduciary ? 'Yes' : 'No'],
+            ['Generated', s(meta.generated_at)],
+            ['Overall status', s(overall.compliance_status).toUpperCase()],
+            ['Activities assessed', s(overall.activities_assessed)],
+            ['Total findings', s(overall.total_gaps)]
+        ],
+        columnStyles: { 0: { fontStyle: 'bold', cellWidth: 160 } }, margin: { left: M, right: M }
+    });
+    afterTable();
+
+    // ── Per-activity compliance (RoPA-centric) ────────────────────────────
+    line('Processing Activities (RoPA) — Compliance', 13, 'bold', [16, 29, 74]); gap(2);
+    var acts = (currentReport.activities || []).map(function (a) {
+        return [s(a.activity_name), s(a.lawful_ground), s(a.compliance_status).toUpperCase(),
+                String((a.gaps || []).length)];
+    });
+    doc.autoTable({
+        startY: y, head: [['Activity', 'Lawful ground', 'Status', 'Findings']], body: acts.length ? acts : [['—', '—', '—', '0']],
+        theme: 'striped', headStyles: { fillColor: [16, 29, 74] }, styles: { fontSize: 8, cellPadding: 3 },
+        margin: { left: M, right: M }
+    });
+    afterTable();
+
+    // ── Findings + citations ──────────────────────────────────────────────
+    var findings = [];
+    (currentReport.activities || []).forEach(function (a) {
+        (a.gaps || []).forEach(function (g) {
+            findings.push([s(a.activity_name), s(g.detail), s((g.citation || {}).citation)]);
+        });
+    });
+    (overall.organisation_gaps || []).forEach(function (g) {
+        findings.push(['Organisation', s(g.detail), s((g.citation || {}).citation)]);
+    });
+    if (y > doc.internal.pageSize.getHeight() - 120) { doc.addPage(); y = 48; }
+    line('Findings', 13, 'bold', [185, 28, 40]); gap(2);
+    doc.autoTable({
+        startY: y, head: [['Where', 'Finding', 'Citation']], body: findings.length ? findings : [['—', 'No findings', '—']],
+        theme: 'striped', headStyles: { fillColor: [185, 28, 40] }, styles: { fontSize: 8, cellPadding: 3, valign: 'top' },
+        columnStyles: { 0: { cellWidth: 110 }, 2: { cellWidth: 150 } }, margin: { left: M, right: M }
+    });
+    afterTable();
+
+    // ── Remediations ──────────────────────────────────────────────────────
+    var rems = [];
+    var pushRem = function (where, g) {
+        if (g.remediation) rems.push([s(where), s(g.remediation), s(g.suggestion)]);
+    };
+    (currentReport.activities || []).forEach(function (a) { (a.gaps || []).forEach(function (g) { pushRem(a.activity_name, g); }); });
+    (overall.organisation_gaps || []).forEach(function (g) { pushRem('Organisation', g); });
+    if (y > doc.internal.pageSize.getHeight() - 120) { doc.addPage(); y = 48; }
+    line('Remediations & Suggestions', 13, 'bold', [21, 128, 61]); gap(2);
+    doc.autoTable({
+        startY: y, head: [['Where', 'Remediation', 'Suggestion']], body: rems.length ? rems : [['—', 'No remediations', '—']],
+        theme: 'striped', headStyles: { fillColor: [21, 128, 61] }, styles: { fontSize: 8, cellPadding: 3, valign: 'top' },
+        columnStyles: { 0: { cellWidth: 100 } }, margin: { left: M, right: M }
+    });
+
+    // ── Footer on every page ──────────────────────────────────────────────
+    var pages = doc.internal.getNumberOfPages();
+    for (var p = 1; p <= pages; p++) {
+        doc.setPage(p); doc.setFontSize(7); doc.setTextColor(148, 163, 184);
+        doc.text('DPDPA.center — DPIA generated ' + dateStamp + '  ·  Page ' + p + ' of ' + pages,
+                 M, doc.internal.pageSize.getHeight() - 20);
+    }
+    doc.save(base + '.pdf');
 }
 
 /* ── Init ───────────────────────────────────────────────────────────────── */
