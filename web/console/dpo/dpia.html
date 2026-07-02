@@ -974,6 +974,15 @@ function renderOrgGaps(orgGaps) {
 /* ── Orchestrate all dashboard renders for a freshly loaded report ──────── */
 
 function renderDashboard(report) {
+    // The charts must draw into a VISIBLE, sized canvas — Chart.js renders to a 0x0
+    // canvas (empty) if report-body is still display:none. So un-hide FIRST, then build
+    // the charts, then resize after layout settles (fixes empty donut/ring/bar on the
+    // restore + generate paths). vAIb-krqu.
+    var body = document.getElementById('report-body');
+    if (body) body.classList.remove('hidden');
+    var empty = document.getElementById('empty-state');
+    if (empty) empty.classList.add('hidden');
+
     loadMarks();
     renderMeta(report);
     renderScoreRing(report);
@@ -984,6 +993,17 @@ function renderDashboard(report) {
     renderSections(report.sections);
     renderActivities(report.activities);
     renderOrgGaps(report.overall && report.overall.organisation_gaps);
+
+    // Safety net: after the browser has laid out the now-visible cards, force every
+    // chart to resize to its real canvas size (covers the hidden-then-shown + iframe
+    // pre-layout cases where the initial draw measured 0x0).
+    requestAnimationFrame(function () {
+        requestAnimationFrame(function () {
+            Object.keys(charts).forEach(function (k) {
+                try { if (charts[k] && charts[k].resize) { charts[k].resize(); charts[k].update('none'); } } catch (e) {}
+            });
+        });
+    });
 }
 
 /* ── Main call ──────────────────────────────────────────────────────────── */
