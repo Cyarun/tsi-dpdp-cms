@@ -98,6 +98,55 @@
             border: 1px solid var(--dpo-border, rgba(15,23,42,.1)); background: var(--dpo-surface, #fff); color: var(--dpo-muted, #64748b);
         }
         .filter-btn.active { background: var(--dpo-accent, #db1481); color: #fff; border-color: var(--dpo-accent, #db1481); }
+
+        /* ── RoPA activity accordion cards (vAIb-7bu1: RoPA-centric DPIA) ──── */
+        .activity-card {
+            background: var(--dpo-surface, #fff); border: 1px solid var(--dpo-border, rgba(15,23,42,.1));
+            border-radius: var(--dpo-radius, 12px); overflow: hidden;
+            box-shadow: var(--dpo-shadow-card, 0 1px 3px rgba(15,23,42,.08));
+        }
+        .activity-card.status-border-non_compliant { border-left: 4px solid #dc2626; }
+        .activity-card.status-border-attention     { border-left: 4px solid #d97706; }
+        .activity-card.status-border-compliant     { border-left: 4px solid #059669; }
+        .activity-head {
+            display: flex; align-items: center; gap: 12px; padding: 14px 18px; cursor: pointer;
+            user-select: none; transition: background-color .15s ease;
+        }
+        .activity-head:hover { background: color-mix(in srgb, var(--dpo-accent, #db1481) 5%, transparent); }
+        .activity-head:focus-visible { outline: 2px solid var(--dpo-accent, #db1481); outline-offset: -2px; }
+        .activity-chevron { flex-shrink: 0; transition: transform .18s ease; color: var(--dpo-muted, #64748b); }
+        .activity-card.open .activity-chevron { transform: rotate(90deg); }
+        .activity-body {
+            max-height: 0; overflow: hidden; transition: max-height .22s ease;
+            border-top: 1px solid transparent;
+        }
+        .activity-card.open .activity-body { max-height: 4000px; border-top-color: var(--dpo-border, rgba(15,23,42,.1)); }
+        .activity-body-inner { padding: 4px 18px 18px 18px; }
+        .finding-card {
+            border: 1px solid var(--dpo-border, rgba(15,23,42,.1)); border-left: 3px solid #dc2626;
+            border-radius: 0 8px 8px 0; background: #fef2f2; padding: 12px 14px; margin-top: 10px;
+        }
+        .finding-card .fix-block { background: #ecfdf5; border-radius: 6px; padding: 8px 10px; margin-top: 8px; }
+        .finding-card .suggest-block { background: color-mix(in srgb, var(--dpo-accent, #db1481) 6%, transparent); border-radius: 6px; padding: 8px 10px; margin-top: 6px; }
+        .group-label {
+            font-size: 0.72rem; font-weight: 900; text-transform: uppercase; letter-spacing: .06em;
+            color: var(--dpo-muted, #64748b); display: flex; align-items: center; gap: 8px; margin: 4px 2px 8px;
+        }
+        .group-label .count-chip {
+            font-size: 0.68rem; font-weight: 800; padding: 2px 9px; border-radius: 999px;
+            background: color-mix(in srgb, var(--dpo-text, #1e293b) 8%, transparent); color: var(--dpo-text, #1e293b);
+        }
+        .compliant-toggle {
+            display: flex; align-items: center; gap: 8px; padding: 10px 14px; cursor: pointer; user-select: none;
+            font-size: 0.8rem; font-weight: 700; color: var(--dpo-muted, #64748b);
+            border: 1px dashed var(--dpo-border, rgba(15,23,42,.15)); border-radius: 10px; background: transparent;
+            width: 100%; text-align: left; transition: background-color .15s ease;
+        }
+        .compliant-toggle:hover { background: color-mix(in srgb, var(--dpo-accent, #db1481) 5%, transparent); }
+        .lawful-ground-chip {
+            font-size: 0.68rem; font-weight: 700; padding: 2px 9px; border-radius: 999px; text-transform: capitalize;
+            background: color-mix(in srgb, var(--dpo-text, #1e293b) 6%, transparent); color: var(--dpo-muted, #64748b);
+        }
     </style>
 </head>
 
@@ -149,8 +198,9 @@
         <div>
             <h1 class="text-2xl font-black text-[var(--foreground)] tracking-tight">Data Protection Impact Assessment</h1>
             <p class="text-sm text-[var(--muted-foreground)] max-w-2xl">
-                The §3 11-section Board-submission structure, assembled from this tenant's live Record of
-                Processing Activities. Every attribute carries its exact DPDP Act 2023 §/Rule citation.
+                See which of your processing activities have compliance gaps and exactly how to fix them —
+                built from this tenant's live Record of Processing Activities, with every gap traced to its
+                exact DPDP Act 2023 §/Rule citation.
             </p>
         </div>
         <div class="flex items-center gap-2 shrink-0">
@@ -197,15 +247,17 @@
 
         <!-- Sub-tab bar -->
         <div class="dpia-tabbar">
-            <button type="button" class="dpia-tab active" data-tab="overview" onclick="switchDpiaTab('overview')">Overview</button>
-            <button type="button" class="dpia-tab" data-tab="findings" onclick="switchDpiaTab('findings')">Findings</button>
-            <button type="button" class="dpia-tab" data-tab="remediations" onclick="switchDpiaTab('remediations')">Remediations</button>
+            <button type="button" class="dpia-tab active" data-tab="ropa" onclick="switchDpiaTab('ropa')">RoPA Compliance</button>
+            <button type="button" class="dpia-tab" data-tab="sections" onclick="switchDpiaTab('sections')">DPDP Sections</button>
         </div>
 
-        <!-- ══════════════════════════ OVERVIEW PANEL ══════════════════════════ -->
-        <div id="panel-overview" class="dpia-panel active space-y-6">
+        <!-- ══════════════════════════ RoPA COMPLIANCE PANEL (default) ═══════════
+             vAIb-7bu1: business-first view — "which of my processes have problems
+             and how do I fix them" — activities sorted worst-first, each an
+             expandable card with its findings + remediations INLINE. -->
+        <div id="panel-ropa" class="dpia-panel active space-y-6">
 
-            <!-- Score + donut + radar -->
+            <!-- Score + donut + radar (kept verbatim — headline visuals) -->
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
                 <div class="chart-card flex items-center gap-5">
                     <div class="score-ring-wrap">
@@ -237,62 +289,30 @@
                 <div class="chart-canvas-box" style="height:200px"><canvas id="bar-canvas"></canvas></div>
             </div>
 
-            <!-- 11 Board-report sections -->
-            <div id="sections-wrap" class="space-y-4"></div>
-
-            <!-- Per-activity table with auditor marks -->
+            <!-- Primary content: RoPA activities, worst-first, expandable -->
             <div class="card">
                 <div class="flex flex-wrap items-center justify-between gap-2 mb-1">
-                    <h2 class="text-lg font-bold text-[var(--foreground)]">Processing Activities</h2>
+                    <h2 class="text-lg font-bold text-[var(--foreground)]">Processing Activities (RoPA)</h2>
                     <div id="activity-tally" class="flex items-center gap-2"></div>
                 </div>
-                <p class="text-xs text-[var(--muted-foreground)] mb-4">Each RoPA activity's lawful ground, citation, and compliance status. Auditor marks persist locally on this device.</p>
-                <div class="overflow-x-auto">
-                    <table class="w-full text-left">
-                        <thead>
-                        <tr class="table-header">
-                            <th class="pb-3 px-2">Activity</th>
-                            <th class="pb-3 px-2">Lawful Ground</th>
-                            <th class="pb-3 px-2">Citation</th>
-                            <th class="pb-3 px-2">Data Categories</th>
-                            <th class="pb-3 px-2">Retention</th>
-                            <th class="pb-3 px-2">Gaps</th>
-                            <th class="pb-3 px-2">Status</th>
-                            <th class="pb-3 px-2 text-right">Auditor mark</th>
-                        </tr>
-                        </thead>
-                        <tbody id="activities-tbody" class="text-sm divide-y divide-[var(--border)]"></tbody>
-                    </table>
-                </div>
+                <p class="text-xs text-[var(--muted-foreground)] mb-4">Every activity in your Record of Processing — problems first. Expand a card to see its findings and how to fix them. Auditor marks persist locally on this device.</p>
+                <div id="activities-wrap" class="space-y-3"></div>
+            </div>
+
+            <!-- Beyond RoPA: organisation-level gaps (DPO/breach/auditor/grievance) -->
+            <div id="org-gaps-card" class="card">
+                <h2 class="text-lg font-bold text-[var(--foreground)] mb-1">Beyond RoPA — Organisation</h2>
+                <p class="text-xs text-[var(--muted-foreground)] mb-4">Governance-level requirements that sit above any single process — DPO appointment, breach readiness, auditor, grievance mechanism.</p>
+                <div id="org-gaps-wrap" class="space-y-3"></div>
             </div>
         </div>
 
-        <!-- ══════════════════════════ FINDINGS PANEL ══════════════════════════ -->
-        <div id="panel-findings" class="dpia-panel space-y-4">
-            <div class="card">
-                <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
-                    <div class="flex items-center gap-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                        <h2 class="text-lg font-bold text-red-700">Findings</h2>
-                    </div>
-                    <div id="findings-summary" class="flex flex-wrap items-center gap-2"></div>
-                </div>
-                <p class="text-xs text-[var(--muted-foreground)] mb-3">Every gap — organisation-level and per-activity — with its §/Rule citation. Mark each finding and add an auditor note.</p>
-                <div id="findings-filters" class="flex flex-wrap items-center gap-2 mb-4"></div>
-                <div id="findings-wrap" class="space-y-2"></div>
-            </div>
-        </div>
-
-        <!-- ══════════════════════════ REMEDIATIONS PANEL ══════════════════════════ -->
-        <div id="panel-remediations" class="dpia-panel space-y-4">
-            <div class="card">
-                <div class="flex items-center gap-2 mb-1">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" class="primary-text" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
-                    <h2 class="text-lg font-bold text-[var(--foreground)]">Remediations &amp; Suggestions</h2>
-                </div>
-                <p class="text-xs text-[var(--muted-foreground)] mb-4">The concrete fix for each finding, plus a good-practice suggestion — grouped by DPDP dimension.</p>
-                <div id="remediations-wrap" class="space-y-5"></div>
-            </div>
+        <!-- ══════════════════════════ DPDP SECTIONS PANEL (secondary) ══════════
+             The formal §3 11-section Board-submission structure — unchanged
+             rendering, moved here from the old Overview tab. -->
+        <div id="panel-sections" class="dpia-panel space-y-4">
+            <p class="text-sm text-[var(--muted-foreground)] px-1">The §3 11-section Board-submission structure, assembled from this tenant's live Record of Processing Activities — for formal DPB submission.</p>
+            <div id="sections-wrap" class="space-y-4"></div>
         </div>
     </div>
 </main>
@@ -315,11 +335,18 @@
  * (served under /.../console/cms/dpo/dpia.html -> base = prefix before
  * /console/cms). NO PII: the report is activity metadata + counts + citations.
  *
- * DASHBOARD (vAIb-dpia-dash): the engine (core/dpia_report.py) already emits
- * every number this page needs — this script only RENDERS it. Three sub-tabs:
- *   Overview     — score ring + donut + radar + bar + sections + activity table
- *   Findings     — every gap (org + per-activity) with citation + auditor mark
- *   Remediations — each gap's .remediation/.suggestion, grouped by dimension
+ * DASHBOARD (vAIb-dpia-dash / vAIb-7bu1): the engine (core/dpia_report.py)
+ * already emits every number this page needs — this script only RENDERS it.
+ * RoPA-CENTRIC (vAIb-7bu1): the owner/DPO is a business person who thinks in
+ * PROCESSES, not DPDP §-sections — "which of my processes are broken and how
+ * do I fix them" is the primary question. Two sub-tabs:
+ *   RoPA Compliance (default) — score ring + donut + radar + bar, then the
+ *                    activities themselves as expandable cards, worst-first,
+ *                    each showing its findings + remediation INLINE, plus a
+ *                    'Beyond RoPA — Organisation' group for governance gaps
+ *                    (no_dpo/no_auditor/no_breach_process/no_grievance/...).
+ *   DPDP Sections    — the original §3 11-section Board-submission structure,
+ *                    kept for the formal DPB report (unchanged rendering).
  * Auditor marks (pass/fail/note) are CLIENT-SIDE ONLY (no backend yet) and
  * persist to localStorage per fiduciary_ref so they survive a reload.
  */
@@ -328,7 +355,9 @@ let currentReport = null;
 let charts = {};              // Chart.js instances, destroyed/recreated per report
 let auditorMarks = {};        // { activityName -> {mark, note} } for activity-level
 let findingMarks = {};        // { findingKey -> {mark, note} } for individual gaps
-let findingsFilter = { dimension: 'all', status: 'all' };
+let openActivities = {};      // { activityName -> bool } accordion open/closed state
+let openOrgGaps = {};         // { gapCode -> bool } accordion open/closed state (org gaps)
+let showCompliant = false;    // collapsed-by-default toggle for the compliant activities group
 
 function fabricBase() {
     var p = window.location.pathname || '';
@@ -471,6 +500,10 @@ function marksStorageKey(kind) {
 function loadMarks() {
     try { auditorMarks = JSON.parse(localStorage.getItem(marksStorageKey('activity')) || '{}') || {}; } catch (e) { auditorMarks = {}; }
     try { findingMarks = JSON.parse(localStorage.getItem(marksStorageKey('finding')) || '{}') || {}; } catch (e) { findingMarks = {}; }
+    // fresh report load — collapse all accordions so worst-first is visible without scrolling
+    openActivities = {};
+    openOrgGaps = {};
+    showCompliant = false;
 }
 
 function saveActivityMarks() {
@@ -494,7 +527,13 @@ function setFindingMark(key, mark) {
     cur.mark = (cur.mark === mark) ? null : mark;
     findingMarks[key] = cur;
     saveFindingMarks();
-    renderFindings();
+    // a finding key is either 'org:<code>:<idx>' or 'act:<activityName>:<code>:<idx>' —
+    // re-render whichever group owns it (accordion open/closed state is preserved).
+    if (key.indexOf('org:') === 0) {
+        renderOrgGaps(currentReport.overall && currentReport.overall.organisation_gaps);
+    } else {
+        renderActivities(currentReport.activities);
+    }
 }
 
 function setFindingNote(key, note) {
@@ -758,7 +797,8 @@ function renderSections(sections) {
     }).join('');
 }
 
-/* ── Render: per-activity table with auditor Pass/Fail/Note ─────────────── */
+/* ── Render: RoPA activity cards — worst-first, expandable, findings +
+ * remediations inline (vAIb-7bu1: this IS the point of the redesign). ──── */
 
 function renderActivityTally() {
     var vals = Object.keys(auditorMarks).map(function(k) { return auditorMarks[k].mark; });
@@ -772,145 +812,160 @@ function renderActivityTally() {
         + '<span class="tally-chip" style="background:#f1f5f9;color:#64748b">' + Math.max(0, unmarked) + ' unmarked</span>';
 }
 
+function toggleActivity(name) {
+    openActivities[name] = !openActivities[name];
+    renderActivities(currentReport.activities);
+}
+
+function toggleCompliantGroup() {
+    showCompliant = !showCompliant;
+    renderActivities(currentReport.activities);
+}
+
+/* One finding block — citation chip + detail + Fix + Suggestion, all inline
+ * under the activity card that owns it (no separate Findings/Remediations tab). */
+function findingBlock(f) {
+    return '<div class="finding-card">'
+        + '<div class="flex items-center justify-between gap-2 flex-wrap mb-1">'
+        + '<span class="flex items-center gap-2 flex-wrap">'
+        + '<span class="text-xs font-black text-red-700 uppercase tracking-wide">' + esc((f.code || '').replace(/_/g,' ')) + '</span>'
+        + citationChip(f.citation)
+        + '</span>'
+        + markGroup('finding', f.key, (findingMarks[f.key] || {}).mark)
+        + '</div>'
+        + '<p class="text-sm text-red-800">' + esc(f.detail) + '</p>'
+        + (f.remediation ? '<div class="fix-block"><span class="font-black text-emerald-800 text-xs uppercase tracking-wide mr-1">Fix</span><span class="text-sm text-emerald-900">' + esc(f.remediation) + '</span></div>' : '')
+        + (f.suggestion ? '<div class="suggest-block"><span class="font-black primary-text text-xs uppercase tracking-wide mr-1">Suggestion</span><span class="text-sm">' + esc(f.suggestion) + '</span></div>' : '')
+        + '<input type="text" class="note-input mt-2" placeholder="Auditor note…" value="' + esc((findingMarks[f.key] || {}).note || '') + '" '
+        + 'onchange="setFindingNote(\'' + f.key.replace(/'/g,"\\'") + '\', this.value)">'
+        + '</div>';
+}
+
+/* One expandable RoPA activity card: header (name + status + ground + gap
+ * count) collapsed, findings + auditor mark revealed on expand. */
+function activityCard(a, findingsForActivity) {
+    var open = !!openActivities[a.activity_name];
+    var gaps = a.gaps || [];
+    var mark = (auditorMarks[a.activity_name] || {}).mark;
+    var keyAttr = esc(a.activity_name);
+    return '<div class="activity-card status-border-' + esc(a.compliance_status) + (open ? ' open' : '') + '">'
+        + '<div class="activity-head" role="button" tabindex="0" aria-expanded="' + (open ? 'true' : 'false') + '" '
+        + 'onclick="toggleActivity(\'' + keyAttr.replace(/'/g,"\\'") + '\')" '
+        + 'onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();toggleActivity(\'' + keyAttr.replace(/'/g,"\\'") + '\')}">'
+        + '<svg class="activity-chevron" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>'
+        + '<div class="flex-1 min-w-0">'
+        + '<div class="flex items-center gap-2 flex-wrap">'
+        + '<span class="font-bold text-[var(--foreground)]">' + esc(a.activity_name) + '</span>'
+        + statusPill(a.compliance_status)
+        + '</div>'
+        + '<div class="flex items-center gap-2 flex-wrap mt-1">'
+        + '<span class="lawful-ground-chip">' + esc((a.lawful_ground || 'UNSET').replace(/_/g,' ')) + '</span>'
+        + (gaps.length ? '<span class="text-xs font-bold text-red-600">' + gaps.length + ' gap' + (gaps.length === 1 ? '' : 's') + '</span>' : '<span class="text-xs text-emerald-700 font-semibold">no gaps</span>')
+        + '</div>'
+        + '</div>'
+        + '<div onclick="event.stopPropagation()">' + markGroup('activity', a.activity_name, mark) + '</div>'
+        + '</div>'
+        + '<div class="activity-body"><div class="activity-body-inner">'
+        + (findingsForActivity.length
+            ? findingsForActivity.map(findingBlock).join('')
+            : '<p class="text-sm text-emerald-700 font-semibold py-2">No findings for this activity.</p>')
+        + '</div></div>'
+        + '</div>';
+}
+
 function renderActivities(activities) {
-    var tbody = document.getElementById('activities-tbody');
+    var wrap = document.getElementById('activities-wrap');
     if (!activities || activities.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" class="py-10 text-center text-[var(--muted-foreground)] italic">No RoPA activities found for this tenant.</td></tr>';
+        wrap.innerHTML = '<p class="py-10 text-center text-[var(--muted-foreground)] italic">No RoPA activities found for this tenant.</p>';
         renderActivityTally();
         return;
     }
-    tbody.innerHTML = activities.map(function(a) {
-        var comp = a.components || {};
-        var cats = (comp.data_categories && comp.data_categories.categories) || [];
-        var retentionDays = comp.retention && comp.retention.retention_period_days;
-        var groundCitation = comp.processing_purpose && comp.processing_purpose.citation;
-        var gaps = a.gaps || [];
-        var mark = auditorMarks[a.activity_name] && auditorMarks[a.activity_name].mark;
-        return '<tr class="hover:bg-[var(--muted)] transition-colors align-top">'
-            + '<td class="py-3 px-2 font-bold text-[var(--foreground)]">' + esc(a.activity_name) + '</td>'
-            + '<td class="py-3 px-2 capitalize">' + esc((a.lawful_ground || 'UNSET').replace(/_/g,' ')) + '</td>'
-            + '<td class="py-3 px-2">' + citationChip(groundCitation) + '</td>'
-            + '<td class="py-3 px-2 text-xs text-[var(--muted-foreground)]">' + (cats.length ? esc(cats.slice(0,4).join(', ')) + (cats.length > 4 ? ' +' + (cats.length - 4) : '') : '<span class="text-red-600 font-semibold">none</span>') + '</td>'
-            + '<td class="py-3 px-2 text-xs">' + (retentionDays ? esc(retentionDays) + ' days' : '<span class="text-red-600 font-semibold">unset</span>') + '</td>'
-            + '<td class="py-3 px-2 text-xs">' + (gaps.length ? '<span class="font-bold text-red-600">' + gaps.length + '</span>' : '<span class="text-[var(--muted-foreground)]">0</span>') + '</td>'
-            + '<td class="py-3 px-2">' + statusPill(a.compliance_status) + '</td>'
-            + '<td class="py-3 px-2 text-right">' + markGroup('activity', a.activity_name, mark) + '</td>'
-            + '</tr>';
-    }).join('');
+    var allFindings = collectFindings(currentReport);
+    var findingsByActivity = {};
+    allFindings.forEach(function(f) {
+        if (!f.activityName) return;
+        (findingsByActivity[f.activityName] = findingsByActivity[f.activityName] || []).push(f);
+    });
+
+    var problems = activities.filter(function(a) { return a.compliance_status !== 'compliant'; });
+    var clean = activities.filter(function(a) { return a.compliance_status === 'compliant'; });
+    // worst-first within the problem group
+    problems.sort(function(x, y) { return (_STATUS_RANK[y.compliance_status] || 0) - (_STATUS_RANK[x.compliance_status] || 0); });
+
+    var html = '';
+    if (problems.length) {
+        html += '<div class="group-label">Needs attention <span class="count-chip">' + problems.length + '</span></div>';
+        html += '<div class="space-y-3">' + problems.map(function(a) {
+            return activityCard(a, findingsByActivity[a.activity_name] || []);
+        }).join('') + '</div>';
+    }
+    if (clean.length) {
+        html += '<div class="' + (problems.length ? 'mt-4' : '') + '">'
+            + '<button type="button" class="compliant-toggle" onclick="toggleCompliantGroup()">'
+            + '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="transform:rotate(' + (showCompliant ? '90' : '0') + 'deg);transition:transform .15s ease"><polyline points="9 18 15 12 9 6"/></svg>'
+            + 'Compliant activities <span class="count-chip">' + clean.length + '</span>'
+            + '</button>'
+            + (showCompliant ? '<div class="space-y-3 mt-3">' + clean.map(function(a) {
+                return activityCard(a, findingsByActivity[a.activity_name] || []);
+            }).join('') + '</div>' : '')
+            + '</div>';
+    }
+    if (!problems.length && !clean.length) {
+        html = '<p class="py-10 text-center text-[var(--muted-foreground)] italic">No RoPA activities found for this tenant.</p>';
+    }
+    wrap.innerHTML = html;
     renderActivityTally();
 }
 
-/* ── Render: Findings tab ────────────────────────────────────────────────── */
+var _STATUS_RANK = { non_compliant: 2, attention: 1, compliant: 0 };
 
-function findingsSummaryCounts(findings) {
-    var pass = 0, fail = 0, unmarked = 0;
-    findings.forEach(function(f) {
-        var m = findingMarks[f.key] && findingMarks[f.key].mark;
-        if (m === 'pass') pass++; else if (m === 'fail') fail++; else unmarked++;
-    });
-    return { total: findings.length, pass: pass, fail: fail, unmarked: unmarked };
+/* ── Render: 'Beyond RoPA — Organisation' group — governance-level gaps
+ * (no_dpo / no_grievance / no_auditor / no_breach_process / children
+ * unassessed) rendered as the same expandable-card pattern as activities. */
+
+function toggleOrgGap(code) {
+    openOrgGaps[code] = !openOrgGaps[code];
+    renderOrgGaps(currentReport.overall.organisation_gaps);
 }
 
-function renderFindingsFilters(findings) {
-    var dims = ['all'].concat(DIMENSIONS.filter(function(d) { return findings.some(function(f) { return f.dimension === d; }); }));
-    var statuses = ['all', 'compliant', 'attention', 'non_compliant'];
-    var html = '<div class="flex flex-wrap gap-1.5 items-center">'
-        + '<span class="text-[10px] font-black uppercase tracking-wide text-[var(--muted-foreground)] mr-1">Dimension</span>'
-        + dims.map(function(d) {
-            return '<button type="button" class="filter-btn' + (findingsFilter.dimension === d ? ' active' : '') + '" onclick="setFindingsFilter(\'dimension\',\'' + d + '\')">' + esc(d === 'all' ? 'All' : d) + '</button>';
-        }).join('') + '</div>'
-        + '<div class="flex flex-wrap gap-1.5 items-center">'
-        + '<span class="text-[10px] font-black uppercase tracking-wide text-[var(--muted-foreground)] mr-1">Status</span>'
-        + statuses.map(function(s) {
-            return '<button type="button" class="filter-btn' + (findingsFilter.status === s ? ' active' : '') + '" onclick="setFindingsFilter(\'status\',\'' + s + '\')">' + esc(s === 'all' ? 'All' : STATUS_LABEL[s] || s) + '</button>';
-        }).join('') + '</div>';
-    document.getElementById('findings-filters').innerHTML = html;
+function orgGapCard(g, idx) {
+    var key = 'org:' + g.code + ':' + idx;
+    var open = !!openOrgGaps[key];
+    var fm = findingMarks[key] || {};
+    return '<div class="activity-card status-border-attention' + (open ? ' open' : '') + '">'
+        + '<div class="activity-head" role="button" tabindex="0" aria-expanded="' + (open ? 'true' : 'false') + '" '
+        + 'onclick="toggleOrgGap(\'' + key.replace(/'/g,"\\'") + '\')" '
+        + 'onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();toggleOrgGap(\'' + key.replace(/'/g,"\\'") + '\')}">'
+        + '<svg class="activity-chevron" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>'
+        + '<div class="flex-1 min-w-0">'
+        + '<div class="flex items-center gap-2 flex-wrap">'
+        + '<span class="font-bold text-[var(--foreground)]">' + esc((g.code || '').replace(/_/g,' ')) + '</span>'
+        + citationChip(g.citation)
+        + '</div>'
+        + '<p class="text-xs text-[var(--muted-foreground)] mt-1">' + esc(g.detail) + '</p>'
+        + '</div>'
+        + '<div onclick="event.stopPropagation()">' + markGroup('finding', key, fm.mark) + '</div>'
+        + '</div>'
+        + '<div class="activity-body"><div class="activity-body-inner">'
+        + (g.remediation ? '<div class="fix-block"><span class="font-black text-emerald-800 text-xs uppercase tracking-wide mr-1">Fix</span><span class="text-sm text-emerald-900">' + esc(g.remediation) + '</span></div>' : '')
+        + (g.suggestion ? '<div class="suggest-block"><span class="font-black primary-text text-xs uppercase tracking-wide mr-1">Suggestion</span><span class="text-sm">' + esc(g.suggestion) + '</span></div>' : '')
+        + '<input type="text" class="note-input mt-2" placeholder="Auditor note…" value="' + esc(fm.note || '') + '" '
+        + 'onchange="setFindingNote(\'' + key.replace(/'/g,"\\'") + '\', this.value)">'
+        + '</div></div>'
+        + '</div>';
 }
 
-function setFindingsFilter(kind, value) {
-    findingsFilter[kind] = value;
-    renderFindings();
-}
-
-function renderFindings() {
-    if (!currentReport) return;
-    var all = collectFindings(currentReport);
-    renderFindingsFilters(all);
-
-    var summary = findingsSummaryCounts(all);
-    document.getElementById('findings-summary').innerHTML =
-        '<span class="tally-chip" style="background:#f1f5f9;color:#334155">' + summary.total + ' total</span>'
-        + '<span class="tally-chip" style="background:#ecfdf5;color:#047857">' + summary.pass + ' passed</span>'
-        + '<span class="tally-chip" style="background:#fef2f2;color:#b91c1c">' + summary.fail + ' failed</span>'
-        + '<span class="tally-chip" style="background:#fffbeb;color:#b45309">' + summary.unmarked + ' unmarked</span>';
-
-    var filtered = all.filter(function(f) {
-        if (findingsFilter.dimension !== 'all' && f.dimension !== findingsFilter.dimension) return false;
-        if (findingsFilter.status !== 'all' && f.status !== findingsFilter.status) return false;
-        return true;
-    });
-
-    var wrap = document.getElementById('findings-wrap');
-    if (!filtered.length) {
-        wrap.innerHTML = '<p class="text-sm text-emerald-700 font-semibold py-6 text-center">No findings match this filter.</p>';
+function renderOrgGaps(orgGaps) {
+    var card = document.getElementById('org-gaps-card');
+    var wrap = document.getElementById('org-gaps-wrap');
+    orgGaps = orgGaps || [];
+    if (!orgGaps.length) {
+        card.classList.add('hidden');
+        wrap.innerHTML = '';
         return;
     }
-    wrap.innerHTML = filtered.map(function(f) {
-        var fm = findingMarks[f.key] || {};
-        return '<div class="gap-row px-4 py-3">'
-            + '<div class="flex items-center justify-between gap-2 flex-wrap mb-1">'
-            + '<span class="flex items-center gap-2 flex-wrap">'
-            + '<span class="text-xs font-black text-red-700 uppercase tracking-wide">' + esc(f.scope) + ' &middot; ' + esc((f.code || '').replace(/_/g,' ')) + '</span>'
-            + '<span class="dim-badge">' + esc(f.dimension) + '</span>'
-            + citationChip(f.citation)
-            + '</span>'
-            + markGroup('finding', f.key, fm.mark)
-            + '</div>'
-            + '<p class="text-sm text-red-800 mb-2">' + esc(f.detail) + '</p>'
-            + '<input type="text" class="note-input" placeholder="Auditor note…" value="' + esc(fm.note || '') + '" '
-            + 'onchange="setFindingNote(\'' + f.key.replace(/'/g,"\\'") + '\', this.value)">'
-            + '</div>';
-    }).join('');
-}
-
-/* ── Render: Remediations tab — grouped by dimension ─────────────────────── */
-
-function renderRemediations() {
-    if (!currentReport) return;
-    var all = collectFindings(currentReport);
-    var wrap = document.getElementById('remediations-wrap');
-
-    if (!all.length) {
-        wrap.innerHTML = '<p class="text-sm text-emerald-700 font-semibold py-6 text-center">No gaps — nothing to remediate.</p>';
-        return;
-    }
-
-    var byDim = {};
-    all.forEach(function(f) {
-        (byDim[f.dimension] = byDim[f.dimension] || []).push(f);
-    });
-    var orderedDims = DIMENSIONS.concat(['Other']).filter(function(d) { return byDim[d] && byDim[d].length; });
-
-    wrap.innerHTML = orderedDims.map(function(dim) {
-        var items = byDim[dim];
-        return '<div>'
-            + '<div class="flex items-center gap-2 mb-2">'
-            + '<span class="dim-badge">' + esc(dim) + '</span>'
-            + '<span class="text-xs text-[var(--muted-foreground)]">' + items.length + ' finding' + (items.length === 1 ? '' : 's') + '</span>'
-            + '</div>'
-            + '<div class="space-y-2 mb-4">' + items.map(function(f) {
-                return '<div class="border border-[var(--border)] rounded-lg px-4 py-3">'
-                    + '<div class="flex items-center justify-between gap-2 flex-wrap mb-1">'
-                    + '<span class="text-xs font-bold text-[var(--foreground)]">' + esc(f.scope) + '</span>'
-                    + citationChip(f.citation)
-                    + '</div>'
-                    + '<p class="text-xs text-[var(--muted-foreground)] mb-2 italic">' + esc(f.detail) + '</p>'
-                    + (f.remediation ? '<p class="text-sm"><span class="font-black text-[var(--foreground)] text-xs uppercase tracking-wide mr-1">Fix</span>' + esc(f.remediation) + '</p>' : '')
-                    + (f.suggestion ? '<p class="text-sm mt-1"><span class="font-black primary-text text-xs uppercase tracking-wide mr-1">Suggestion</span>' + esc(f.suggestion) + '</p>' : '')
-                    + '</div>';
-            }).join('') + '</div>'
-            + '</div>';
-    }).join('');
+    card.classList.remove('hidden');
+    wrap.innerHTML = orgGaps.map(function(g, idx) { return orgGapCard(g, idx); }).join('');
 }
 
 /* ── Orchestrate all dashboard renders for a freshly loaded report ──────── */
@@ -925,8 +980,7 @@ function renderDashboard(report) {
     renderBar(findings);
     renderSections(report.sections);
     renderActivities(report.activities);
-    renderFindings();
-    renderRemediations();
+    renderOrgGaps(report.overall && report.overall.organisation_gaps);
 }
 
 /* ── Main call ──────────────────────────────────────────────────────────── */
@@ -985,7 +1039,7 @@ async function runDpia() {
         }
 
         currentReport = data.report;
-        switchDpiaTab('overview');
+        switchDpiaTab('ropa');
         renderDashboard(currentReport);
 
         emptyState.classList.add('hidden');
