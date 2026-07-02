@@ -49,12 +49,17 @@
   --dpo-fail:          #dc2626;   /* non-compliant */
   --dpo-neutral:       #94a3b8;   /* unassessed/neutral chart series */
 
-  /* MODEST font scale (user: fonts too big) — dpdpa.support hierarchy. */
-  --dpo-fs-body:       14px;
-  --dpo-fs-sm:         12.5px;
-  --dpo-fs-h1:         22px;
-  --dpo-fs-h2:         17px;
-  --dpo-fs-eyebrow:    11px;   /* small-caps section labels */
+  /* COMPACT font scale (user: "still too big, have to scroll") — dense compliance-tool
+     scale so data fits without hunting. If the host injects a base size, --dpo-fs-body
+     tracks it (adapts to the site), else this compact default. */
+  --dpo-fs-body:       var(--tsi-font-size, 13px);
+  --dpo-fs-sm:         12px;
+  --dpo-fs-h1:         19px;
+  --dpo-fs-h2:         15px;
+  --dpo-fs-eyebrow:    10.5px;  /* small-caps section labels */
+  /* Tight spacing rhythm so sections are compact, not sprawling. */
+  --dpo-gap:           14px;
+  --dpo-pad:           14px;
 }
 
 /* Neutralise the leftover tweakcn console theme: its injected :root sets
@@ -144,15 +149,18 @@ h3, .dpo-h3 { font-size: 15px;             line-height: 1.35; font-weight: 650; 
   border: 1px solid var(--dpo-border);
   border-radius: var(--dpo-radius);
   box-shadow: var(--dpo-shadow-card);
-  padding: 20px;
+  padding: var(--dpo-pad);   /* compact (14px) — was 20px (user: too big) */
 }
 /* stat-card top stripe: force the host accent so cards are UNIFORM (like My-Data),
    overriding the legacy per-card Tailwind colours (border-blue-600/indigo/amber/
    orange and the unset --primary that fell back to black). One rule, all pages. */
 .card.border-t-4 { border-top-color: var(--dpo-accent) !important; }
 
-/* page heading sits on the light body → dark host text */
-main > div > h1, main h1 { color: var(--dpo-text); }
+/* page heading — navy, compact (was grey host-text + oversized) */
+main > div > h1, main h1 { color: var(--dpo-heading); font-size: var(--dpo-fs-h1); }
+/* tighten the default vertical rhythm between page sections */
+main { padding: 18px !important; }
+@media (min-width: 1024px) { main { padding: 22px 28px !important; } }
 
 /* filter chips / small surfaces */
 .filter-chip {
@@ -172,15 +180,15 @@ thead th {
   text-align: left; font-size: 0.7rem; font-weight: 800;
   text-transform: uppercase; letter-spacing: 0.05em;
   color: var(--dpo-muted);
-  padding: 12px 16px; border-bottom: 1px solid var(--dpo-border);
+  padding: 9px 12px; border-bottom: 1px solid var(--dpo-border);
 }
-tbody td { padding: 14px 16px; font-size: 0.875rem; border-bottom: 1px solid var(--dpo-border); }
+tbody td { padding: 9px 12px; font-size: var(--dpo-fs-body); border-bottom: 1px solid var(--dpo-border); }
 tbody tr:hover { background: color-mix(in srgb, var(--dpo-accent) 4%, transparent); }
 
 /* ── buttons / links ───────────────────────────────────────────────────── */
 .btn-primary {
   background: var(--dpo-accent); color: #fff; border: 0;
-  padding: 9px 18px; border-radius: 9px; font-weight: 700; font-size: 0.875rem;
+  padding: 7px 14px; border-radius: 8px; font-weight: 700; font-size: var(--dpo-fs-sm);
   cursor: pointer; transition: filter .15s ease;
 }
 .btn-primary:hover { filter: brightness(0.93); }
