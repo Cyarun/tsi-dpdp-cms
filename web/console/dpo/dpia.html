@@ -233,6 +233,9 @@
     <!-- Report body (hidden until loaded) -->
     <div id="report-body" class="hidden space-y-6">
 
+        <!-- Freshness note when showing a restored (previously generated) report -->
+        <div id="cached-stamp" class="hidden dpo-sm dpo-muted italic"></div>
+
         <!-- Meta strip -->
         <div class="card flex flex-wrap items-center justify-between gap-3">
             <div class="flex flex-wrap items-center gap-4 text-sm">
@@ -1039,6 +1042,7 @@ async function runDpia() {
         }
 
         currentReport = data.report;
+        _saveReport(currentReport);   // persist so it STAYS on reload/navigate-back
         switchDpiaTab('ropa');
         renderDashboard(currentReport);
 
@@ -1166,11 +1170,44 @@ function downloadReport() {
     doc.save(base + '.pdf');
 }
 
+/* ── Report persistence — the last generated report STAYS across reload / nav-back
+ * (user: "once generated it should stay"). Cached in localStorage per tenant, with a
+ * generated-at stamp shown so the auditor knows its freshness (Regenerate re-scans). */
+function _reportStorageKey() {
+    var q = new URLSearchParams(location.search);
+    var inst = q.get('instance') || 'default';
+    return 'dpia-last-report:' + inst;
+}
+function _saveReport(report) {
+    try { localStorage.setItem(_reportStorageKey(), JSON.stringify(report)); } catch (e) { /* storage full/unavailable — non-fatal */ }
+}
+function _loadReport() {
+    try { return JSON.parse(localStorage.getItem(_reportStorageKey()) || 'null'); } catch (e) { return null; }
+}
+function _restoreLastReport() {
+    var saved = _loadReport();
+    if (!saved || !saved.overall) return false;
+    currentReport = saved;
+    switchDpiaTab('ropa');
+    renderDashboard(currentReport);
+    document.getElementById('empty-state').classList.add('hidden');
+    document.getElementById('report-body').classList.remove('hidden');
+    document.getElementById('download-btn').disabled = false;
+    // Freshness note: show when this cached report was generated (regenerate to re-scan).
+    var stamp = document.getElementById('cached-stamp');
+    if (stamp && saved.meta && saved.meta.generated_at) {
+        stamp.textContent = 'Showing the last report generated ' + saved.meta.generated_at + ' — click Generate Report to re-scan.';
+        stamp.classList.remove('hidden');
+    }
+    return true;
+}
+
 /* ── Init ───────────────────────────────────────────────────────────────── */
 window.onload = function () {
     var _rawUser = localStorage.getItem('username') || '';
     var USER_NAME = (/^Site Owner \(Wix\)\s+[0-9a-f-]{8,}/.test(_rawUser) || /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.test(_rawUser)) ? '' : _rawUser;
     document.getElementById('username').textContent = USER_NAME || 'DPO User';
+    _restoreLastReport();   // if a prior report exists, show it instead of the empty state
 };
 </script>
 </body>
