@@ -18,16 +18,43 @@
    ────────────────────────────────────────────────────────────────────────── */
 
 :root {
-  /* local design tokens, all derived from the host-injected ones */
-  --dpo-accent:        var(--tsi-primary, #db1481);
-  --dpo-text:          var(--tsi-text, #1e293b);
-  --dpo-muted:         color-mix(in srgb, var(--tsi-text, #1e293b) 55%, transparent);
-  --dpo-bg:            var(--background, #f6f7fb);
-  --dpo-surface:       #ffffff;
+  /* TAMED HOST-BLEND (2026-07-02): a FIXED professional base (navy/slate/white, like
+     dpdpa.support) so the console looks like a real compliance tool on EVERY Wix theme,
+     with the host accent CAPPED to thin highlights only — never filling chart bars,
+     panels, or big text (that garish over-application was the amateur look). */
+
+  /* Fixed professional structural palette — the SAME on every tenant, theme-independent. */
+  --dpo-navy:          #101d4a;   /* headings, structural emphasis */
+  --dpo-slate:         #334155;   /* body text base */
+  --dpo-bg:            #f6f7fb;    /* page background (calm neutral, not the host bg) */
+  --dpo-surface:       #ffffff;    /* cards */
   --dpo-border:        rgba(15, 23, 42, 0.10);
   --dpo-radius:        12px;
   --dpo-shadow:        0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
   --dpo-shadow-card:   0 1px 3px rgba(15, 23, 42, 0.08);
+
+  /* Text derives from the fixed base (host text only softly tints it, capped legible). */
+  --dpo-text:          var(--dpo-slate);
+  --dpo-heading:       var(--dpo-navy);
+  --dpo-muted:         #64748b;
+
+  /* HOST ACCENT — the ONE token that adopts the tenant's brand, used ONLY as a thin
+     highlight (active nav, primary button, small chips, a 3px card edge). Structural
+     surfaces must NEVER use it as a fill. Falls back to the dpdpa red. */
+  --dpo-accent:        var(--tsi-primary, #e3263b);
+
+  /* Calm COMPLIANCE-STATUS palette for charts/pills — fixed, never the host accent. */
+  --dpo-pass:          #16a34a;   /* compliant  */
+  --dpo-warn:          #d97706;   /* attention  */
+  --dpo-fail:          #dc2626;   /* non-compliant */
+  --dpo-neutral:       #94a3b8;   /* unassessed/neutral chart series */
+
+  /* MODEST font scale (user: fonts too big) — dpdpa.support hierarchy. */
+  --dpo-fs-body:       14px;
+  --dpo-fs-sm:         12.5px;
+  --dpo-fs-h1:         22px;
+  --dpo-fs-h2:         17px;
+  --dpo-fs-eyebrow:    11px;   /* small-caps section labels */
 }
 
 /* Neutralise the leftover tweakcn console theme: its injected :root sets
@@ -44,12 +71,38 @@ body {
 body {
   background-color: var(--dpo-bg);
   color: var(--dpo-text);
+  font-size: var(--dpo-fs-body);
+  line-height: 1.55;
   margin: 0;
 }
 @media (min-width: 1024px) { body { padding-left: 250px; } }
 
+/* Professional type scale (modest, dpdpa.support-like — headings navy, not accent) */
+h1, .dpo-h1 { font-size: var(--dpo-fs-h1); line-height: 1.25; font-weight: 700; color: var(--dpo-heading); letter-spacing: -0.01em; }
+h2, .dpo-h2 { font-size: var(--dpo-fs-h2); line-height: 1.3;  font-weight: 700; color: var(--dpo-heading); }
+h3, .dpo-h3 { font-size: 15px;             line-height: 1.35; font-weight: 650; color: var(--dpo-heading); }
+.dpo-muted  { color: var(--dpo-muted); }
+.dpo-sm     { font-size: var(--dpo-fs-sm); }
+
+/* Section eyebrow — small-caps accent label (the dpdpa.support "—— ZERO-TOUCH" cue) */
+.dpo-eyebrow {
+  font-size: var(--dpo-fs-eyebrow); font-weight: 800; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--dpo-accent); display: inline-flex; align-items: center; gap: 8px;
+}
+.dpo-eyebrow::before { content: ""; width: 22px; height: 2px; background: var(--dpo-accent); border-radius: 2px; }
+
+/* accent used ONLY as a thin highlight — text/links, never a big fill */
 .primary-text { color: var(--dpo-accent); }
-.primary-bg   { background-color: var(--dpo-accent); }
+/* .primary-bg kept for the ONE primary button; capped — do not use on large surfaces */
+.primary-bg   { background-color: var(--dpo-accent); color: #fff; }
+
+/* Calm status pills (fixed palette — never the host accent) */
+.dpo-pill { display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px; border-radius: 999px;
+            font-size: 11px; font-weight: 700; letter-spacing: 0.02em; }
+.dpo-pill--pass { background: color-mix(in srgb, var(--dpo-pass) 12%, #fff); color: var(--dpo-pass); }
+.dpo-pill--warn { background: color-mix(in srgb, var(--dpo-warn) 14%, #fff); color: var(--dpo-warn); }
+.dpo-pill--fail { background: color-mix(in srgb, var(--dpo-fail) 12%, #fff); color: var(--dpo-fail); }
+.dpo-pill--neutral { background: #f1f5f9; color: var(--dpo-muted); }
 
 /* ── sidebar: clean white panel, host-accent active pill ───────────────── */
 .sidebar {

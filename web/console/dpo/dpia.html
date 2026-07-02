@@ -24,12 +24,12 @@
         .status-non_compliant { background: #fef2f2; color: #b91c1c; }
         .citation-chip {
             display: inline-block; font-size: 0.68rem; font-weight: 700; font-family: ui-monospace, monospace;
-            padding: 2px 8px; border-radius: 6px; background: color-mix(in srgb, var(--dpo-accent, #db1481) 8%, transparent);
-            color: var(--dpo-accent, #db1481); white-space: nowrap;
+            padding: 2px 8px; border-radius: 6px; background: color-mix(in srgb, var(--dpo-accent, #e3263b) 8%, transparent);
+            color: var(--dpo-accent, #e3263b); white-space: nowrap;
         }
         .gap-row { border-left: 3px solid #dc2626; background: #fef2f2; border-radius: 0 8px 8px 0; }
         .section-num {
-            width: 28px; height: 28px; border-radius: 999px; background: var(--dpo-accent, #db1481);
+            width: 28px; height: 28px; border-radius: 999px; background: var(--dpo-accent, #e3263b);
             color: #fff; font-weight: 800; font-size: 0.75rem; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
         }
         .spinner {
@@ -51,8 +51,8 @@
             cursor: pointer; transition: background-color .15s ease, color .15s ease; user-select: none;
             border: 0; background: transparent;
         }
-        .dpia-tab:hover { color: var(--dpo-text, #1e293b); background: color-mix(in srgb, var(--dpo-accent, #db1481) 6%, transparent); }
-        .dpia-tab.active { background: var(--dpo-accent, #db1481); color: #fff; }
+        .dpia-tab:hover { color: var(--dpo-text, #1e293b); background: color-mix(in srgb, var(--dpo-accent, #e3263b) 6%, transparent); }
+        .dpia-tab.active { background: var(--dpo-accent, #e3263b); color: #fff; }
         .dpia-panel { display: none; }
         .dpia-panel.active { display: block; }
 
@@ -77,7 +77,7 @@
             border-right: 1px solid var(--dpo-border, rgba(15,23,42,.1)); transition: background-color .15s ease, color .15s ease;
         }
         .mark-btn:last-child { border-right: 0; }
-        .mark-btn:hover { background: color-mix(in srgb, var(--dpo-accent, #db1481) 8%, transparent); }
+        .mark-btn:hover { background: color-mix(in srgb, var(--dpo-accent, #e3263b) 8%, transparent); }
         .mark-btn.mark-pass.active  { background: #ecfdf5; color: #047857; }
         .mark-btn.mark-fail.active  { background: #fef2f2; color: #b91c1c; }
         .mark-btn.mark-note.active  { background: #fffbeb; color: #b45309; }
@@ -86,18 +86,18 @@
             width: 100%; font-size: 0.78rem; border: 1px solid var(--dpo-border, rgba(15,23,42,.1)); border-radius: 8px;
             padding: 6px 10px; color: var(--dpo-text, #1e293b); background: var(--dpo-surface, #fff);
         }
-        .note-input:focus { outline: 2px solid color-mix(in srgb, var(--dpo-accent, #db1481) 35%, transparent); outline-offset: 1px; }
+        .note-input:focus { outline: 2px solid color-mix(in srgb, var(--dpo-accent, #e3263b) 35%, transparent); outline-offset: 1px; }
 
         .tally-chip { font-size: 0.72rem; font-weight: 800; padding: 4px 10px; border-radius: 999px; }
         .dim-badge {
             display: inline-block; font-size: 0.68rem; font-weight: 700; padding: 2px 9px; border-radius: 999px;
-            background: color-mix(in srgb, var(--dpo-accent, #db1481) 10%, transparent); color: var(--dpo-accent, #db1481);
+            background: color-mix(in srgb, var(--dpo-accent, #e3263b) 10%, transparent); color: var(--dpo-accent, #e3263b);
         }
         .filter-btn {
             font-size: 0.72rem; font-weight: 700; padding: 5px 12px; border-radius: 8px; cursor: pointer;
             border: 1px solid var(--dpo-border, rgba(15,23,42,.1)); background: var(--dpo-surface, #fff); color: var(--dpo-muted, #64748b);
         }
-        .filter-btn.active { background: var(--dpo-accent, #db1481); color: #fff; border-color: var(--dpo-accent, #db1481); }
+        .filter-btn.active { background: var(--dpo-accent, #e3263b); color: #fff; border-color: var(--dpo-accent, #e3263b); }
 
         /* ── RoPA activity accordion cards (vAIb-7bu1: RoPA-centric DPIA) ──── */
         .activity-card {
@@ -112,8 +112,8 @@
             display: flex; align-items: center; gap: 12px; padding: 14px 18px; cursor: pointer;
             user-select: none; transition: background-color .15s ease;
         }
-        .activity-head:hover { background: color-mix(in srgb, var(--dpo-accent, #db1481) 5%, transparent); }
-        .activity-head:focus-visible { outline: 2px solid var(--dpo-accent, #db1481); outline-offset: -2px; }
+        .activity-head:hover { background: color-mix(in srgb, var(--dpo-accent, #e3263b) 5%, transparent); }
+        .activity-head:focus-visible { outline: 2px solid var(--dpo-accent, #e3263b); outline-offset: -2px; }
         .activity-chevron { flex-shrink: 0; transition: transform .18s ease; color: var(--dpo-muted, #64748b); }
         .activity-card.open .activity-chevron { transform: rotate(90deg); }
         .activity-body {
@@ -126,8 +126,8 @@
             border: 1px solid var(--dpo-border, rgba(15,23,42,.1)); border-left: 3px solid #dc2626;
             border-radius: 0 8px 8px 0; background: #fef2f2; padding: 12px 14px; margin-top: 10px;
         }
-        .finding-card .fix-block { background: #ecfdf5; border-radius: 6px; padding: 8px 10px; margin-top: 8px; }
-        .finding-card .suggest-block { background: color-mix(in srgb, var(--dpo-accent, #db1481) 6%, transparent); border-radius: 6px; padding: 8px 10px; margin-top: 6px; }
+        .finding-card .fix-block { background: #f0fdf4; border: 1px solid #dcfce7; border-radius: 8px; padding: 9px 11px; margin-top: 8px; }
+        .finding-card .suggest-block { background: #f8fafc; border: 1px solid var(--dpo-border, rgba(15,23,42,0.08)); border-radius: 8px; padding: 9px 11px; margin-top: 6px; }
         .group-label {
             font-size: 0.72rem; font-weight: 900; text-transform: uppercase; letter-spacing: .06em;
             color: var(--dpo-muted, #64748b); display: flex; align-items: center; gap: 8px; margin: 4px 2px 8px;
@@ -142,7 +142,7 @@
             border: 1px dashed var(--dpo-border, rgba(15,23,42,.15)); border-radius: 10px; background: transparent;
             width: 100%; text-align: left; transition: background-color .15s ease;
         }
-        .compliant-toggle:hover { background: color-mix(in srgb, var(--dpo-accent, #db1481) 5%, transparent); }
+        .compliant-toggle:hover { background: color-mix(in srgb, var(--dpo-accent, #e3263b) 5%, transparent); }
         .lawful-ground-chip {
             font-size: 0.68rem; font-weight: 700; padding: 2px 9px; border-radius: 999px; text-transform: capitalize;
             background: color-mix(in srgb, var(--dpo-text, #1e293b) 6%, transparent); color: var(--dpo-muted, #64748b);
@@ -676,9 +676,9 @@ function renderRadar(report) {
             datasets: [{
                 label: 'Compliance %',
                 data: DIMENSIONS.map(function(d) { return scores[d]; }),
-                backgroundColor: 'color-mix(in srgb, #db1481 18%, transparent)',
-                borderColor: '#db1481', borderWidth: 2,
-                pointBackgroundColor: '#db1481', pointRadius: 3
+                backgroundColor: 'rgba(16, 29, 74, 0.14)',
+                borderColor: '#101d4a', borderWidth: 2,
+                pointBackgroundColor: '#101d4a', pointRadius: 3
             }]
         },
         options: {
@@ -706,7 +706,7 @@ function renderBar(findings) {
         type: 'bar',
         data: {
             labels: DIMENSIONS,
-            datasets: [{ label: 'Gaps', data: DIMENSIONS.map(function(d) { return counts[d]; }), backgroundColor: '#db1481', borderRadius: 4, maxBarThickness: 36 }]
+            datasets: [{ label: 'Gaps', data: DIMENSIONS.map(function(d) { return counts[d]; }), backgroundColor: '#475569', borderRadius: 4, maxBarThickness: 36 }]
         },
         options: {
             responsive: true, maintainAspectRatio: false,
