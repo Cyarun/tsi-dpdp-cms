@@ -241,8 +241,11 @@ public class Dpia implements Action {
     private FiduciaryContext deriveFiduciaryContext(UUID fiduciaryId, JSONArray ropaRows) throws SQLException {
         boolean isSdf = false;
         boolean hasDpoOnFiduciary = false;
-        // Read the fiduciary row (server-side, own tenant) for the SDF flag + a registered DPO.
-        String fidSql = "SELECT is_significant_data_fiduciary, dpo_user_id FROM fiduciaries WHERE id = ?";
+        // Read the fiduciary row (server-side, own tenant) for the SDF flag. The fiduciaries
+        // table has no dpo_user_id column in this schema (it was a planned field never added),
+        // so has_dpo is derived solely from the RoPA rows' dpo_id below (the real mechanism).
+        // ponytail: don't SELECT a column that doesn't exist — it crashed the whole DPIA report.
+        String fidSql = "SELECT is_significant_data_fiduciary FROM fiduciaries WHERE id = ?";
         PoolDB pool = new PoolDB();
         Connection conn = null;
         PreparedStatement pstmt = null;
@@ -254,7 +257,6 @@ public class Dpia implements Action {
             rs = pstmt.executeQuery();
             if (rs.next()) {
                 isSdf = rs.getBoolean("is_significant_data_fiduciary");
-                hasDpoOnFiduciary = rs.getObject("dpo_user_id") != null;
             }
         } finally {
             pool.cleanup(rs, pstmt, conn);
