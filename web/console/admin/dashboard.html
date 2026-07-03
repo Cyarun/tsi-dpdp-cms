@@ -152,10 +152,44 @@
     </nav>
   </div>
   <div class="p-3 border-t border-gray-200">
-    <div class="mt-2 text-sm text-gray-500 p-2 rounded-md hover:bg-gray-100 cursor-pointer flex justify-between items-center">
+    <div class="mt-2 text-sm text-gray-500 p-2 rounded-md hover:bg-gray-100 flex justify-between items-center">
       <span id="username" class="font-bold text-[var(--foreground)]">Admin User</span>
       <a href="#" onclick="handleLogout()"><span class="text-xs font-semibold text-red-500">Logout</span></a>
     </div>
+    <!-- vAIb-83bu: DIRECT-login account control. Hidden by default so it never flashes in the
+         Wix-embedded panel; tenant-scope.js REVEALS it only when NOT Wix-embedded. -->
+    <div data-account-control style="display:none" class="mt-1 px-2">
+      <a href="#" onclick="openChangePassword();return false;" class="text-xs font-semibold text-[var(--tsi-primary)] hover:underline">Change Password</a>
+    </div>
+  </div>
+</div>
+
+<!-- vAIb-83bu: Change-Password modal (DIRECT login only). Reuses the EXISTING recovery
+     backend (reset_password_via_recovery — email + recovery phrase + new password), no new
+     endpoint. The recovery phrase is issued from the CMS Users page (generate_recovery_key). -->
+<div id="change-password-modal" class="modal-overlay">
+  <div class="modal-content" style="max-width:460px">
+    <h2 class="text-lg font-bold text-[var(--foreground)] mb-1">Change Password</h2>
+    <p class="text-sm text-gray-500 mb-4">Enter your account email, your recovery phrase, and a new password (minimum 12 characters). A recovery phrase is issued from the CMS Users page.</p>
+    <form id="change-password-form" onsubmit="submitChangePassword(event)">
+      <label class="block text-[10px] font-black uppercase text-gray-500 mb-1" for="cp-email">Account email</label>
+      <input type="email" id="cp-email" required autocomplete="username"
+             class="w-full border border-gray-300 rounded-lg px-3 py-2 mb-3 text-sm">
+      <label class="block text-[10px] font-black uppercase text-gray-500 mb-1" for="cp-phrase">Recovery phrase</label>
+      <input type="text" id="cp-phrase" required autocomplete="off"
+             class="w-full border border-gray-300 rounded-lg px-3 py-2 mb-3 text-sm">
+      <label class="block text-[10px] font-black uppercase text-gray-500 mb-1" for="cp-new">New password</label>
+      <input type="password" id="cp-new" required minlength="12" autocomplete="new-password"
+             class="w-full border border-gray-300 rounded-lg px-3 py-2 mb-3 text-sm">
+      <label class="block text-[10px] font-black uppercase text-gray-500 mb-1" for="cp-confirm">Confirm new password</label>
+      <input type="password" id="cp-confirm" required minlength="12" autocomplete="new-password"
+             class="w-full border border-gray-300 rounded-lg px-3 py-2 mb-2 text-sm">
+      <p id="cp-message" class="text-sm hidden mb-2"></p>
+      <div class="flex justify-end gap-3 mt-2">
+        <button type="button" onclick="closeChangePassword()" class="px-4 py-2 rounded-lg text-sm font-bold text-gray-600 hover:bg-gray-100">Cancel</button>
+        <button type="submit" id="cp-submit" class="btn-brand px-4 py-2 rounded-lg text-sm font-bold">Update Password</button>
+      </div>
+    </form>
   </div>
 </div>
 
@@ -348,6 +382,9 @@
         // --- Data Loading Functions ---
 
         async function loadDashboardMetrics() {
+            // vAIb-83bu: a missing token must be OBVIOUS, not a silent "--". If authToken is
+            // absent (e.g. reached outside the Wix-launch handoff), show the session banner now.
+            if (window.ConsoleAuth && !window.ConsoleAuth.requireToken()) return;
             try {
                 // get_dpo_metrics is TENANT-SCOPED (the owner's own fiduciary). get_admin_metrics
                 // is platform-only and 403s a tenant owner -> cards showed '--'. Use the
@@ -359,11 +396,11 @@
                     body: JSON.stringify({ "_func": "get_dpo_metrics" })
                 });
                 const data = await response.json();
-                 if (data.status === 401) {
-                    alert("Session Expired: " + (data.message || "Authentication required."));
-                    handleLogout();
-                    return;
-                }
+                // vAIb-83bu: guard EVERY auth-failure shape (non-2xx, {error:"Unauthorized"},
+                // {status:401}, "Authentication failed") — the old check only caught status===401,
+                // so the {error:"Unauthorized"} object the fabric proxy returns left the cards
+                // silently at "--". Show the "Session expired" banner + re-login path instead.
+                if (window.ConsoleAuth && window.ConsoleAuth.guard(response, data)) return;
                 if (data.success && data.metrics) {
                     const m = data.metrics;
                     // tenant-scoped: Data Principals (people whose consent is tracked),
@@ -386,6 +423,12 @@
                     body: JSON.stringify({ "_func": "list_access_logs", "limit": 10 })
                 });
                 const responseData = await response.json();
+                // vAIb-83bu: same auth-failure guard — otherwise the table stayed stuck on
+                // "Fetching logs..." forever when the token was missing/expired.
+                if (window.ConsoleAuth && window.ConsoleAuth.guard(response, responseData)) {
+                    auditActivityBody.innerHTML = `<tr><td colspan="4" class="p-4 text-center text-red-500">Session expired — please log in again.</td></tr>`;
+                    return;
+                }
                 const activities = responseData.data || responseData;
                 if (Array.isArray(activities)) {
                     auditActivityBody.innerHTML = activities.length === 0
@@ -482,6 +525,66 @@
             window.location.href = "../index.html";
         }
 
+        // --- vAIb-83bu: in-console Change Password (DIRECT login only) ---
+        // Recovery-based reset, reusing the existing backend (reset_password_via_recovery,
+        // an ADMIN_NOAUTH func — no operator JWT required). This is NEVER reachable in the
+        // Wix-embedded panel: tenant-scope.js keeps the trigger hidden there, and even if the
+        // modal were forced open, a Wix owner has no CMS password/recovery phrase to change.
+        // Posts to the UNGATED fabric /recovery route (not the owner-gated /api proxy, which
+        // needs a Wix instance) so it works on the direct/standalone console.
+        function _recoveryUrl() {
+            // The admin console is served at <base>/console/cms/admin/dashboard.html.
+            const P = location.pathname;
+            const i = P.indexOf('/admin/');
+            const BASE = i >= 0 ? P.slice(0, i) : '..';   // .../console/cms
+            return BASE + '/recovery';
+        }
+        function openChangePassword() {
+            // Belt-and-suspenders: refuse to open in the Wix-embedded context.
+            if (window.isWixEmbedded && window.isWixEmbedded()) return;
+            const m = document.getElementById('cp-message');
+            m.classList.add('hidden'); m.textContent = '';
+            document.getElementById('change-password-form').reset();
+            document.getElementById('change-password-modal').style.display = 'flex';
+        }
+        function closeChangePassword() {
+            document.getElementById('change-password-modal').style.display = 'none';
+        }
+        async function submitChangePassword(event) {
+            event.preventDefault();
+            const email = document.getElementById('cp-email').value.trim();
+            const phrase = document.getElementById('cp-phrase').value.trim();
+            const pw = document.getElementById('cp-new').value;
+            const confirm = document.getElementById('cp-confirm').value;
+            const m = document.getElementById('cp-message');
+            const btn = document.getElementById('cp-submit');
+            const showMsg = (text, ok) => {
+                m.textContent = text; m.classList.remove('hidden', 'text-red-500', 'text-green-600');
+                m.classList.add(ok ? 'text-green-600' : 'text-red-500');
+            };
+            if (pw.length < 12) { showMsg('New password must be at least 12 characters.', false); return; }
+            if (pw !== confirm) { showMsg('Passwords do not match.', false); return; }
+            btn.disabled = true; btn.textContent = 'Updating…';
+            try {
+                const response = await fetch(_recoveryUrl(), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ _func: 'reset_password_via_recovery', email: email, passphrase: phrase, new_password: pw })
+                });
+                const data = await response.json().catch(() => ({}));
+                if (response.ok && data && data.success) {
+                    showMsg('Password updated. Please log in again with your new password.', true);
+                    setTimeout(handleLogout, 1500);
+                } else {
+                    showMsg((data && data.message) || 'Could not update password. Check your email and recovery phrase.', false);
+                }
+            } catch (e) {
+                showMsg('Network error. Please try again.', false);
+            } finally {
+                btn.disabled = false; btn.textContent = 'Update Password';
+            }
+        }
+
         document.addEventListener('DOMContentLoaded', () => {
             auditActivityBody = document.getElementById('audit-activity-body');
             auditErrorMessageP = document.getElementById('audit-error-message');
@@ -494,7 +597,11 @@
             loadRecentAuditActivity();
         });
     </script>
-    <!-- vAIb-ae11: hide platform-only Fiduciaries tab + deactivation for tenant-scoped operators -->
+    <!-- vAIb-83bu: shared auth-failure guard (no silent blank on 401) — load BEFORE tenant-scope.js. -->
+    <script src="../console-auth.js"></script>
+    <!-- vAIb-ae11: hide platform-only Fiduciaries tab + deactivation for tenant-scoped operators.
+         vAIb-83bu: also renders context-aware account controls (Logout/Change Password on direct,
+         hidden in the Wix-embedded panel). -->
     <script src="../tenant-scope.js"></script>
 </body>
 </html>

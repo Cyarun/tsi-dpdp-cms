@@ -123,6 +123,8 @@
             <div>
                 <div class="flex justify-between items-center mb-1">
                     <label for="password" class="block text-[10px] font-black text-[var(--muted-foreground)] uppercase tracking-widest">Password</label>
+                    <!-- vAIb-83bu: recovery flow (reset_password_via_recovery — no auth needed). -->
+                    <a href="#" onclick="openRecovery();return false;" class="text-[10px] font-bold text-[var(--tsi-accent,var(--ring))] hover:underline">Forgot Password?</a>
                 </div>
                 <input type="password" id="password" name="password" required
                        class="input-style w-full px-3 py-2 border border-[var(--border)] rounded-[var(--radius)] focus:ring-2 focus:ring-[var(--ring)] focus:border-[var(--ring)] outline-none transition-all text-sm"
@@ -139,6 +141,29 @@
     <!-- Message/Error Area -->
     <div id="login-message" class="mt-6 text-center text-xs font-bold hidden"></div>
 
+</div>
+
+<!-- vAIb-83bu: password recovery (reset_password_via_recovery). email + recovery phrase +
+     new password. reset_password_via_recovery is an ADMIN_NOAUTH func, so this works from the
+     login page with no session. The recovery phrase is issued from the CMS Users page. -->
+<div id="recovery-overlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.7);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:var(--card,#fff);padding:28px;border-radius:12px;max-width:420px;width:92%;box-shadow:0 25px 50px -12px rgba(0,0,0,.5)">
+    <h2 class="text-base font-bold text-[var(--foreground)] mb-1">Reset Password</h2>
+    <p class="text-xs text-[var(--muted-foreground)] mb-4">Enter your email, your recovery phrase, and a new password (minimum 12 characters).</p>
+    <form onsubmit="submitRecovery(event)">
+      <label class="block text-[10px] font-black uppercase text-[var(--muted-foreground)] mb-1" for="rc-email">Email</label>
+      <input type="email" id="rc-email" required class="w-full border border-[var(--border)] rounded-md px-3 py-2 mb-3 text-sm">
+      <label class="block text-[10px] font-black uppercase text-[var(--muted-foreground)] mb-1" for="rc-phrase">Recovery phrase</label>
+      <input type="text" id="rc-phrase" required autocomplete="off" class="w-full border border-[var(--border)] rounded-md px-3 py-2 mb-3 text-sm">
+      <label class="block text-[10px] font-black uppercase text-[var(--muted-foreground)] mb-1" for="rc-new">New password</label>
+      <input type="password" id="rc-new" required minlength="12" autocomplete="new-password" class="w-full border border-[var(--border)] rounded-md px-3 py-2 mb-2 text-sm">
+      <p id="rc-message" class="text-xs hidden mb-2"></p>
+      <div class="flex justify-end gap-3 mt-2">
+        <button type="button" onclick="closeRecovery()" class="px-4 py-2 rounded-md text-sm font-bold text-[var(--muted-foreground)] hover:bg-[var(--muted)]">Cancel</button>
+        <button type="submit" id="rc-submit" class="animated-button px-4 py-2 rounded-md text-sm font-bold">Reset Password</button>
+      </div>
+    </form>
+  </div>
 </div>
 
 <script>
@@ -211,6 +236,11 @@ async function handlePlatformLogin(event) {
             localStorage.setItem('role', responseData.role);
             localStorage.setItem('fiduciary_id', responseData.fiduciary_id); // NULL/all-zeros
             localStorage.setItem('fiduciary_name', responseData.fiduciary_name || 'TSI Platform');
+            // vAIb-83bu: this is a DIRECT (standalone) login — NOT the Wix-embedded panel.
+            // Clear any stale Wix-embedded marker a prior Wix session may have left on this
+            // browser, so the console shows the full account menu (logout/change password).
+            // Only the server-side /cms/launch landing (owner-gated) ever SETS this marker.
+            localStorage.removeItem('wix_embedded');
 
             messageArea.textContent = "Login successful. Loading platform console...";
             messageArea.classList.replace('text-blue-500', 'text-green-600');
@@ -225,6 +255,53 @@ async function handlePlatformLogin(event) {
         messageArea.textContent = 'Network Error: Cannot reach the platform service.';
         messageArea.classList.replace('text-blue-500', 'text-red-500');
         console.error('Connection error:', error);
+    }
+}
+
+// vAIb-83bu — password recovery (reset_password_via_recovery). Posts to the UNGATED fabric
+// /recovery route (sibling of /platform-login); reset_password_via_recovery is an ADMIN_NOAUTH
+// func so it needs no operator JWT. The recovery phrase is the auth. Never logs it.
+function _recoveryUrl() {
+    const P = location.pathname;
+    const BASE = P.slice(0, P.indexOf('/platform/'));   // .../console/cms
+    return BASE + '/recovery';                           // ungated fabric -> CMS /admin/operator
+}
+function openRecovery() {
+    const m = document.getElementById('rc-message');
+    m.classList.add('hidden'); m.textContent = '';
+    document.getElementById('rc-email').value = document.getElementById('email').value || '';
+    document.getElementById('rc-phrase').value = '';
+    document.getElementById('rc-new').value = '';
+    document.getElementById('recovery-overlay').style.display = 'flex';
+}
+function closeRecovery() { document.getElementById('recovery-overlay').style.display = 'none'; }
+async function submitRecovery(event) {
+    event.preventDefault();
+    const email = document.getElementById('rc-email').value.trim();
+    const phrase = document.getElementById('rc-phrase').value.trim();
+    const pw = document.getElementById('rc-new').value;
+    const m = document.getElementById('rc-message');
+    const btn = document.getElementById('rc-submit');
+    const show = (t, ok) => { m.textContent = t; m.classList.remove('hidden','text-red-500','text-green-600'); m.classList.add(ok ? 'text-green-600' : 'text-red-500'); };
+    if (pw.length < 12) { show('New password must be at least 12 characters.', false); return; }
+    btn.disabled = true; btn.textContent = 'Resetting…';
+    try {
+        const response = await fetch(_recoveryUrl(), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ _func: 'reset_password_via_recovery', email: email, passphrase: phrase, new_password: pw })
+        });
+        const data = await response.json().catch(() => ({}));
+        if (response.ok && data && data.success) {
+            show('Password reset. You can now log in with your new password.', true);
+            setTimeout(closeRecovery, 1500);
+        } else {
+            show((data && data.message) || 'Reset failed. Check your email and recovery phrase.', false);
+        }
+    } catch (e) {
+        show('Network error. Please try again.', false);
+    } finally {
+        btn.disabled = false; btn.textContent = 'Reset Password';
     }
 }
 </script>
