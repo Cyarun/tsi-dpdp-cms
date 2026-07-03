@@ -252,6 +252,9 @@
         <div class="dpia-tabbar">
             <button type="button" class="dpia-tab active" data-tab="ropa" onclick="switchDpiaTab('ropa')">RoPA Compliance</button>
             <button type="button" class="dpia-tab" data-tab="sections" onclick="switchDpiaTab('sections')">DPDP Sections</button>
+            <!-- vAIb-a0a0: the OpenMetadata cross-source assessment (connector-fed, pushed by the
+                 native OM DPDPA DPIA app) shown ALONGSIDE the native CMS-RoPA assessment above. -->
+            <button type="button" class="dpia-tab" data-tab="om" onclick="switchDpiaTab('om')">OpenMetadata cross-source</button>
         </div>
 
         <!-- ══════════════════════════ RoPA COMPLIANCE PANEL (default) ═══════════
@@ -316,6 +319,47 @@
         <div id="panel-sections" class="dpia-panel space-y-4">
             <p class="text-sm text-[var(--muted-foreground)] px-1">The §3 11-section Board-submission structure, assembled from this tenant's live Record of Processing Activities — for formal DPB submission.</p>
             <div id="sections-wrap" class="space-y-4"></div>
+        </div>
+
+        <!-- ══════════════════════════ OPENMETADATA CROSS-SOURCE PANEL (vAIb-a0a0) ══
+             The DPIA that the native OpenMetadata DPDPA DPIA app computes across EVERY
+             connector-fed integration under this customer's OM Domain and PUSHES to the
+             CMS (Direction 1). This is a DIFFERENT, complementary view to the RoPA
+             Compliance panel above (which assesses this tenant's OWN CMS RoPA): the OM
+             view is cross-SOURCE (what the connectors actually see in the data stores),
+             the RoPA view is what the fiduciary has DECLARED. Shown side-by-side so the
+             DPO can reconcile declared vs discovered. Metadata/counts only — no PII. -->
+        <div id="panel-om" class="dpia-panel space-y-4">
+            <div id="om-empty" class="card py-10 text-center text-[var(--muted-foreground)]">
+                <p class="text-sm">No OpenMetadata cross-source assessment has been received yet.</p>
+                <p class="text-xs mt-2">The OpenMetadata DPDPA DPIA app pushes its combined, connector-fed verdict here on each scheduled run. Once it has run for this tenant, the cross-source assessment appears here alongside your RoPA-based DPIA.</p>
+            </div>
+            <div id="om-body" class="hidden space-y-5">
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                    <div class="chart-card">
+                        <p class="text-xs font-black text-[var(--muted-foreground)] uppercase tracking-widest mb-1">Cross-source status</p>
+                        <span id="om-status" class="status-pill text-sm"></span>
+                        <p class="text-xs text-[var(--muted-foreground)] mt-2">Combined worst-wins verdict across all integrations OpenMetadata catalogs for this customer.</p>
+                    </div>
+                    <div class="chart-card">
+                        <p class="text-xs font-black text-[var(--muted-foreground)] uppercase tracking-widest mb-1">Cross-source score</p>
+                        <p><span id="om-score" class="text-3xl font-black">0</span><span class="text-sm text-[var(--muted-foreground)]">/100</span></p>
+                    </div>
+                    <div class="chart-card">
+                        <p class="text-xs font-black text-[var(--muted-foreground)] uppercase tracking-widest mb-1">Assessed</p>
+                        <p class="text-xs text-[var(--muted-foreground)]">Domain <code id="om-domain" class="text-[var(--foreground)]"></code></p>
+                        <p class="text-xs text-[var(--muted-foreground)] mt-1">at <span id="om-assessed-at"></span></p>
+                    </div>
+                </div>
+                <div class="card p-4">
+                    <p class="text-xs font-black text-[var(--muted-foreground)] uppercase tracking-widest mb-2">Per-integration breakdown</p>
+                    <div id="om-per-integration" class="space-y-2"></div>
+                </div>
+                <div class="card p-4">
+                    <p class="text-xs font-black text-[var(--muted-foreground)] uppercase tracking-widest mb-2">Summary</p>
+                    <pre id="om-summary" class="text-xs whitespace-pre-wrap text-[var(--foreground)] leading-relaxed"></pre>
+                </div>
+            </div>
         </div>
     </div>
 </main>
@@ -428,6 +472,85 @@ function switchDpiaTab(name) {
     document.querySelectorAll('.dpia-panel').forEach(function(panel) {
         panel.classList.toggle('active', panel.id === 'panel-' + name);
     });
+}
+
+/* ── OpenMetadata cross-source assessment (vAIb-a0a0) ───────────────────────
+ * Direction 2 read-back: fetch this tenant's LATEST OM-pushed DPIA verdict and
+ * render it in the "OpenMetadata cross-source" panel, ALONGSIDE the native
+ * CMS-RoPA DPIA. AUTH is the SAME operator session (Bearer authToken) the rest
+ * of this console uses for /api/v1/admin/* — the CMS derives the tenant scope
+ * SERVER-SIDE (resolveTenantScope), NEVER from the body. A DPO for tenant A can
+ * never read tenant B's OM assessment. The verdict is metadata/counts only (no
+ * PII), and every stored value was HTML-escaped server-side; we ALSO render via
+ * textContent / esc() here (belt-and-braces against stored markup).
+ *
+ * Independent of the CMS RoPA report: the OM assessment is available whenever the
+ * OM app has pushed one, regardless of whether the DPO has generated the CMS DPIA. */
+async function loadOmAssessment() {
+    var authToken = localStorage.getItem('authToken');
+    var fiduciaryId = localStorage.getItem('fiduciary_id');
+    if (!authToken) return;   // no session -> leave the empty state (no error surfaced on this panel)
+    try {
+        var resp = await fetch('/api/v1/admin/omsync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'Authorization': 'Bearer ' + authToken },
+            credentials: 'same-origin',
+            body: JSON.stringify({ _func: 'get_om_assessment', fiduciary_id: fiduciaryId || undefined })
+        });
+        var data;
+        try { data = await resp.json(); } catch (_) { data = null; }
+        if (!resp.ok || !data || data.found !== true) return;   // nothing pushed yet -> keep empty state
+        renderOmAssessment(data);
+    } catch (e) {
+        /* network error on this secondary panel is non-fatal — the RoPA DPIA is unaffected */
+    }
+}
+
+function renderOmAssessment(a) {
+    var body = document.getElementById('om-body');
+    var empty = document.getElementById('om-empty');
+    if (!body || !empty) return;
+
+    var status = String(a.dpia_status || 'unknown');
+    var statusEl = document.getElementById('om-status');
+    statusEl.textContent = status.replace(/_/g, ' ');
+    statusEl.className = 'status-pill text-sm ' + (
+        status === 'compliant' ? 'status-compliant' :
+        status === 'attention' ? 'status-attention' :
+        status === 'non_compliant' ? 'status-non_compliant' : '');
+
+    document.getElementById('om-score').textContent = (a.dpia_score != null ? a.dpia_score : 0);
+    document.getElementById('om-domain').textContent = String(a.om_domain || '');
+    document.getElementById('om-assessed-at').textContent = String(a.assessed_at || '');
+    document.getElementById('om-summary').textContent = String(a.dpia_summary || '');
+
+    // Per-integration breakdown — counts/statuses only. Built via DOM (textContent) so no
+    // pushed string is ever interpreted as HTML.
+    var wrap = document.getElementById('om-per-integration');
+    wrap.innerHTML = '';
+    var per = a.per_integration;
+    if (Array.isArray(per) && per.length) {
+        per.forEach(function(e) {
+            var row = document.createElement('div');
+            row.className = 'flex items-center justify-between text-xs border-b border-[var(--border)] pb-1';
+            var left = document.createElement('span');
+            left.className = 'font-mono';
+            left.textContent = String((e && e.service) || '?') + ' (' + String((e && e.platform) || '?') + ')';
+            var right = document.createElement('span');
+            right.textContent = String((e && e.status) || '?') + ' · ' + String((e && e.score) || 0) + '/100 · '
+                + String((e && e.activities) || 0) + ' activities · ' + String((e && e.gaps) || 0) + ' gaps';
+            row.appendChild(left); row.appendChild(right);
+            wrap.appendChild(row);
+        });
+    } else {
+        var none = document.createElement('p');
+        none.className = 'text-xs text-[var(--muted-foreground)]';
+        none.textContent = 'No per-integration detail in this assessment.';
+        wrap.appendChild(none);
+    }
+
+    empty.classList.add('hidden');
+    body.classList.remove('hidden');
 }
 
 /* ── Dimension mapping — gap code -> DPDP dimension (drives radar + bar +
@@ -1238,6 +1361,9 @@ window.onload = function () {
     var USER_NAME = (/^Site Owner \(Wix\)\s+[0-9a-f-]{8,}/.test(_rawUser) || /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.test(_rawUser)) ? '' : _rawUser;
     document.getElementById('username').textContent = USER_NAME || 'DPO User';
     _restoreLastReport();   // if a prior report exists, show it instead of the empty state
+    // vAIb-a0a0: load the OM-pushed cross-source DPIA (independent of the CMS RoPA report) so
+    // the 'OpenMetadata cross-source' tab shows the connector-fed verdict whenever one exists.
+    loadOmAssessment();
 };
 </script>
 </body>

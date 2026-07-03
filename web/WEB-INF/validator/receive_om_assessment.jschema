@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Receive OM Assessment (Direction 1: OM -> CMS push)",
+  "type": "object",
+  "properties": {
+    "_func": { "type": "string" },
+    "fiduciary_id": { "type": "string" },
+    "om_domain": { "type": "string", "maxLength": 256 },
+    "dpia_status": { "type": "string", "enum": ["compliant", "attention", "non_compliant", "unknown"] },
+    "dpia_score": { "type": "number", "minimum": 0, "maximum": 100 },
+    "dpia_summary": { "type": "string" },
+    "dpia_gaps": { "type": ["object", "array", "string"] },
+    "per_integration": { "type": ["array", "string"] },
+    "assessed_at": { "type": "string" }
+  },
+  "required": ["_func", "om_domain", "dpia_status"]
+}

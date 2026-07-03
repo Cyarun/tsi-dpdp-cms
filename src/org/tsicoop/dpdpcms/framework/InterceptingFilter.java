@@ -58,7 +58,17 @@ public class InterceptingFilter implements Filter {
             "list_notifications",
             "mark_notification_read",
             "record_parent_consent",
-            "list_active_policies"
+            "list_active_policies",
+            // vAIb-a0a0 (OM<->CMS sync): the native OpenMetadata DPDPA DPIA app PUSHES its
+            // combined cross-source DPIA verdict here, server-to-server, with the tenant's own
+            // api-key. CLIENT-scope (api-key auth, tenant-bound) + WRITE scope (see below). The
+            // handler additionally derives the tenant from the key and 403s any body fiduciary_id
+            // mismatch, so a key can only ever write ITS OWN tenant's OM assessment.
+            "receive_om_assessment",
+            // vAIb-a0a0 (Direction 2 pull): the OM app reads this tenant's VALUE-FREE compliance
+            // counts (active RoPA / active policies / consent records / grievances) to mirror onto
+            // the OM catalog. api-key auth, tenant-bound, READ scope; counts only, never row data.
+            "get_cms_compliance_counts"
     ));
 
     private static final Set<String> ADMIN_NOAUTH_FUNCS = new HashSet<>(Arrays.asList(
@@ -85,6 +95,10 @@ public class InterceptingFilter implements Filter {
         CLIENT_FUNC_SCOPES.put("submit_grievance", SCOPE_WRITE);
         CLIENT_FUNC_SCOPES.put("mark_notification_read", SCOPE_WRITE);
         CLIENT_FUNC_SCOPES.put("erasure_request", SCOPE_WRITE);
+        // vAIb-a0a0 (OM->CMS push): the OM app writes the cross-source DPIA verdict -> WRITE scope.
+        CLIENT_FUNC_SCOPES.put("receive_om_assessment", SCOPE_WRITE);
+        // vAIb-a0a0 (Direction 2 pull): value-free compliance counts -> READ scope.
+        CLIENT_FUNC_SCOPES.put("get_cms_compliance_counts", SCOPE_READ);
 
         // --- READ SCOPE ---
         CLIENT_FUNC_SCOPES.put("get_active_consent", SCOPE_READ);
