@@ -208,29 +208,39 @@
     -->
   </div>
 
-  <!-- Metric Widgets Section -->
-  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 mb-8">
-    <div id="metric-fiduciaries" class="card p-5 border-l-4 border-green-500 hover:shadow-md transition duration-200 cursor-pointer">
+  <!-- Metric Widgets Section — compliance-posture pane (vAIb-zv2g). Each card links to its lens. -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-8">
+    <div id="metric-dpia" onclick="location.href='dpia.html'" class="card p-5 border-l-4 border-slate-700 hover:shadow-md transition duration-200 cursor-pointer">
+      <p class="text-sm font-medium text-gray-500">DPIA Status</p>
+      <p class="text-3xl font-bold text-gray-900 mt-1" id="metric-dpia-value">--</p>
+      <p class="text-xs text-gray-400 mt-2" id="metric-dpia-sub">Data Protection Impact Assessment.</p>
+    </div>
+    <div id="metric-coverage" onclick="location.href='coverage.html'" class="card p-5 border-l-4 border-orange-500 hover:shadow-md transition duration-200 cursor-pointer">
+      <p class="text-sm font-medium text-gray-500">Coverage Gaps</p>
+      <p class="text-3xl font-bold text-gray-900 mt-1" id="metric-coverage-value">--</p>
+      <p class="text-xs text-gray-400 mt-2">Activities without a consent basis.</p>
+    </div>
+    <div id="metric-fiduciaries" onclick="location.href='principals.html'" class="card p-5 border-l-4 border-green-500 hover:shadow-md transition duration-200 cursor-pointer">
       <p class="text-sm font-medium text-gray-500">Data Principals</p>
       <p class="text-3xl font-bold text-gray-900 mt-1" id="metric-fiduciaries-value">--</p>
       <p class="text-xs text-gray-400 mt-2">People whose consent you track.</p>
     </div>
-    <div id="metric-processors" class="card p-5 border-l-4 border-indigo-500 hover:shadow-md transition duration-200 cursor-pointer">
+    <div id="metric-processors" onclick="location.href='policies.html'" class="card p-5 border-l-4 border-indigo-500 hover:shadow-md transition duration-200 cursor-pointer">
       <p class="text-sm font-medium text-gray-500">Active Policies</p>
       <p class="text-3xl font-bold text-gray-900 mt-1" id="metric-processors-value">--</p>
       <p class="text-xs text-gray-400 mt-2">Processing activities governed.</p>
     </div>
-    <div id="metric-ropa" class="card p-5 border-l-4 border-amber-500 hover:shadow-md transition duration-200 cursor-pointer">
+    <div id="metric-ropa" onclick="location.href='ropa.html'" class="card p-5 border-l-4 border-amber-500 hover:shadow-md transition duration-200 cursor-pointer">
       <p class="text-sm font-medium text-gray-500">RoPA Entries</p>
       <p class="text-3xl font-bold text-gray-900 mt-1" id="metric-ropa-value">--</p>
       <p class="text-xs text-gray-400 mt-2">Records of Processing Activities formulated.</p>
     </div>
-    <div id="metric-consents" class="card p-5 border-l-4 border-red-500 hover:shadow-md transition duration-200 cursor-pointer">
+    <div id="metric-consents" onclick="location.href='principals.html'" class="card p-5 border-l-4 border-red-500 hover:shadow-md transition duration-200 cursor-pointer">
       <p class="text-sm font-medium text-gray-500">Consents Recorded</p>
       <p class="text-3xl font-bold text-gray-900 mt-1" id="metric-consents-value">--</p>
       <p class="text-xs text-gray-400 mt-2">Consent records in the ledger.</p>
     </div>
-    <div id="metric-purge" class="card p-5 border-l-4 border-red-500 hover:shadow-md transition duration-200 cursor-pointer">
+    <div id="metric-purge" onclick="location.href='grievances.html'" class="card p-5 border-l-4 border-red-500 hover:shadow-md transition duration-200 cursor-pointer">
       <p class="text-sm font-medium text-gray-500">Pending Actions</p>
       <p class="text-3xl font-bold text-gray-900 mt-1" id="metric-purge-value">--</p>
       <p class="text-xs text-gray-400 mt-2">Open grievances + erasure requests.</p>
@@ -410,6 +420,16 @@
                     document.getElementById('metric-ropa-value').textContent = (Number(m.ropa_active ?? 0) + Number(m.ropa_draft ?? 0));
                     document.getElementById('metric-consents-value').textContent = m.total_consents ?? '0';
                     document.getElementById('metric-purge-value').textContent = (Number(m.grievances_pending ?? 0) + Number(m.purge_pending ?? 0));
+                    // vAIb-zv2g posture cards: DPIA status (color-coded) + coverage gaps.
+                    const dpiaStatus = (m.dpia_status ?? 'unknown');
+                    const dpiaEl = document.getElementById('metric-dpia-value');
+                    const dpiaCard = document.getElementById('metric-dpia');
+                    const label = { compliant: 'Compliant', attention: 'Attention', non_compliant: 'Non-Compliant', unknown: '--' }[dpiaStatus] || dpiaStatus;
+                    dpiaEl.textContent = label;
+                    const color = { compliant: 'border-green-500', attention: 'border-amber-500', non_compliant: 'border-red-500', unknown: 'border-slate-700' }[dpiaStatus] || 'border-slate-700';
+                    dpiaCard.className = dpiaCard.className.replace(/border-(green|amber|red|slate)-\d+/, color);
+                    document.getElementById('metric-dpia-sub').textContent = (Number(m.dpia_gaps ?? 0)) + ' gap(s) identified.';
+                    document.getElementById('metric-coverage-value').textContent = m.coverage_gap ?? '0';
                 }
             } catch (error) { console.error("Metrics load failed", error); }
         }

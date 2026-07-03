@@ -4,17 +4,22 @@ import org.tsicoop.dpdpcms.framework.Action;
 import org.tsicoop.dpdpcms.framework.InputProcessor;
 import org.tsicoop.dpdpcms.framework.OutputProcessor;
 import org.tsicoop.dpdpcms.framework.PoolDB;
+import org.tsicoop.dpdpcms.service.v1.dpia.DpiaEngine;
+import org.tsicoop.dpdpcms.service.v1.dpia.FiduciaryContext;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
+import org.json.simple.parser.JSONParser;
 import org.tsicoop.dpdpcms.util.Constants;
 
 import java.sql.*;
 import java.time.ZonedDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -198,6 +203,24 @@ public class AdminDash implements Action {
             // the DPO having to remember to visit the coverage page). Fail-soft: a missing
             // coverage_findings table/row defaults the count to 0 (no alert), never a 500.
             metrics.put("coverage_gap", getLatestGapCount(conn, pool, fiduciaryId));
+
+            // 8. DPIA STATUS (vAIb-zv2g): reuse the native DPIA engine exactly as Dpia.java does —
+            // read this tenant's ACTIVE RoPA (same query shape as
+            // Dpia.listActiveRopaWithConsentCount), derive the PII-free FiduciaryContext, and call
+            // DpiaEngine.buildDpiaReport for the SAME server-derived fiduciaryId this method
+            // already resolved (never a body value, never cross-tenant). FAIL-SOFT by design,
+            // mirroring the coverage_gap read above: any engine/query error must NOT blank the
+            // rest of the dashboard (that was the exact vAIb-86uz/dpo_user_id bug just fixed) —
+            // it only omits dpia_status/dpia_gaps ("unknown"/0) while every other card still loads.
+            try {
+                JSONObject dpia = new Dpia().computeSummaryForFiduciary(fiduciaryId);
+                metrics.put("dpia_status", dpia.get("dpia_status"));
+                metrics.put("dpia_gaps", dpia.get("dpia_gaps"));
+            } catch (Exception e) {
+                System.err.println("[DPO METRICS] dpia_status computation failed (non-fatal): " + e.getMessage());
+                metrics.put("dpia_status", "unknown");
+                metrics.put("dpia_gaps", 0);
+            }
 
         } finally {
             if (pool != null && conn != null) pool.cleanup(null, null, conn);

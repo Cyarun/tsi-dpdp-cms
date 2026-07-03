@@ -98,6 +98,38 @@ public class Dpia implements Action {
         OutputProcessor.send(res, HttpServletResponse.SC_OK, out);
     }
 
+    /**
+     * vAIb-zv2g — a compact DPIA summary ({@code dpia_status}, {@code dpia_gaps}) for a SERVER-DERIVED
+     * fiduciary, reusing the exact same engine pipeline as {@code generate_report} (RoPA read ->
+     * adapt -> FiduciaryContext -> {@link DpiaEngine#buildDpiaReport}). The AdminDash overview cards
+     * call this. Callers MUST pass an already-tenant-resolved fiduciaryId (from resolveTenantScope) —
+     * this method does NO scoping of its own and NEVER accepts a body value. Returns just the two
+     * headline fields the posture card needs (not the full 11-section report).
+     */
+    public JSONObject computeSummaryForFiduciary(UUID fiduciaryId) throws SQLException {
+        JSONArray ropaRows = listActiveRopaWithConsentCount(fiduciaryId);
+        List<Map<String, Object>> activities = new ArrayList<>();
+        for (Object o : ropaRows) {
+            if (o instanceof JSONObject) activities.add(adaptRow((JSONObject) o));
+        }
+        FiduciaryContext ctx = deriveFiduciaryContext(fiduciaryId, ropaRows);
+        Map<String, Object> report = DpiaEngine.buildDpiaReport(activities, ctx, Instant.now().toString(), null);
+        Object overall = report.get("overall");
+        JSONObject out = new JSONObject();
+        String status = "unknown";
+        int gaps = 0;
+        if (overall instanceof Map) {
+            Object s = ((Map<?, ?>) overall).get("overall_compliance_status");
+            if (s == null) s = ((Map<?, ?>) overall).get("compliance_status");
+            if (s != null) status = String.valueOf(s);
+            Object g = ((Map<?, ?>) overall).get("total_gaps");
+            if (g instanceof Number) gaps = ((Number) g).intValue();
+        }
+        out.put("dpia_status", status);
+        out.put("dpia_gaps", gaps);
+        return out;
+    }
+
     // --- RoPA read (tenant-scoped, active only) ---
 
     /**

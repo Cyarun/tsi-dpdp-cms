@@ -104,6 +104,19 @@
                 <span class="text-[11px] font-bold text-orange-600" id="metric-grievances-pending">(-- Pending)</span>
             </div>
         </div>
+
+        <!-- Widget 6: DPIA Status (vAIb-zv2g) — links to the DPIA lens -->
+        <div class="card p-4 border-t-4 shadow-sm cursor-pointer" onclick="location.href='dpia.html'">
+            <p class="text-[10px] font-black text-[var(--muted-foreground)] uppercase tracking-widest">DPIA Status</p>
+            <p class="text-2xl font-black text-[var(--foreground)] mt-2" id="metric-dpia-status">--</p>
+            <p class="text-[11px] font-bold text-[var(--muted-foreground)]" id="metric-dpia-gaps">-- gap(s)</p>
+        </div>
+
+        <!-- Widget 7: Coverage Gaps (vAIb-zv2g) — links to the coverage lens -->
+        <div class="card p-4 border-t-4 shadow-sm cursor-pointer" onclick="location.href='coverage.html'">
+            <p class="text-[10px] font-black text-[var(--muted-foreground)] uppercase tracking-widest"># Coverage Gaps</p>
+            <p class="text-3xl font-black text-[var(--foreground)] mt-2" id="metric-coverage-gap">--</p>
+        </div>
     </div>
 
     <!-- vAIb-ermw: COVERAGE ALERT — proactive §6 banner shown ONLY when the latest CES
@@ -227,6 +240,13 @@
                 // Consolidated Grievance Card
                 document.getElementById('metric-grievances-total').textContent = m.grievances_total || 0;
                 document.getElementById('metric-grievances-pending').textContent = `(${m.grievances_pending || 0} Pending)`;
+
+                // vAIb-zv2g posture widgets: DPIA status + coverage gaps.
+                const _dpiaStatus = m.dpia_status || 'unknown';
+                document.getElementById('metric-dpia-status').textContent =
+                    ({ compliant: 'Compliant', attention: 'Attention', non_compliant: 'Non-Compliant', unknown: '--' }[_dpiaStatus] || _dpiaStatus);
+                document.getElementById('metric-dpia-gaps').textContent = (Number(m.dpia_gaps || 0)) + ' gap(s)';
+                document.getElementById('metric-coverage-gap').textContent = m.coverage_gap || 0;
 
                 // vAIb-ermw: proactive §6 coverage alert — reveal ONLY when the latest CES
                 // scan found a gap (discovered activities with no active RoPA entry).
