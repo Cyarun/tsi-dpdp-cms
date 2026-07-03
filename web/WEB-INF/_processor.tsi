@@ -18,6 +18,7 @@
 /api/v1/discoverbaseline=org.tsicoop.dpdpcms.service.v1.DiscoveryBaseline
 /api/v1/datapointcatalog=org.tsicoop.dpdpcms.service.v1.DataPointCatalog
 /api/v1/coverageauditresult=org.tsicoop.dpdpcms.service.v1.CoverageAuditResult
+/api/v1/dpia=org.tsicoop.dpdpcms.service.v1.Dpia
 
 
 

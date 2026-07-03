@@ -141,13 +141,35 @@
             <version>3.5.2</version> <!-- Use the latest stable version -->
         </dependency>
 
+        <!-- vAIb-86uz: JUnit 5 for the DpiaEngine parity test (proves the copied engine is
+             byte-identical to the Python golden). Test scope only — not shipped in the WAR. -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>5.10.2</version>
+            <scope>test</scope>
+        </dependency>
+
     </dependencies>
 
     <build>
         <finalName>${project.artifactId}</finalName>
         <sourceDirectory>src</sourceDirectory>
+        <!-- vAIb-86uz: DpiaEngine parity test lives under test/ (mirrors the OM fork layout). -->
+        <testSourceDirectory>test</testSourceDirectory>
+        <testResources>
+            <testResource>
+                <directory>test/resources</directory>
+            </testResource>
+        </testResources>
 
         <plugins>
+            <!-- vAIb-86uz: run the DpiaEngine parity test as part of `mvn clean package`. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.2.5</version>
+            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>

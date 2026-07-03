@@ -326,19 +326,20 @@
 <script>
 /* ── DPIA Report UI (vAIb-ry6i) ────────────────────────────────────────────
  *
- * AUTH: POST /v1/dpia/report — OWNER-or-DPO gated, same seam as coverage.html
- * (/v1/coverage/audit): the signed Wix instance travels as the ?instance= query
- * param the console proxy forwards (console.py GET /v1/console/cms/{path}), and
- * on the DPO-member surface as the X-Fabric-Dpo countersign header. We never
- * trust the localStorage bearer token for this call — the DPIA reveals the whole
- * tenant processing posture, so it is a privileged owner/DPO-only read gated
- * server-side on the verified signed instance / member countersign.
+ * AUTH (vAIb-86uz — NATIVE CMS): POST /api/v1/admin/dpia {_func:'generate_report'}
+ * — the SAME operator-session seam ropa.html/coverage.html use for /api/v1/admin/*
+ * (Authorization: Bearer <authToken>). The forked multi-tenant CMS derives the tenant
+ * scope SERVER-SIDE from the signed operator JWT (InputProcessor.resolveTenantScope),
+ * NEVER from the body fiduciary_id — a DPO for tenant A can never see tenant B's DPIA.
+ * The DPIA reveals the whole tenant processing posture, so it is a privileged DPO-only
+ * read gated on the operator session + the CMS's own fiduciary_id isolation.
  *
- * PATH: fabricBase() derives the /v1 root the SAME way coverage.html does
- * (served under /.../console/cms/dpo/dpia.html -> base = prefix before
- * /console/cms). NO PII: the report is activity metadata + counts + citations.
+ * NATIVE (strangler-fig slice 1): the report is now computed ENTIRELY inside the CMS on
+ * this tenant's OWN RoPA data (Dpia.java + the in-process DpiaEngine, a verbatim
+ * parity-tested port of core/dpia_report.py) — NO call to fabric, NO OpenMetadata, NO
+ * network egress. NO PII: the report is activity metadata + counts + citations.
  *
- * DASHBOARD (vAIb-dpia-dash / vAIb-7bu1): the engine (core/dpia_report.py)
+ * DASHBOARD (vAIb-dpia-dash / vAIb-7bu1): the engine (DpiaEngine.java == core/dpia_report.py)
  * already emits every number this page needs — this script only RENDERS it.
  * RoPA-CENTRIC (vAIb-7bu1): the owner/DPO is a business person who thinks in
  * PROCESSES, not DPDP §-sections — "which of my processes are broken and how
@@ -1017,9 +1018,16 @@ async function runDpia() {
     errBox.classList.add('hidden');
     errBox.querySelector('span').textContent = '';
 
-    var inst = signedInstance();
-    if (!inst && !dpoContextHeader()) {
-        errBox.querySelector('span').textContent = 'Missing signed instance — this page must be opened through the Wix owner dashboard or the DPO console. If you see this in production, the console proxy is not forwarding the ?instance= param correctly.';
+    // vAIb-86uz — NATIVE CMS DPIA (strangler-fig slice 1). The report is now computed
+    // ENTIRELY inside the forked multi-tenant CMS on this tenant's OWN RoPA data (no fabric,
+    // no OpenMetadata). AUTH is the operator session (Bearer authToken), the SAME seam
+    // ropa.html/coverage.html use for /api/v1/admin/* — the CMS derives the tenant scope
+    // server-side from the signed operator JWT (resolveTenantScope), NEVER from the body
+    // fiduciary_id. A DPO for tenant A can never see tenant B's DPIA.
+    var authToken = localStorage.getItem('authToken');
+    var fiduciaryId = localStorage.getItem('fiduciary_id');
+    if (!authToken) {
+        errBox.querySelector('span').textContent = 'Missing operator session — sign in to the DPO console. If you see this in production, the console did not persist the operator token.';
         errBox.classList.remove('hidden');
         return;
     }
@@ -1029,16 +1037,18 @@ async function runDpia() {
     btn.innerHTML = '<span class="spinner"></span> Generating…';
 
     try {
-        var hdrs = { 'Content-Type': 'application/json', 'Accept': 'application/json' };
-        var dpoHdr = dpoContextHeader();
-        if (dpoHdr) hdrs['X-Fabric-Dpo'] = dpoHdr;
+        var hdrs = { 'Content-Type': 'application/json', 'Accept': 'application/json', 'Authorization': 'Bearer ' + authToken };
         var period = document.getElementById('reporting-period').value || '';
 
-        var resp = await fetch(fabricBase() + '/dpia/report', {
+        // NATIVE CMS endpoint — same /api/v1/admin/* console path ropa.html calls, with the
+        // {_func} envelope. The tenant is server-derived; fiduciary_id is a hint only (the
+        // platform-admin path uses it; a tenant operator is hard-scoped to its own fid and any
+        // mismatch is a server-side 403).
+        var resp = await fetch('/api/v1/admin/dpia', {
             method: 'POST',
             headers: hdrs,
             credentials: 'same-origin',
-            body: JSON.stringify({ instance: inst || '', reporting_period: period })
+            body: JSON.stringify({ _func: 'generate_report', fiduciary_id: fiduciaryId || undefined, reporting_period: period })
         });
 
         var data;
