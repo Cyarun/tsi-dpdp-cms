@@ -989,6 +989,19 @@ public class Operator implements Action {
         String passphrase = (String) input.get("passphrase");
         String newPassword = (String) input.get("new_password");
 
+        // vAIb-83bu (security): THROTTLE the recovery guess. This is an UNAUTHENTICATED path
+        // (the recovery phrase IS the credential) whose email lookup is CROSS-TENANT unscoped,
+        // so an un-throttled guess is a realistic account-takeover of ANY operator (incl a
+        // platform admin). Reuse the SAME LoginRateLimiter as handleLogin (5 attempts / 15 min),
+        // keyed on client-IP + email so neither a single IP nor a single targeted email can be
+        // brute-forced. 429 on exceed. No recordSuccess() — every attempt counts (defence: a
+        // valid reset should be rare; we never want to reset the counter on a lucky hit).
+        String rlKey = LoginRateLimiter.getClientIp(req) + "|recovery|" + (email == null ? "" : email);
+        if (!LoginRateLimiter.isAllowed(rlKey)) {
+            OutputProcessor.errorResponse(res, 429, "Too Many Requests", "Too many recovery attempts. Please try again later.", req.getRequestURI());
+            return;
+        }
+
         if (!PASSWORD_PATTERN.matcher(newPassword).matches()) {
             OutputProcessor.errorResponse(res, 400, "Bad Request", "Password complexity failed.", req.getRequestURI());
             return;
@@ -1091,6 +1104,17 @@ public class Operator implements Action {
     private void handleVerifyRecoveryKey(JSONObject input, HttpServletResponse res, HttpServletRequest req) throws SQLException {
         String email = (String) input.get("email");
         String passphrase = (String) input.get("passphrase");
+
+        // vAIb-83bu (security): THROTTLE the verify oracle. verify_recovery_key is a FREE
+        // confirmation oracle for a guessed phrase (200 = "this phrase is correct"), so it must
+        // be rate-limited exactly like the reset path. SAME LoginRateLimiter (5 / 15 min), same
+        // IP+email key (shared bucket with the reset path — a mix of verify+reset guesses is
+        // bounded together). 429 on exceed.
+        String rlKey = LoginRateLimiter.getClientIp(req) + "|recovery|" + (email == null ? "" : email);
+        if (!LoginRateLimiter.isAllowed(rlKey)) {
+            OutputProcessor.errorResponse(res, 429, "Too Many Requests", "Too many recovery attempts. Please try again later.", req.getRequestURI());
+            return;
+        }
 
         PoolDB pool = new PoolDB();
         Connection conn = null;

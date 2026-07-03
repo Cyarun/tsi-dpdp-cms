@@ -39,15 +39,20 @@
  *         cannot forge a Wix session by clearing the marker — clearing it only reveals the
  *         corroborating iframe test below, which still holds for a real embed.
  *   OR
- *     (b) the page is FRAMED (window.self !== window.top) AND the operator is the Wix owner
- *         (username matches the "Site Owner (Wix) <uuid>" pattern the launch mints). The
- *         Wix panel ALWAYS frames the console; a direct login is top-level. This corroborates
- *         (a) and covers a session whose marker was dropped, so the marker can only ever
- *         HIDE controls, never be removed to EXPOSE them in a genuine embed.
+ *     (b) the page is FRAMED (window.self !== window.top) AND this is a TENANT operator
+ *         (concrete, non-platform fiduciary_id) reached via the Wix launch. The Wix panel
+ *         ALWAYS frames the console AND the launch always binds a concrete tenant fiduciary; a
+ *         direct standalone login is top-level (not framed). This is the REAL corroboration:
+ *         it holds for EVERY genuine embedded session (owner ADMIN or member DPO), so a client
+ *         who deletes the wix_embedded marker in devtools (without reload) STILL resolves as
+ *         embedded and account controls STAY HIDDEN in the Wix frame. (vAIb-83bu security fix:
+ *         the earlier fallback keyed on the "Site Owner (Wix) <uuid>" username pattern, but the
+ *         launch seeds username = the BUSINESS/DPO name, never that placeholder — so the old
+ *         fallback was dead and a dropped marker fell through to EXPOSE. Now it corroborates.)
  *   The two signals are combined with OR precisely so neither can be individually spoofed to
- *   EXPOSE account controls inside the Wix panel. (Pure iframe-detection alone is spoofable
- *   and is therefore never the SOLE positive signal for exposing anything — it only ever
- *   pushes toward HIDING.)
+ *   EXPOSE account controls inside the Wix panel. Pure iframe-detection is only ever used to
+ *   push TOWARD hiding (never as a sole signal to expose anything). The username regex is kept
+ *   as an extra positive signal but is NO LONGER load-bearing.
  */
 (function () {
   var PLATFORM_FID = '00000000-0000-0000-0000-000000000000';
@@ -73,10 +78,15 @@
     return WIX_OWNER_RE.test(u);
   }
 
-  // FAIL-SAFE-TOWARD-HIDING context detector (see header). Authoritative server marker OR
-  // (framed AND Wix-owner) => Wix-embedded => hide account controls.
+  // FAIL-SAFE-TOWARD-HIDING context detector (see header). Wix-embedded if:
+  //   (a) the AUTHORITATIVE server-set marker is present, OR
+  //   (b) the page is FRAMED AND this is a tenant operator (concrete fiduciary) — the REAL
+  //       corroboration that holds for every genuine embed even if the marker was dropped, OR
+  //   (c) the page is FRAMED AND the username is the "Site Owner (Wix) <uuid>" placeholder
+  //       (extra belt-and-suspenders signal; not load-bearing since the launch rarely seeds it).
   function isWixEmbedded() {
     if ((localStorage.getItem('wix_embedded') || '') === '1') return true;
+    if (isFramed() && isTenantScoped()) return true;
     if (isFramed() && isWixOwnerUser()) return true;
     return false;
   }
