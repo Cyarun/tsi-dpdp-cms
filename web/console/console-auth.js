@@ -86,13 +86,14 @@
       }));
     } else {
       bar.appendChild(mkBtn('Log in', function () {
-        // Clear the stale session then send to the login page (relative to the console root).
+        // Clear the stale session then send to the login page. The login (index.html) lives at
+        // the CONSOLE MOUNT ROOT (before /console/), e.g. /vaib/cms/index.html — NOT inside
+        // /console/. Deriving it wrong sent users to a 404 (same base-path class of bug).
         try { localStorage.clear(); } catch (e) {}
-        // Pages live at .../console/<area>/<page>.html; the operator login is at the root.
         var p = location.pathname;
-        var i = p.lastIndexOf('/console/');
-        var base = i >= 0 ? p.slice(0, i + '/console/'.length) : '../';
-        window.location.href = base + 'index.html';
+        var i = p.indexOf('/console/');
+        var base = i > 0 ? p.slice(0, i) : '';
+        window.location.href = base + '/index.html';
       }));
     }
     (document.body || document.documentElement).appendChild(bar);
@@ -117,9 +118,19 @@
     return false;
   }
 
+  // vAIb-zv2g: clear any stale banner once data loads successfully. A banner shown on the
+  // first paint (before the token/fetch resolved) must not linger when the session is in fact
+  // valid — call this after a successful data load.
+  function clearBanner() {
+    _shown = false;
+    var bar = document.querySelector('[role="alert"]');
+    if (bar && bar.parentNode) { bar.parentNode.removeChild(bar); }
+  }
+
   window.ConsoleAuth = {
     isAuthFailure: isAuthFailure,
     showSessionExpired: showSessionExpired,
+    clearBanner: clearBanner,
     requireToken: requireToken,
     guard: guard
   };

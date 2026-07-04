@@ -421,6 +421,8 @@
                 // silently at "--". Show the "Session expired" banner + re-login path instead.
                 if (window.ConsoleAuth && window.ConsoleAuth.guard(response, data)) return;
                 if (data.success && data.metrics) {
+                    // vAIb-zv2g: a valid load clears any stale first-paint "not signed in" banner.
+                    if (window.ConsoleAuth && window.ConsoleAuth.clearBanner) window.ConsoleAuth.clearBanner();
                     const m = data.metrics;
                     // tenant-scoped: Data Principals (people whose consent is tracked),
                     // Active Policies (apps/processing governed), Pending Purges.
