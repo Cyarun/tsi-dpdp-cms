@@ -5,34 +5,18 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>DPDPA.center – Consent Coverage Audit</title>
-  <!-- Tailwind CDN (same as all DPO console pages) -->
+  <!-- Tailwind CDN (same as all console pages) -->
   <script src="https://cdn.tailwindcss.com"></script>
+  <!-- vAIb-7b9f: shared console design system (tokens + components). This page was
+       the visual outlier — it used to paint a navy glassmorphism tint (body::before +
+       translucent glass cards) that made its cards read GREY and diverge from the clean
+       white-card dashboard. That glass block is removed; the page now renders the same
+       canonical white cards + sidebar/nav/modal as every other console page. The stat
+       cards keep their coloured progress bars (green=covered / blue=derived / red=orphan)
+       because those carry meaning. -->
+  <link rel="stylesheet" href="../console.css">
   <style>
-    /* DPDPA.center DPO console — fixed navy brand (NOT host Wix theme).
-       Only structural rules that Tailwind utilities can't express inline.
-       ponytail: minimal <style> block — all visual design is Tailwind utilities on elements */
-    :root {
-      --navy-900: #101d4a; --navy-800: #182a63;
-      --red-500:  #e3263b; --red-600:  #c81f31;
-    }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif; }
-
-    /* Sidebar slide-in (mobile) */
-    @media (max-width: 1023px) {
-      #sidebar { transform: translateX(-100%); }
-      #sidebar.open { transform: translateX(0); }
-    }
-    @media (min-width: 1024px) { body { padding-left: 250px; } }
-
-    /* Active nav indicator */
-    .nav-link.active {
-      background-color: #e8ecf5;
-      color: var(--navy-900);
-      font-weight: 600;
-      border-left: 3px solid var(--navy-900);
-    }
-
-    /* Spinner for run-button loading state */
+    /* Page-local: only the run-button loading spinner (not a design-system component). */
     .spinner {
       display: inline-block; width: 14px; height: 14px;
       border: 2px solid rgba(255,255,255,.3);
@@ -40,47 +24,10 @@
       animation: spin .65s linear infinite; vertical-align: middle;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
-  
-
-
-
-/* vAIb-mr3u — BRANDED tweakcn glass (gaussian blur + brand tint, blended into host):
-   gaussian blur softens the host photo; a translucent NAVY (tweakcn --secondary) tint + a
-   faint red (--primary) top sheen give OUR brand + real glass character; host shows through
-   softly (blended, not an opaque panel). Cards are tinted translucent glass, text legible. */
-:root{
-  --gl-tint:   oklch(0.3303 0.0753 267.1046 / 0.28);  /* tweakcn navy, low alpha = brand glass */
-  --gl-sheen:  oklch(0.5882 0.2309 28.2936 / 0.10);   /* tweakcn red, faint top sheen */
-  --gl-solid:  oklch(0.3303 0.0753 267.1046 / 0.90);  /* @supports-off fallback */
-  --gl-card:   oklch(1 0 0 / 0.55);                    /* translucent glass card (not flat white) */
-  --gl-card-strong: oklch(1 0 0 / 0.72);
-}
-body::before{
-  content:""; position:fixed; inset:0; z-index:-1;
-  background:
-    radial-gradient(120% 80% at 50% -10%, var(--gl-sheen), transparent 60%),
-    var(--gl-tint);
-  -webkit-backdrop-filter:blur(22px) saturate(150%);
-  backdrop-filter:blur(22px) saturate(150%);
-}
-@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
-  body::before{ background:var(--gl-solid); }
-}
-body{ background-color:transparent; }
-/* tinted glass cards (translucent, brand-blended) with their OWN blur so text stays crisp */
-[class*="bg-[var(--card)]"], .card:not(.modal-content), [class*="bg-white"]:not(.modal-content){
-  background-color:var(--gl-card-strong) !important;
-  -webkit-backdrop-filter:blur(8px); backdrop-filter:blur(8px);
-  border:1px solid oklch(1 0 0 / 0.35) !important;
-}
-
-/* POPUP CARE (user): modals/overlays are SOLID over the glass — never see-through. */
-.modal-content{ background-color:#ffffff !important; -webkit-backdrop-filter:none !important; backdrop-filter:none !important; }
-.modal-overlay{ background:rgba(15,23,42,0.78) !important; z-index:1000; }
-</style>
+  </style>
 </head>
 
-<body class="bg-slate-50 text-slate-800 min-h-screen">
+<body class="text-slate-800 min-h-screen">
 
 <!-- Mobile header -->
 <div class="lg:hidden flex items-center justify-between p-4 bg-white border-b border-slate-200 sticky top-0 z-30">

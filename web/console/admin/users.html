@@ -6,25 +6,9 @@
   <title>DPDPA.center - CMS User Management</title>
   <!-- Load Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <style>
-        /* W2 LANE A — tweakcn brand adoption (bead vAIb-4ypo.1).
-           Hardcoded :root literals removed; injected canonical tokens win.
-           Navy = chrome/structure (--tsi-primary→--secondary),
-           Red = action/accent (--tsi-accent→--primary). */
-        body { background-color: var(--background); font-family: var(--font-sans); color: var(--ink); margin: 0; padding: 0; min-height: 100vh; }
-        h1, h2, h3, h4 { color: var(--tsi-primary); }
-        .btn-brand { background-color: var(--tsi-accent); color: var(--primary-foreground); transition: background-color .18s ease; }
-        .btn-brand:hover { background-color: var(--red-600); }
-        .sidebar { width: 250px; background-color: var(--muted); box-shadow: 2px 0 5px rgba(0, 0, 0, 0.05); padding-top: 20px; position: fixed; height: 100vh; overflow-y: auto; z-index: 50; transition: transform 0.3s ease-in-out; transform: translateX(-250px); border-right: 1px solid var(--border); }
-        @media (min-width: 1024px) { .sidebar { transform: translateX(0); } body { padding-left: 250px; } }
-        .nav-link { display: flex; align-items: center; padding: 10px 20px; margin: 5px 0; border-radius: 6px; color: var(--muted-foreground); transition: all 0.2s ease; }
-        .nav-link:hover, .nav-link.active { background-color: color-mix(in oklch, var(--tsi-accent) 10%, transparent); color: var(--tsi-accent); font-weight: 600; }
-        .card { background-color: var(--card); border-radius: var(--radius); box-shadow: 0 1px 3px rgba(0,0,0,0.1); padding: 24px; border: 1px solid var(--border); }
-        .modal-overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.7); display: none; justify-content: center; align-items: center; z-index: 1000; }
-        .modal-content { background: var(--card); padding: 32px; border-radius: var(--radius); max-width: 500px; width: 95%; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); }
-        .primary-bg { background-color: var(--tsi-primary); }
-        .primary-text { color: var(--tsi-primary); }
-  </style>
+  <!-- vAIb-7b9f: shared console design system (tokens + components). Replaces the
+       per-page inline card/sidebar/nav/modal/table styles that used to drift. -->
+  <link rel="stylesheet" href="../console.css">
 </head>
 
 <body class="flex lg:p-0">

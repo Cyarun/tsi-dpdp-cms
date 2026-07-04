@@ -25,22 +25,19 @@
       password (password_hash / checkPassword). Same posture as the /index.html login.
     -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- vAIb-7b9f: shared console design system (tokens + components). The login page
+         keeps a small page-local block below for its centered-card layout + the button
+         shine animation (genuinely login-specific, not design-system components). -->
+    <link rel="stylesheet" href="../console.css">
     <style>
-        /* DPDPA.support FIXED BRAND (vAIb-xhke) — TSI platform staff console; a staff
-           tool, NOT a tenant site, so it keeps the fixed DPDPA brand (navy/red), never
-           the host Wix theme. Tokens: https://dpdpa.support/css/site.css.
-           W2 re-skin (w2-lane-c): page-local hex literals removed — canonical tokens
-           injected by console.py (tweakcn-theme.css alias layer). Per ADOPTION.md §5. */
-
+        /* Login is a standalone centered card — override the shared sidebar layout
+           (no sidebar here) so the card sits dead-center. */
         body {
-            background-color: var(--background);
-            font-family: var(--font-sans);
-            color: var(--foreground);
             display: flex;
             justify-content: center;
             align-items: center;
             min-height: 100vh;
-            margin: 0;
+            padding-left: 0;
         }
 
         /* The primary CTA is the brand RED (dpdpa.support buttons rule); hover red-600. */
