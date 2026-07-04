@@ -104,10 +104,17 @@
 
 <script>
         document.addEventListener('DOMContentLoaded', () => {
-            // Leading-slash relative form so fabric's HTML rewrite re-bases it onto
-            // the scoped /v1/console/cms/api mount (like the admin pages). A hardcoded
-            // http://localhost:8080 URL is unreachable from the browser/dashboard iframe.
-            const API_SETUP_URL = '/api/v1/bootstrap/setup';
+            // vAIb-zv2g fix: this page is also served directly by the CMS under a mount
+            // prefix (e.g. /vaib/cms/console/setup/init.html) with NO server-side rewrite
+            // in that path — a root-absolute '/api/...' resolves to the wrong host there.
+            // Derive the base from the URL (everything before '/console/') so the API path
+            // is correct wherever the console is mounted.
+            const CONSOLE_BASE = (function () {
+                const p = window.location.pathname || '';
+                const i = p.indexOf('/console/');
+                return i > 0 ? p.slice(0, i) : '';
+            })();
+            const API_SETUP_URL = CONSOLE_BASE + '/api/v1/bootstrap/setup';
             const LOGIN_PAGE_URL = '../index.html';
 
             const form = document.getElementById('setup-form');

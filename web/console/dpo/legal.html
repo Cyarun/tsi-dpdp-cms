@@ -8,9 +8,6 @@
     <!-- Load Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com/"></script>
     <link rel="stylesheet" href="dpo-console.css">
-    <script>
-        window.ENV_SERVER_URL = window.ENV_SERVER_URL || 'http://localhost:8080';
-    </script>
     <style>
         /* Certificate paper — legal-page-specific */
         .cert-paper {
@@ -226,7 +223,17 @@
 <script src="../tenant-scope.js"></script>
 <script>
     // --- Setup & Connectivity ---
-    const API_URL = ENV_SERVER_URL + '/api/v1/admin/legal';
+    // vAIb-zv2g fix: the console is served under a base path (e.g. /vaib/cms), NOT the domain
+    // root, and this page's OLD default (ENV_SERVER_URL = 'http://localhost:8080') is
+    // unreachable from the browser in production anyway. Derive the base from the URL
+    // (everything before '/console/') so the API path is correct wherever the console is
+    // mounted, same-origin.
+    const CONSOLE_BASE = (function () {
+        const p = window.location.pathname || '';
+        const i = p.indexOf('/console/');
+        return i > 0 ? p.slice(0, i) : '';
+    })();
+    const API_URL = CONSOLE_BASE + '/api/v1/admin/legal';
     const AUTH_TOKEN = localStorage.getItem('authToken');
     const FIDUCIARY_ID = localStorage.getItem('fiduciary_id');
     // vAIb-kyog: audience flag — TENANT sees short refs (no raw uuids); TSI staff see raw ids.

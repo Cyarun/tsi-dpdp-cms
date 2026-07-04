@@ -296,8 +296,17 @@
         }
 
         // --- Configuration ---
-        const API_URL_DASHBOARD = '/api/v1/admin/admindash';
-        const API_URL_JOBS = '/api/v1/admin/job';
+        // vAIb-zv2g fix: the console is served under a base path (e.g. /vaib/cms), NOT the domain
+        // root. A root-absolute '/api/...' resolves to the wrong host and every fetch silently
+        // fails. Derive the base from the URL (everything before '/console/') so the API path is
+        // correct wherever the console is mounted.
+        const CONSOLE_BASE = (function () {
+            const p = window.location.pathname || '';
+            const i = p.indexOf('/console/');
+            return i > 0 ? p.slice(0, i) : '';
+        })();
+        const API_URL_DASHBOARD = CONSOLE_BASE + '/api/v1/admin/admindash';
+        const API_URL_JOBS = CONSOLE_BASE + '/api/v1/admin/job';
         const AUTH_TOKEN = localStorage.getItem('authToken');
         // vAIb-kyog: audience flag — TENANT (owner) sees short job refs + humanized subtype/status.
         const AV = window.AudienceView;

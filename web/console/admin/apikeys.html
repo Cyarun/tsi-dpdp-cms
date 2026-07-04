@@ -306,9 +306,18 @@
 
 <script>
     // --- Configuration ---
-    const API_URL_KEYS = '/api/v1/admin/apikey';
-    const API_URL_FIDUCIARIES_LIST = '/api/v1/admin/fiduciary';
-    const API_URL_APPS_LIST = '/api/v1/admin/app';
+    // vAIb-zv2g fix: the console is served under a base path (e.g. /vaib/cms), NOT the domain
+    // root. A root-absolute '/api/...' resolves to the wrong host and every fetch silently
+    // fails. Derive the base from the URL (everything before '/console/') so the API path is
+    // correct wherever the console is mounted.
+    const CONSOLE_BASE = (function () {
+        const p = window.location.pathname || '';
+        const i = p.indexOf('/console/');
+        return i > 0 ? p.slice(0, i) : '';
+    })();
+    const API_URL_KEYS = CONSOLE_BASE + '/api/v1/admin/apikey';
+    const API_URL_FIDUCIARIES_LIST = CONSOLE_BASE + '/api/v1/admin/fiduciary';
+    const API_URL_APPS_LIST = CONSOLE_BASE + '/api/v1/admin/app';
     const AUTH_TOKEN = localStorage.getItem('authToken');
     // Show the real business/owner name, NEVER the "Site Owner (Wix) <uuid>" operator
     // placeholder. Prefer fiduciary_name (the Wix business name); fall back to username

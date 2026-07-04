@@ -231,7 +231,16 @@
 <script src="../audience-view.js"></script>
 <script src="../tenant-scope.js"></script>
 <script>
-    const API = '/api/v1/admin/ropa';
+    // vAIb-zv2g fix: the console is served under a base path (e.g. /vaib/cms), NOT the domain
+    // root. A root-absolute '/api/...' resolves to the wrong host and every fetch silently
+    // fails. Derive the base from the URL (everything before '/console/') so the API path is
+    // correct wherever the console is mounted.
+    const CONSOLE_BASE = (function () {
+        const p = window.location.pathname || '';
+        const i = p.indexOf('/console/');
+        return i > 0 ? p.slice(0, i) : '';
+    })();
+    const API = CONSOLE_BASE + '/api/v1/admin/ropa';
     const AUTH_TOKEN = localStorage.getItem('authToken');
     const FIDUCIARY_ID = localStorage.getItem('fiduciary_id');
     // vAIb-kyog: audience flag — TENANT (concrete fiduciary) sees clean labels only;
@@ -742,7 +751,7 @@
     // vAIb-kyog: register the tenant's active-policy titles for clean display in lists/modal/PDF.
     async function loadPolicyTitles() {
         try {
-            const res = await fetch('/api/v1/policy', {
+            const res = await fetch(CONSOLE_BASE + '/api/v1/policy', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${AUTH_TOKEN}` },
                 body: JSON.stringify({ _func: 'list_active_policies', fiduciary_id: FIDUCIARY_ID })

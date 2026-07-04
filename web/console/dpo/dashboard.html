@@ -165,7 +165,16 @@
 <script src="../audience-view.js"></script>
 <script src="../tenant-scope.js"></script>
 <script>
-    const API_URL_DASHBOARD = '/api/v1/admin/admindash';
+    // vAIb-zv2g fix: the console is served under a base path (e.g. /vaib/cms), NOT the domain
+    // root. A root-absolute '/api/...' resolves to the wrong host and every fetch silently
+    // fails. Derive the base from the URL (everything before '/console/') so the API path is
+    // correct wherever the console is mounted.
+    const CONSOLE_BASE = (function () {
+        const p = window.location.pathname || '';
+        const i = p.indexOf('/console/');
+        return i > 0 ? p.slice(0, i) : '';
+    })();
+    const API_URL_DASHBOARD = CONSOLE_BASE + '/api/v1/admin/admindash';
     const AUTH_TOKEN = localStorage.getItem('authToken');
     const FIDUCIARY_ID = localStorage.getItem('fiduciary_id');
     // vAIb: audience-clean — DPO/tenant sees human request refs (REQ-XXXXXX), not raw uuid tails.

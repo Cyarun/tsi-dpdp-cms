@@ -332,7 +332,16 @@
 <script src="../tenant-scope.js"></script>
 <script>
     // --- Configuration ---
-    const API_URL_POLICY = '/api/v1/policy';
+    // vAIb-zv2g fix: the console is served under a base path (e.g. /vaib/cms), NOT the domain
+    // root. A root-absolute '/api/...' resolves to the wrong host and every fetch silently
+    // fails. Derive the base from the URL (everything before '/console/') so the API path is
+    // correct wherever the console is mounted.
+    const CONSOLE_BASE = (function () {
+        const p = window.location.pathname || '';
+        const i = p.indexOf('/console/');
+        return i > 0 ? p.slice(0, i) : '';
+    })();
+    const API_URL_POLICY = CONSOLE_BASE + '/api/v1/policy';
     const AUTH_TOKEN = localStorage.getItem('authToken');
     // vAIb-kyog: audience flag — TENANT (concrete fiduciary) sees clean human view; TSI staff raw.
     const AV = window.AudienceView;
@@ -700,7 +709,7 @@
 
     async function fetchRegisteredAppNames() {
         try {
-            const res = await fetch('/api/v1/admin/app', {
+            const res = await fetch(CONSOLE_BASE + '/api/v1/admin/app', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${AUTH_TOKEN}` },
                 body: JSON.stringify({ _func: 'list_apps', fiduciary_id: localStorage.getItem('fiduciary_id') })
@@ -786,7 +795,7 @@
         const tbody = document.getElementById('ropa-review-tbody');
         tbody.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-[var(--muted-foreground)] italic">Loading ROPA entries...</td></tr>';
         try {
-            const res = await fetch('/api/v1/admin/ropa', {
+            const res = await fetch(CONSOLE_BASE + '/api/v1/admin/ropa', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${AUTH_TOKEN}` },
                 body: JSON.stringify({ _func: 'list_entries', fiduciary_id: localStorage.getItem('fiduciary_id'), status: '', limit: 100 })
@@ -842,8 +851,8 @@
         document.getElementById('rem-checklist').innerHTML = '<p class="text-xs text-[var(--muted-foreground)] italic">Loading...</p>';
         try {
             const [entryRes, validateRes] = await Promise.all([
-                fetch('/api/v1/admin/ropa', { method:'POST', headers:{ 'Content-Type':'application/json','Authorization':`Bearer ${AUTH_TOKEN}` }, body: JSON.stringify({ _func:'get_entry', id }) }),
-                fetch('/api/v1/admin/ropa', { method:'POST', headers:{ 'Content-Type':'application/json','Authorization':`Bearer ${AUTH_TOKEN}` }, body: JSON.stringify({ _func:'validate_completeness', id }) })
+                fetch(CONSOLE_BASE + '/api/v1/admin/ropa', { method:'POST', headers:{ 'Content-Type':'application/json','Authorization':`Bearer ${AUTH_TOKEN}` }, body: JSON.stringify({ _func:'get_entry', id }) }),
+                fetch(CONSOLE_BASE + '/api/v1/admin/ropa', { method:'POST', headers:{ 'Content-Type':'application/json','Authorization':`Bearer ${AUTH_TOKEN}` }, body: JSON.stringify({ _func:'validate_completeness', id }) })
             ]);
             const e = await entryRes.json();
             const v = await validateRes.json();
@@ -924,7 +933,7 @@
     }
 
     async function doPublishRopaEntry(id) {
-        const res = await fetch('/api/v1/admin/ropa', {
+        const res = await fetch(CONSOLE_BASE + '/api/v1/admin/ropa', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${AUTH_TOKEN}` },
             body: JSON.stringify({ _func: 'publish_entry', id })

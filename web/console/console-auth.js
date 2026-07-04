@@ -124,3 +124,12 @@
     guard: guard
   };
 })();
+
+// vAIb-zv2g: console base-path helper. The console is served under a mount (e.g. /vaib/cms),
+// not the domain root — a root-absolute '/api/...' hits the wrong host. Derive the base from
+// the path (everything before '/console/') so API calls resolve on the correct origin+prefix.
+window.__cb = function () {
+    var p = window.location.pathname || '';
+    var i = p.indexOf('/console/');
+    return i > 0 ? p.slice(0, i) : '';
+};

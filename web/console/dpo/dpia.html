@@ -368,6 +368,15 @@
 <script src="../audience-view.js"></script>
 <script src="../tenant-scope.js"></script>
 <script>
+// vAIb-zv2g fix: the console is served under a base path (e.g. /vaib/cms), NOT the domain
+// root. A root-absolute '/api/...' resolves to the wrong host and every fetch silently
+// fails. Derive the base from the URL (everything before '/console/') so the API path is
+// correct wherever the console is mounted.
+const CONSOLE_BASE = (function () {
+    const p = window.location.pathname || '';
+    const i = p.indexOf('/console/');
+    return i > 0 ? p.slice(0, i) : '';
+})();
 /* ── DPIA Report UI (vAIb-ry6i) ────────────────────────────────────────────
  *
  * AUTH (vAIb-86uz — NATIVE CMS): POST /api/v1/admin/dpia {_func:'generate_report'}
@@ -491,7 +500,7 @@ async function loadOmAssessment() {
     var fiduciaryId = localStorage.getItem('fiduciary_id');
     if (!authToken) return;   // no session -> leave the empty state (no error surfaced on this panel)
     try {
-        var resp = await fetch('/api/v1/admin/omsync', {
+        var resp = await fetch(CONSOLE_BASE + '/api/v1/admin/omsync', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'Authorization': 'Bearer ' + authToken },
             credentials: 'same-origin',
@@ -1167,7 +1176,7 @@ async function runDpia() {
         // {_func} envelope. The tenant is server-derived; fiduciary_id is a hint only (the
         // platform-admin path uses it; a tenant operator is hard-scoped to its own fid and any
         // mismatch is a server-side 403).
-        var resp = await fetch('/api/v1/admin/dpia', {
+        var resp = await fetch(CONSOLE_BASE + '/api/v1/admin/dpia', {
             method: 'POST',
             headers: hdrs,
             credentials: 'same-origin',

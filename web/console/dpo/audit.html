@@ -135,7 +135,16 @@
 <script src="../tenant-scope.js"></script>
 <script>
     // --- Configuration ---
-    const API_URL_AUDIT = '/api/v1/admin/audit';
+    // vAIb-zv2g fix: the console is served under a base path (e.g. /vaib/cms), NOT the domain
+    // root. A root-absolute '/api/...' resolves to the wrong host and every fetch silently
+    // fails. Derive the base from the URL (everything before '/console/') so the API path is
+    // correct wherever the console is mounted.
+    const CONSOLE_BASE = (function () {
+        const p = window.location.pathname || '';
+        const i = p.indexOf('/console/');
+        return i > 0 ? p.slice(0, i) : '';
+    })();
+    const API_URL_AUDIT = CONSOLE_BASE + '/api/v1/admin/audit';
     const AUTH_TOKEN = localStorage.getItem('authToken');
     const FIDUCIARY_ID = localStorage.getItem('fiduciary_id');
     // vAIb-kyog: audience flag — TENANT sees humanized actions + short refs + a CLEAN context
@@ -381,7 +390,7 @@
     (async function () {
         try {
             if (!FIDUCIARY_ID) return;
-            const r = await fetch('/api/v1/policy', { method:'POST', headers:{ 'Content-Type':'application/json','Authorization':`Bearer ${AUTH_TOKEN}` }, body: JSON.stringify({ _func:'list_active_policies', fiduciary_id: FIDUCIARY_ID }) });
+            const r = await fetch(CONSOLE_BASE + '/api/v1/policy', { method:'POST', headers:{ 'Content-Type':'application/json','Authorization':`Bearer ${AUTH_TOKEN}` }, body: JSON.stringify({ _func:'list_active_policies', fiduciary_id: FIDUCIARY_ID }) });
             if (!r.ok) return;
             const d = await r.json();
             (Array.isArray(d) ? d : (d.data || [])).forEach(p => { if (p && p.policy_id && p.title) AV.registerPolicyTitle(p.policy_id, p.title); });
