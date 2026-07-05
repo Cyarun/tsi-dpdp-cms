@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DPDPA.center - Executive Readiness</title>
+    <!-- Tailwind CDN (same as every console page) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- vAIb-c174: shared console design system (tokens + components). NO hand-rolled CSS —
+         the exec board reuses the canonical .card / .data-table / .pill--pass|warn|fail|neutral
+         / .stat-card components + the navy/red brand tokens from console.css. -->
+    <link rel="stylesheet" href="../console.css">
+</head>
+
+<body>
+
+<!-- Mobile header -->
+<div class="lg:hidden flex items-center justify-between p-4 bg-[var(--card)] border-b border-[var(--border)] sticky top-0 z-30">
+    <button onclick="toggleSidebar()" class="p-2 text-[var(--muted-foreground)] focus:outline-none">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+        </svg>
+    </button>
+    <span class="font-bold primary-text">DPDPA.center</span>
+    <div class="w-6"></div>
+</div>
+
+<div id="backdrop" class="sidebar-backdrop lg:hidden" onclick="toggleSidebar()"></div>
+
+<!-- Sidebar Navigation (mirrors dpo/dashboard.html) -->
+<div id="sidebar" class="sidebar flex flex-col justify-between">
+    <div>
+        <div class="px-5 pb-6 border-b border-[var(--border)] hidden lg:block">
+            <span class="text-xl font-bold primary-text">DPDPA.center</span>
+        </div>
+        <nav class="flex flex-col space-y-1 mt-4 px-3">
+            <a href="dashboard.html" class="nav-link">Dashboard</a>
+            <a href="readiness.html" class="nav-link active">Readiness</a>
+            <a href="policies.html" class="nav-link">Policies</a>
+            <a href="principals.html" class="nav-link">Principals</a>
+            <a href="compliance.html" class="nav-link">Compliance</a>
+            <a href="grievances.html" class="nav-link">Grievances</a>
+            <a href="audit.html" class="nav-link">Audit</a>
+            <a href="legal.html" class="nav-link">Legal</a>
+            <a href="ropa.html" class="nav-link">ROPA</a>
+            <a href="dpia.html" class="nav-link">DPIA Report</a>
+            <a href="reports.html" class="nav-link">Reports</a>
+        </nav>
+    </div>
+    <div class="p-3 border-t border-[var(--border)]">
+        <div class="mt-2 text-sm text-[var(--muted-foreground)] p-2 rounded-md flex justify-between items-center">
+            <span id="username" class="font-bold text-[var(--foreground)]">DPO User</span>
+            <button onclick="handleLogout()" class="text-xs font-semibold text-red-500 hover:underline">Logout</button>
+        </div>
+    </div>
+</div>
+
+<!-- Main content -->
+<main class="p-4 lg:p-8 overflow-y-auto">
+
+    <!-- Page header -->
+    <div class="page-header">
+        <div>
+            <h1 class="page-title">Executive DPDPA Readiness</h1>
+            <p class="page-subtitle">
+                Your live DPDPA readiness board — the 8 OpenMetadata feature-groups mapped to
+                their DPDPA objective, with a GREEN / AMBER / RED / PENDING status.
+                <strong class="text-[var(--foreground)] font-semibold">Status &amp; counts only</strong> —
+                never any principal data.
+            </p>
+        </div>
+        <button id="refresh-btn" onclick="loadReadiness()" class="btn btn-primary shrink-0">
+            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/>
+            </svg>
+            Refresh
+        </button>
+    </div>
+
+    <!-- Error alert (hidden by default) -->
+    <div id="readiness-error" class="card mb-6 hidden" style="border:1px solid #fca5a5; background:#fef2f2;">
+        <div class="flex items-start gap-3">
+            <span style="font-size:1.15rem; line-height:1.4;">⚠️</span>
+            <div class="flex-1">
+                <h2 class="text-sm font-bold text-red-700 mb-1">Could not load the readiness board</h2>
+                <p id="readiness-error-msg" class="text-sm text-red-700/90"></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Headline stat cards (reuse .stat-card) -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div class="card stat-card p-4">
+            <p class="stat-label">Overall Readiness</p>
+            <div class="flex items-center gap-2 mt-2">
+                <span id="hd-overall-pill" class="pill pill--neutral">—</span>
+            </div>
+        </div>
+        <div class="card stat-card p-4">
+            <p class="stat-label">Overall Score</p>
+            <p class="stat-value" id="hd-score">--</p>
+        </div>
+        <div class="card stat-card p-4">
+            <p class="stat-label"># Integrations Catalogued</p>
+            <p class="stat-value" id="hd-integrations">--</p>
+        </div>
+        <div class="card stat-card p-4">
+            <p class="stat-label">Open DPDPA Gaps</p>
+            <p class="stat-value stat-accent" id="hd-gaps">--</p>
+        </div>
+    </div>
+
+    <!-- The exec-view board -->
+    <div class="card">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="h2">Feature-group readiness</h2>
+            <span id="board-meta" class="caption"></span>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="data-table" style="min-width:640px;">
+                <thead>
+                    <tr class="table-header">
+                        <th>Feature Group</th>
+                        <th>DPDPA Objective</th>
+                        <th class="text-right">Metric</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="board-tbody">
+                    <tr><td colspan="4" class="p-8 text-center caption italic">Loading readiness board…</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Honest-partial legend -->
+    <div class="card mt-4">
+        <h3 class="eyebrow mb-3">Status meaning</h3>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+                <span class="pill pill--pass">Green</span>
+                <p class="caption mt-2">Assessed and compliant for this objective — no gaps found.</p>
+            </div>
+            <div>
+                <span class="pill pill--warn">Amber</span>
+                <p class="caption mt-2">Onboarded and configured, but awaiting first assessment or needs review.</p>
+            </div>
+            <div>
+                <span class="pill pill--fail">Red</span>
+                <p class="caption mt-2">Assessed with one or more DPDPA gaps — action required.</p>
+            </div>
+            <div>
+                <span class="pill pill--neutral">Pending</span>
+                <p class="caption mt-2">Not yet configured — this capability is on the DPDPA roadmap. Shown honestly, never faked green.</p>
+            </div>
+        </div>
+    </div>
+
+</main>
+
+<!-- shared audience + tenant-scope utilities (same as the other DPO pages) -->
+<script src="../audience-view.js"></script>
+<script src="../tenant-scope.js"></script>
+
+<script>
+/* ── Executive DPDPA Readiness board (vAIb-c174) ───────────────────────────
+ *
+ * The CUSTOMER-FACING audit view. It calls the FABRIC endpoint
+ * POST /v1/broker/readiness (NOT the CMS Jetty) — the SAME fabric-served,
+ * owner/DPO-gated, PII-FREE pattern coverage.html uses. The endpoint reads the
+ * tenant's Domain-scoped OM verdict and projects it onto the 8 feature-groups.
+ *
+ * AUTH (identical to coverage.html): the route accepts EITHER
+ *   (A) the OWNER signed instance (?instance=<signed> from the Wix owner dashboard,
+ *       forwarded in the POST body), OR
+ *   (B) the tenant's registered DPO (the member-countersign X-Fabric-Dpo header).
+ * The tenant is derived SERVER-SIDE from that proof — the page asserts no identity
+ * and a cross-tenant read is structurally impossible.
+ *
+ * NO PII: the endpoint returns status/counts/objective labels only; we render
+ * those verbatim. There is no principal data anywhere on this page.
+ */
+
+function fabricBase() {
+    /* The readiness route lives on FABRIC. When served under a fabric mount
+       (/v1/console/cms/dpo/... or /vaib/fabric/console/cms/...) the prefix before
+       /console/cms is the fabric root. Served CMS-direct or at root, fall back to the
+       public fabric prefix so the POST still reaches fabric. Mirrors coverage.html. */
+    var p = window.location.pathname || '';
+    var i = p.indexOf('/console/cms');
+    if (i <= 0) return '/vaib/fabric';
+    return p.slice(0, i);
+}
+
+function signedInstance() {
+    return new URLSearchParams(window.location.search).get('instance') || '';
+}
+
+/* DPO console auth context (mirrors coverage.html dpoContextHeader). Only a real DPO
+   countersign (member proof present) yields a header; the owner surface has none and
+   falls back to the signed-instance body path. */
+function dpoContextHeader() {
+    var q = new URLSearchParams(window.location.search);
+    var ctx = {
+        instance:   q.get('instance')   || '',
+        email:      q.get('email')      || '',
+        member_sig: q.get('member_sig') || '',
+        member_ts:  q.get('member_ts')  || ''
+    };
+    if (!ctx.email || !ctx.member_sig || !ctx.member_ts) return '';
+    try { return btoa(JSON.stringify(ctx)); } catch (e) { return ''; }
+}
+
+function esc(s) {
+    if (s == null) return '';
+    return String(s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#x27;');
+}
+
+function toggleSidebar() {
+    document.getElementById('sidebar').classList.toggle('open');
+    document.getElementById('backdrop').classList.toggle('active');
+}
+
+function handleLogout() {
+    localStorage.clear();
+    window.location.href = '../index.html';
+}
+
+/* status -> console.css pill class + label. Fixed semantic palette (never the brand accent). */
+function statusPill(status) {
+    var map = {
+        green:   ['pill--pass',    'Green'],
+        amber:   ['pill--warn',    'Amber'],
+        red:     ['pill--fail',    'Red'],
+        pending: ['pill--neutral', 'Pending']
+    };
+    var v = map[status] || map.pending;
+    return '<span class="pill ' + v[0] + '">' + v[1] + '</span>';
+}
+
+function renderHeadline(r) {
+    document.getElementById('hd-overall-pill').outerHTML =
+        '<span id="hd-overall-pill">' + statusPill(r.overall_status) + '</span>';
+    document.getElementById('hd-score').textContent =
+        (r.integrations ? (Number(r.overall_score) || 0) : '--');
+    document.getElementById('hd-integrations').textContent = Number(r.integrations) || 0;
+    document.getElementById('hd-gaps').textContent = Number(r.total_gaps) || 0;
+}
+
+function renderBoard(groups) {
+    var tbody = document.getElementById('board-tbody');
+    if (!Array.isArray(groups) || groups.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" class="p-8 text-center caption italic">No feature-groups returned.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = groups.map(function (g) {
+        var metric = (g.built && (Number(g.metric) || 0) > 0)
+            ? '<span class="font-bold text-[var(--foreground)]">' + esc(String(g.metric)) + '</span>'
+            : '<span class="caption">—</span>';
+        return '<tr>'
+            + '<td><div class="font-bold text-[var(--foreground)]">' + esc(g.feature) + '</div>'
+            +   '<div class="caption mt-0.5">' + esc(g.detail || '') + '</div></td>'
+            + '<td class="text-[var(--muted-foreground)]">' + esc(g.objective) + '</td>'
+            + '<td class="text-right">' + metric + '</td>'
+            + '<td>' + statusPill(g.status) + '</td>'
+            + '</tr>';
+    }).join('');
+}
+
+async function loadReadiness() {
+    var btn = document.getElementById('refresh-btn');
+    var errBox = document.getElementById('readiness-error');
+    var meta = document.getElementById('board-meta');
+    errBox.classList.add('hidden');
+
+    var inst = signedInstance();
+    var dpoHdr = dpoContextHeader();
+    if (!inst && !dpoHdr) {
+        document.getElementById('readiness-error-msg').textContent =
+            'Missing signed instance — open this page through the Wix owner dashboard or the DPO console.';
+        errBox.classList.remove('hidden');
+        return;
+    }
+
+    btn.disabled = true;
+    try {
+        var hdrs = { 'Content-Type': 'application/json', 'Accept': 'application/json' };
+        if (dpoHdr) hdrs['X-Fabric-Dpo'] = dpoHdr;
+        var resp = await fetch(fabricBase() + '/v1/broker/readiness', {
+            method: 'POST', headers: hdrs, credentials: 'same-origin',
+            body: JSON.stringify({ instance: inst || '' })
+        });
+        var data; try { data = await resp.json(); } catch (_) { data = null; }
+
+        if (resp.status === 401) {
+            document.getElementById('readiness-error-msg').textContent =
+                'Authentication failed (401) — reload the console to get a fresh session.';
+            errBox.classList.remove('hidden'); return;
+        }
+        if (resp.status === 403) {
+            document.getElementById('readiness-error-msg').textContent =
+                'Access denied (403) — the readiness board is restricted to the site owner or the registered DPO.';
+            errBox.classList.remove('hidden'); return;
+        }
+        if (!resp.ok || !data || !data.ok || !data.readiness) {
+            var msg = (data && data.error) ? data.error : ('HTTP ' + resp.status);
+            document.getElementById('readiness-error-msg').textContent =
+                'Could not load readiness: ' + msg + '.';
+            errBox.classList.remove('hidden'); return;
+        }
+
+        var r = data.readiness;
+        renderHeadline(r);
+        renderBoard(r.groups || []);
+        var parts = [];
+        if (data.customer_ref) parts.push('tenant ' + esc(data.customer_ref));
+        if (r.generated_at) parts.push('generated ' + esc(r.generated_at));
+        meta.textContent = parts.join(' \xb7 ');
+    } catch (err) {
+        document.getElementById('readiness-error-msg').textContent =
+            'Network error — could not reach the readiness endpoint: ' + (err.message || err);
+        errBox.classList.remove('hidden');
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+window.onload = function () {
+    /* Show the verified DPO/owner name, never a raw UUID or Wix placeholder (defence in depth). */
+    var _rawUser = localStorage.getItem('username') || '';
+    var storedUser = (
+        /^Site Owner \(Wix\)\s+[0-9a-f-]{8,}/.test(_rawUser) ||
+        /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.test(_rawUser)
+    ) ? '' : _rawUser;
+    if (storedUser) document.getElementById('username').textContent = storedUser;
+
+    loadReadiness();
+};
+</script>
+
+</body>
+</html>
